@@ -1,0 +1,10 @@
+# RME Fireface UCX II (2a39:3fd9) -- oscmix-autostart
+#
+# On plug-in: disable USB autosuspend (the interface must stay awake) and
+# ask the user's systemd instance to start the oscmix backend.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2a39", ATTR{idProduct}=="3fd9", ATTR{power/control}="on", TAG+="systemd", ENV{SYSTEMD_USER_WANTS}+="oscmix.service"
+
+# On unplug: sysfs attributes are gone, so match via ENV{PRODUCT}. Tagging
+# the remove event lets systemd drop the device pull-in, which stops the
+# service (StopWhenUnneeded=yes).
+ACTION=="remove", SUBSYSTEM=="usb", ENV{PRODUCT}=="2a39/3fd9/*", TAG+="systemd"

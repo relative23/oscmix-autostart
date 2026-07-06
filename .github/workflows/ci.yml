@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pytest
+      - run: make lint
+      - run: make test
+
+  build-oscmix:
+    # Prove that install.sh can build upstream oscmix on a clean system.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libasound2-dev libgtk-3-dev \
+            libglib2.0-dev-bin
+      - run: |
+          git clone --depth 1 https://github.com/michaelforney/oscmix build/oscmix
+          make -C build/oscmix
+          test -x build/oscmix/oscmix
+          test -x build/oscmix/alsaseqio
+          test -x build/oscmix/gtk/oscmix-gtk

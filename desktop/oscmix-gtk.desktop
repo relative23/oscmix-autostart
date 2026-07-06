@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=RME Fireface Mixer
+GenericName=Audio Mixer
+Comment=Hardware mixer for RME Fireface interfaces (TotalMix-style)
+Exec=oscmix-launch
+Icon=oscmix
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=RME;Fireface;TotalMix;mixer;audio;routing;
+StartupNotify=true

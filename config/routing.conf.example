@@ -1,0 +1,46 @@
+# oscmix-autostart routing configuration
+#
+# Copied to ~/.config/oscmix/routing.conf on install (only if none exists).
+# The routes below are applied to the Fireface's hardware mixer every time
+# the backend starts, so the device state is predictable after every boot
+# and hotplug. Changes you make in oscmix-gtk stay active until the next
+# backend start.
+#
+# Reload after editing:  systemctl --user restart oscmix.service
+
+[device]
+# ALSA sequencer client name to wait for (substring match).
+name = Fireface UCX II
+# USB vendor:product ID, used to tell "not plugged in" apart from
+# "plugged in but the driver failed".
+usb-id = 2a39:3fd9
+
+[osc]
+# UDP port the oscmix backend listens on.
+port = 7222
+
+# --------------------------------------------------------------------------
+# Routes: [route:<any-name>] sections, applied in file order.
+#
+#   playback  software playback channel(s):  a pair "1/2" or a single "3"
+#   output    hardware output channel(s), same shape as playback
+#   level     mix gain in dB   (0 = unity, -65 = mute; default 0)
+#   volume    optional hardware output volume in dB
+#   stereo    stereo-link the output pair (default true for pairs)
+#
+# PipeWire/PulseAudio send stereo audio to playback 1/2, so most setups
+# only need to route 1/2 to wherever their speakers are connected.
+# --------------------------------------------------------------------------
+
+# Main outputs (headphones on the UCX II front panel are outputs 1/2).
+[route:main-out]
+playback = 1/2
+output = 1/2
+level = 0.0
+
+# Example: studio monitors connected to outputs 5/6 on the rear panel.
+# [route:monitors]
+# playback = 1/2
+# output = 5/6
+# level = 0.0
+# volume = 0.0

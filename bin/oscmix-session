@@ -1,0 +1,591 @@
+#!/usr/bin/env python3
+"""oscmix-session -- supervise the oscmix backend for an RME Fireface interface.
+
+This program is the ExecStart of the oscmix systemd user service. It
+
+  1. waits until the Fireface registers as an ALSA sequencer client,
+  2. starts ``alsaseqio <client>:1 oscmix`` (the MIDI <-> OSC bridge),
+  3. waits until oscmix listens on its OSC UDP port,
+  4. applies the mixer routing configured in routing.conf, and
+  5. supervises the backend until it exits or the service is stopped.
+
+Exit codes are chosen so systemd restarts the service only when a restart
+can actually help:
+
+  0  nothing to do (device not connected), clean shutdown, or backend
+     exited cleanly
+  1  runtime failure (systemd restarts via Restart=on-failure)
+  2  configuration error (no restart; see RestartPreventExitStatus)
+
+Only the Python standard library is used.
+"""
+
+from __future__ import annotations
+
+import argparse
+import configparser
+import logging
+import os
+import re
+import shutil
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional, Sequence, Tuple
+
+__version__ = "0.1.0"
+
+DEFAULT_DEVICE_NAME = "Fireface UCX II"
+DEFAULT_USB_ID = "2a39:3fd9"
+DEFAULT_OSC_PORT = 7222
+DEFAULT_DEVICE_TIMEOUT = 30.0
+PORT_READY_TIMEOUT = 10.0
+CHILD_STOP_GRACE = 5.0
+
+LEVEL_MIN, LEVEL_MAX = -65.0, 6.0
+CHANNEL_MIN, CHANNEL_MAX = 1, 64
+
+EXIT_OK = 0
+EXIT_FAILURE = 1
+EXIT_CONFIG = 2
+
+log = logging.getLogger("oscmix-session")
+
+
+class ConfigError(Exception):
+    """A problem in routing.conf that the user has to fix."""
+
+
+# --------------------------------------------------------------------------
+# OSC encoding (OSC 1.0, the subset oscmix understands)
+# --------------------------------------------------------------------------
+
+def _osc_string(value: str) -> bytes:
+    """Encode an OSC string: ASCII, NUL-terminated, padded to 4 bytes."""
+    raw = value.encode("ascii") + b"\x00"
+    return raw + b"\x00" * (-len(raw) % 4)
+
+
+def encode_osc(path: str, types: str = "", *args: object) -> bytes:
+    """Encode a single OSC message.
+
+    Supported type tags: ``f`` (float32), ``i`` (int32), ``s`` (string).
+    """
+    if len(types) != len(args):
+        raise ValueError(
+            "type tag %r expects %d arguments, got %d" % (types, len(types), len(args))
+        )
+    data = _osc_string(path) + _osc_string("," + types)
+    for tag, value in zip(types, args):
+        if tag == "f":
+            data += struct.pack(">f", float(value))  # type: ignore[arg-type]
+        elif tag == "i":
+            data += struct.pack(">i", int(value))  # type: ignore[arg-type]
+        elif tag == "s":
+            data += _osc_string(str(value))
+        else:
+            raise ValueError("unsupported OSC type tag %r" % tag)
+    return data
+
+
+# --------------------------------------------------------------------------
+# Configuration
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Route:
+    """One playback -> hardware output route (mono or a stereo pair)."""
+
+    name: str
+    playback: Tuple[int, ...]
+    output: Tuple[int, ...]
+    level: float = 0.0
+    volume: Optional[float] = None
+    stereo: bool = True
+
+
+@dataclass
+class Config:
+    device_name: str = DEFAULT_DEVICE_NAME
+    usb_id: str = DEFAULT_USB_ID
+    osc_port: int = DEFAULT_OSC_PORT
+    routes: List[Route] = field(default_factory=list)
+
+
+def discover_config_path() -> Optional[Path]:
+    """Return the first existing config file in the search order."""
+    env = os.environ.get("OSCMIX_CONFIG")
+    if env:
+        return Path(env)
+    xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    for candidate in (Path(xdg) / "oscmix" / "routing.conf",
+                      Path("/etc/oscmix/routing.conf")):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _parse_channels(raw: str, section: str, option: str) -> Tuple[int, ...]:
+    """Parse ``1/2`` (stereo pair) or ``3`` (mono) into a channel tuple."""
+    parts = [p.strip() for p in raw.split("/")]
+    if len(parts) not in (1, 2) or not all(parts):
+        raise ConfigError(
+            "[%s] %s: expected a channel ('3') or a pair ('1/2'), got %r"
+            % (section, option, raw)
+        )
+    channels = []
+    for part in parts:
+        try:
+            value = int(part)
+        except ValueError:
+            raise ConfigError(
+                "[%s] %s: %r is not a channel number" % (section, option, part)
+            ) from None
+        if not CHANNEL_MIN <= value <= CHANNEL_MAX:
+            raise ConfigError(
+                "[%s] %s: channel %d out of range %d..%d"
+                % (section, option, value, CHANNEL_MIN, CHANNEL_MAX)
+            )
+        channels.append(value)
+    return tuple(channels)
+
+
+def _parse_db(raw: str, section: str, option: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ConfigError(
+            "[%s] %s: %r is not a dB value" % (section, option, raw)
+        ) from None
+    if not LEVEL_MIN <= value <= LEVEL_MAX:
+        raise ConfigError(
+            "[%s] %s: %.1f dB out of range %.0f..%.0f"
+            % (section, option, value, LEVEL_MIN, LEVEL_MAX)
+        )
+    return value
+
+
+def _parse_bool(raw: str, section: str, option: str) -> bool:
+    lowered = raw.strip().lower()
+    if lowered in ("1", "yes", "true", "on"):
+        return True
+    if lowered in ("0", "no", "false", "off"):
+        return False
+    raise ConfigError("[%s] %s: %r is not a boolean" % (section, option, raw))
+
+
+_KNOWN_OPTIONS = {
+    "device": {"name", "usb-id"},
+    "osc": {"port"},
+    "route": {"playback", "output", "level", "volume", "stereo"},
+}
+
+
+def _check_options(section: str, kind: str, options: Sequence[str]) -> None:
+    unknown = set(options) - _KNOWN_OPTIONS[kind]
+    if unknown:
+        raise ConfigError(
+            "[%s]: unknown option(s) %s (valid: %s)"
+            % (section, ", ".join(sorted(unknown)),
+               ", ".join(sorted(_KNOWN_OPTIONS[kind])))
+        )
+
+
+def _parse_route(parser: configparser.ConfigParser, section: str) -> Route:
+    name = section.split(":", 1)[1].strip() or section
+    _check_options(section, "route", parser.options(section))
+    for required in ("playback", "output"):
+        if not parser.has_option(section, required):
+            raise ConfigError("[%s]: missing required option %r" % (section, required))
+    playback = _parse_channels(parser.get(section, "playback"), section, "playback")
+    output = _parse_channels(parser.get(section, "output"), section, "output")
+    if len(playback) != len(output):
+        raise ConfigError(
+            "[%s]: playback (%s) and output (%s) must both be mono or both be a pair"
+            % (section, parser.get(section, "playback"), parser.get(section, "output"))
+        )
+    level = 0.0
+    if parser.has_option(section, "level"):
+        level = _parse_db(parser.get(section, "level"), section, "level")
+    volume = None
+    if parser.has_option(section, "volume"):
+        volume = _parse_db(parser.get(section, "volume"), section, "volume")
+    stereo = True
+    if parser.has_option(section, "stereo"):
+        stereo = _parse_bool(parser.get(section, "stereo"), section, "stereo")
+    return Route(name=name, playback=playback, output=output,
+                 level=level, volume=volume, stereo=stereo)
+
+
+def load_config(path: Optional[Path]) -> Config:
+    """Load routing.conf. ``path=None`` returns built-in defaults."""
+    config = Config()
+    if path is None:
+        return config
+    if not path.is_file():
+        raise ConfigError("config file not found: %s" % path)
+
+    parser = configparser.ConfigParser(
+        interpolation=None, inline_comment_prefixes=("#", ";")
+    )
+    try:
+        with open(path, encoding="utf-8") as handle:
+            parser.read_file(handle)
+    except (configparser.Error, OSError) as exc:
+        raise ConfigError("cannot read %s: %s" % (path, exc)) from None
+
+    for section in parser.sections():
+        if section == "device":
+            _check_options(section, "device", parser.options(section))
+            config.device_name = parser.get(section, "name",
+                                            fallback=config.device_name).strip()
+            usb_id = parser.get(section, "usb-id", fallback=config.usb_id).strip()
+            if not re.fullmatch(r"[0-9a-fA-F]{4}:[0-9a-fA-F]{4}", usb_id):
+                raise ConfigError(
+                    "[device] usb-id: expected 'vvvv:pppp' hex format, got %r" % usb_id
+                )
+            config.usb_id = usb_id.lower()
+        elif section == "osc":
+            _check_options(section, "osc", parser.options(section))
+            raw = parser.get(section, "port", fallback=str(config.osc_port))
+            try:
+                port = int(raw)
+            except ValueError:
+                raise ConfigError("[osc] port: %r is not a port number" % raw) from None
+            if not 1 <= port <= 65535:
+                raise ConfigError("[osc] port: %d out of range 1..65535" % port)
+            config.osc_port = port
+        elif section.startswith("route:"):
+            config.routes.append(_parse_route(parser, section))
+        else:
+            raise ConfigError(
+                "unknown section [%s] (valid: [device], [osc], [route:<name>])"
+                % section
+            )
+    return config
+
+
+# --------------------------------------------------------------------------
+# Routing -> OSC messages
+# --------------------------------------------------------------------------
+
+def route_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
+    """Translate one route into the OSC messages oscmix expects.
+
+    For a stereo pair the mix matrix of *both* outputs receives both
+    playback channels, panned hard left/right; with the outputs
+    stereo-linked this reproduces a plain stereo pass-through at
+    ``level`` dB (the same messages TotalMix would generate).
+    """
+    messages: List[Tuple[str, str, Tuple[object, ...]]] = []
+    if len(route.output) == 2:
+        left, right = route.output
+        pb_left, pb_right = route.playback
+        if route.stereo:
+            messages.append(("/output/%d/stereo" % left, "i", (1,)))
+        for out in (left, right):
+            messages.append(("/mix/%d/playback/%d" % (out, pb_left), "fi",
+                             (route.level, -100)))
+            messages.append(("/mix/%d/playback/%d" % (out, pb_right), "fi",
+                             (route.level, 100)))
+        if route.volume is not None:
+            for out in (left, right):
+                messages.append(("/output/%d/volume" % out, "f", (route.volume,)))
+    else:
+        (out,) = route.output
+        (pb,) = route.playback
+        messages.append(("/mix/%d/playback/%d" % (out, pb), "fi", (route.level, 0)))
+        if route.volume is not None:
+            messages.append(("/output/%d/volume" % out, "f", (route.volume,)))
+    return messages
+
+
+def apply_routing(routes: Sequence[Route], port: int) -> None:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        for route in routes:
+            for path, types, args in route_messages(route):
+                sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
+            log.info(
+                "route %r: playback %s -> output %s at %+.1f dB",
+                route.name,
+                "/".join(map(str, route.playback)),
+                "/".join(map(str, route.output)),
+                route.level,
+            )
+    finally:
+        sock.close()
+
+
+# --------------------------------------------------------------------------
+# System inspection (ALSA sequencer, USB sysfs, UDP sockets)
+# --------------------------------------------------------------------------
+
+_CLIENT_RE = re.compile(r'^Client\s+(\d+)\s*:\s*"(.*)"', re.MULTILINE)
+
+
+def parse_seq_clients(text: str) -> List[Tuple[int, str]]:
+    """Parse /proc/asound/seq/clients into (client number, name) pairs."""
+    return [(int(num), name) for num, name in _CLIENT_RE.findall(text)]
+
+
+def find_seq_client(text: str, device_name: str) -> Optional[int]:
+    for number, name in parse_seq_clients(text):
+        if device_name in name:
+            return number
+    return None
+
+
+def _trigger_snd_seq_load() -> None:
+    """Opening /dev/snd/seq makes the kernel autoload the snd-seq module."""
+    device = os.environ.get("OSCMIX_SEQ_DEV", "/dev/snd/seq")
+    try:
+        os.close(os.open(device, os.O_RDONLY | os.O_NONBLOCK))
+    except OSError:
+        pass
+
+
+def wait_for_seq_client(device_name: str, timeout: float,
+                        proc_root: Path) -> Optional[int]:
+    clients_file = proc_root / "asound" / "seq" / "clients"
+    deadline = time.monotonic() + timeout
+    while True:
+        if clients_file.is_file():
+            client = find_seq_client(clients_file.read_text(), device_name)
+            if client is not None:
+                return client
+        else:
+            _trigger_snd_seq_load()
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(1.0)
+
+
+def usb_device_present(usb_id: str, sysfs_usb: Path) -> bool:
+    """Check for a USB device by scanning sysfs (no lsusb dependency)."""
+    vendor, product = usb_id.lower().split(":")
+    try:
+        entries = list(sysfs_usb.iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        try:
+            dev_vendor = (entry / "idVendor").read_text().strip().lower()
+            dev_product = (entry / "idProduct").read_text().strip().lower()
+        except OSError:
+            continue
+        if dev_vendor == vendor and dev_product == product:
+            return True
+    return False
+
+
+def udp_port_listening(port: int, proc_root: Path) -> bool:
+    """Check /proc/net/udp{,6} for a socket bound to ``port``."""
+    for name in ("udp", "udp6"):
+        try:
+            lines = (proc_root / "net" / name).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if len(fields) < 2 or ":" not in fields[1]:
+                continue
+            local_port = int(fields[1].rsplit(":", 1)[1], 16)
+            if local_port == port:
+                return True
+    return False
+
+
+def resolve_binary(name: str, env_var: str) -> Optional[str]:
+    """Locate a binary: env override, then PATH, then standard locations.
+
+    The systemd user manager's PATH does not necessarily include
+    ~/.local/bin, so the fallback list checks it explicitly.
+    """
+    override = os.environ.get(env_var)
+    if override:
+        if os.access(override, os.X_OK):
+            return override
+        log.error("%s=%s is not an executable file", env_var, override)
+        return None
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in (os.path.expanduser("~/.local/bin"),
+                      "/usr/local/bin", "/usr/bin"):
+        candidate = os.path.join(directory, name)
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+# --------------------------------------------------------------------------
+# Backend supervision
+# --------------------------------------------------------------------------
+
+def _cleanup_stale_backend(port: int, proc_root: Path) -> None:
+    """A stale oscmix (e.g. from a manual run) would hold the OSC port."""
+    if not udp_port_listening(port, proc_root):
+        return
+    log.warning("UDP port %d already in use; terminating stale oscmix", port)
+    subprocess.run(["pkill", "-x", "oscmix"], check=False)
+    time.sleep(0.5)
+
+
+def supervise(child: subprocess.Popen, stop_requested: dict) -> int:
+    """Wait for the child; escalate SIGTERM -> SIGKILL on shutdown."""
+    kill_deadline: Optional[float] = None
+    while True:
+        try:
+            return child.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            pass
+        if stop_requested["stop"]:
+            now = time.monotonic()
+            if kill_deadline is None:
+                kill_deadline = now + CHILD_STOP_GRACE
+            elif now >= kill_deadline:
+                log.warning("backend ignored SIGTERM; sending SIGKILL")
+                child.kill()
+                return child.wait()
+
+
+def run_session(args: argparse.Namespace, config: Config) -> int:
+    proc_root = Path(os.environ.get("OSCMIX_PROC_ROOT", "/proc"))
+    sysfs_usb = Path(os.environ.get("OSCMIX_SYSFS_USB", "/sys/bus/usb/devices"))
+
+    log.info("waiting for %r (ALSA sequencer, timeout %.0fs)",
+             config.device_name, args.timeout)
+    client = wait_for_seq_client(config.device_name, args.timeout, proc_root)
+    if client is None:
+        if not usb_device_present(config.usb_id, sysfs_usb):
+            log.info("device %s not connected; nothing to do", config.usb_id)
+            return EXIT_OK
+        log.error(
+            "USB device %s is connected but no ALSA sequencer client named %r "
+            "appeared within %.0fs -- is snd-usb-audio loaded?",
+            config.usb_id, config.device_name, args.timeout,
+        )
+        return EXIT_FAILURE
+    log.info("found %r as ALSA sequencer client %d", config.device_name, client)
+
+    if args.dry_run:
+        print("would run: alsaseqio %d:1 oscmix" % client)
+        for route in config.routes:
+            for path, types, values in route_messages(route):
+                print("would send: %s ,%s %s" % (path, types, " ".join(map(str, values))))
+        return EXIT_OK
+
+    alsaseqio = resolve_binary("alsaseqio", "OSCMIX_BIN_ALSASEQIO")
+    backend = resolve_binary("oscmix", "OSCMIX_BIN_BACKEND")
+    if alsaseqio is None or backend is None:
+        log.error("alsaseqio/oscmix not found -- run install.sh first")
+        return EXIT_FAILURE
+
+    _cleanup_stale_backend(config.osc_port, proc_root)
+
+    log.info("starting: %s %d:1 %s", alsaseqio, client, backend)
+    child = subprocess.Popen([alsaseqio, "%d:1" % client, backend])
+
+    stop_requested = {"stop": False}
+
+    def _handle_stop(signum: int, _frame: object) -> None:
+        stop_requested["stop"] = True
+        log.info("received %s; stopping backend", signal.Signals(signum).name)
+        if child.poll() is None:
+            child.terminate()
+
+    signal.signal(signal.SIGTERM, _handle_stop)
+    signal.signal(signal.SIGINT, _handle_stop)
+
+    deadline = time.monotonic() + PORT_READY_TIMEOUT
+    while time.monotonic() < deadline:
+        if udp_port_listening(config.osc_port, proc_root):
+            log.info("oscmix is listening on UDP %d", config.osc_port)
+            break
+        if child.poll() is not None:
+            break
+        time.sleep(0.25)
+    else:
+        log.warning("oscmix not listening on UDP %d after %.0fs; continuing",
+                    config.osc_port, PORT_READY_TIMEOUT)
+
+    if child.poll() is None:
+        if config.routes:
+            apply_routing(config.routes, config.osc_port)
+        else:
+            log.info("no routes configured; leaving mixer state untouched")
+
+    returncode = supervise(child, stop_requested)
+
+    if stop_requested["stop"]:
+        log.info("backend stopped (shutdown requested)")
+        return EXIT_OK
+    if not usb_device_present(config.usb_id, sysfs_usb):
+        log.info("backend exited (%d): device was disconnected", returncode)
+        return EXIT_OK
+    if returncode == 0:
+        log.info("backend exited cleanly")
+        return EXIT_OK
+    log.error("backend exited with status %d", returncode)
+    return EXIT_FAILURE
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="oscmix-session",
+        description="Supervise the oscmix backend for an RME Fireface interface.",
+    )
+    parser.add_argument("--config", type=Path, metavar="FILE",
+                        help="routing config (default: ~/.config/oscmix/routing.conf)")
+    parser.add_argument("--device", metavar="NAME",
+                        help="ALSA client name to wait for (overrides config)")
+    parser.add_argument("--timeout", type=float, default=DEFAULT_DEVICE_TIMEOUT,
+                        metavar="SECONDS", help="how long to wait for the device")
+    parser.add_argument("--osc-port", type=int, metavar="PORT",
+                        help="UDP port oscmix listens on (overrides config)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="show what would be started and sent, then exit")
+    parser.add_argument("--verbose", action="store_true", help="debug logging")
+    parser.add_argument("--version", action="version", version=__version__)
+    return parser
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = build_arg_parser().parse_args(argv)
+    logging.basicConfig(
+        stream=sys.stderr,
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s: %(message)s",
+    )
+
+    config_path = args.config if args.config else discover_config_path()
+    try:
+        config = load_config(config_path)
+    except ConfigError as exc:
+        log.error("configuration error: %s", exc)
+        return EXIT_CONFIG
+    if config_path is None:
+        log.info("no routing.conf found; using defaults without routing")
+    else:
+        log.info("configuration: %s (%d route(s))", config_path, len(config.routes))
+
+    if args.device:
+        config.device_name = args.device
+    if args.osc_port:
+        config.osc_port = args.osc_port
+
+    return run_session(args, config)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
