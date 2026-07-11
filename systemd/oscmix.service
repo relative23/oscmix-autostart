@@ -9,12 +9,16 @@ StartLimitIntervalSec=120
 StartLimitBurst=5
 
 [Service]
-Type=exec
+# oscmix-session sends READY=1 once the backend is up and the routing
+# has been applied; verification then runs in the background.
+Type=notify
 ExecStart=%h/.local/bin/oscmix-session
 Restart=on-failure
 RestartSec=3
 # Exit code 2 means a routing.conf error -- restarting cannot fix that.
 RestartPreventExitStatus=2
+# Device wait (30s) + port wait (10s) + verification, with headroom.
+TimeoutStartSec=75
 TimeoutStopSec=10
 NoNewPrivileges=yes
 

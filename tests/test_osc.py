@@ -53,3 +53,59 @@ def test_argument_count_mismatch_raises(session_mod):
 def test_unsupported_type_tag_raises(session_mod):
     with pytest.raises(ValueError):
         session_mod.encode_osc("/x", "b", b"blob")
+
+
+def test_decode_roundtrip(session_mod):
+    message = session_mod.encode_osc("/mix/5/playback/1", "fi", -3.0, -100)
+    path, tags, args = session_mod.decode_osc(message)
+    assert path == "/mix/5/playback/1"
+    assert tags == "fi"
+    assert abs(args[0] - -3.0) < 1e-6
+    assert args[1] == -100
+
+
+def test_decode_string_argument(session_mod):
+    message = session_mod.encode_osc("/x", "s", "hello")
+    assert session_mod.decode_osc(message) == ("/x", "s", ("hello",))
+
+
+def test_decode_no_arguments(session_mod):
+    assert session_mod.decode_osc(session_mod.encode_osc("/refresh")) == \
+        ("/refresh", "", ())
+
+
+def test_decode_rejects_malformed_input(session_mod):
+    with pytest.raises(ValueError):
+        session_mod.decode_osc(b"no-nul-terminator")
+    with pytest.raises(ValueError):
+        session_mod.decode_osc(b"/x\x00\x00garbage-tags\x00")
+
+
+def test_decode_truncated_arguments_raise_value_error(session_mod):
+    # A valid ',f' tag with only two argument bytes must raise ValueError,
+    # not leak struct.error past the documented contract.
+    with pytest.raises(ValueError):
+        session_mod.decode_osc(b"/x\x00\x00,f\x00\x00" + b"\x00\x00")
+
+
+def test_bundle_unwrapping(session_mod):
+    inner = [
+        session_mod.encode_osc("/output/5/stereo", "i", 1),
+        session_mod.encode_osc("/mix/5/playback/1", "fi", 0.0, 0),
+    ]
+    bundle = b"#bundle\x00" + b"\x00" * 8
+    for message in inner:
+        bundle += struct.pack(">i", len(message)) + message
+    assert list(session_mod.iter_osc_messages(bundle)) == inner
+
+
+def test_plain_datagram_yields_itself(session_mod):
+    message = session_mod.encode_osc("/refresh")
+    assert list(session_mod.iter_osc_messages(message)) == [message]
+
+
+def test_truncated_bundle_stops_cleanly(session_mod):
+    message = session_mod.encode_osc("/x", "i", 1)
+    bundle = (b"#bundle\x00" + b"\x00" * 8
+              + struct.pack(">i", len(message) + 100) + message)
+    assert list(session_mod.iter_osc_messages(bundle)) == []

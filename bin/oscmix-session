@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import json
 import logging
 import os
 import re
@@ -33,6 +34,7 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,9 +45,20 @@ __version__ = "0.1.0"
 DEFAULT_DEVICE_NAME = "Fireface UCX II"
 DEFAULT_USB_ID = "2a39:3fd9"
 DEFAULT_OSC_PORT = 7222
+DEFAULT_OSC_RECV_PORT = 8222
 DEFAULT_DEVICE_TIMEOUT = 30.0
 PORT_READY_TIMEOUT = 10.0
-CHILD_STOP_GRACE = 5.0
+CHILD_STOP_GRACE = float(os.environ.get("OSCMIX_STOP_GRACE", "5"))
+# The full /refresh dump is several thousand MIDI-SysEx-backed messages
+# and takes a few seconds on a 20-channel interface; the loop exits early
+# once every expected register is confirmed, so a generous window only
+# costs time in the mismatch case.
+VERIFY_TIMEOUT = 10.0
+VERIFY_SETTLE = 0.5
+# Right after oscmix starts it synchronizes every device register over
+# MIDI; read-backs during that storm are unreliable, so verification runs
+# in the background once the link has settled (env override for tests).
+VERIFY_DELAY = float(os.environ.get("OSCMIX_VERIFY_DELAY", "12"))
 
 LEVEL_MIN, LEVEL_MAX = -65.0, 6.0
 CHANNEL_MIN, CHANNEL_MAX = 1, 64
@@ -93,6 +106,74 @@ def encode_osc(path: str, types: str = "", *args: object) -> bytes:
     return data
 
 
+def _decode_string(data: bytes, offset: int) -> Tuple[str, int]:
+    end = data.index(b"\x00", offset)
+    value = data[offset:end].decode("ascii")
+    end += 1
+    return value, end + (-end % 4)
+
+
+def decode_osc(data: bytes) -> Tuple[str, str, Tuple[object, ...]]:
+    """Decode a single OSC message (type tags ``f``, ``i``, ``s``)."""
+    try:
+        path, offset = _decode_string(data, 0)
+        tags, offset = _decode_string(data, offset)
+    except (ValueError, IndexError):
+        raise ValueError("truncated OSC message") from None
+    if not tags.startswith(","):
+        raise ValueError("missing OSC type tag string")
+    args: List[object] = []
+    try:
+        for tag in tags[1:]:
+            if tag == "f":
+                (value,) = struct.unpack_from(">f", data, offset)
+                offset += 4
+            elif tag == "i":
+                (value,) = struct.unpack_from(">i", data, offset)
+                offset += 4
+            elif tag == "s":
+                value, offset = _decode_string(data, offset)
+            else:
+                raise ValueError("unsupported OSC type tag %r" % tag)
+            args.append(value)
+    except (struct.error, IndexError):
+        raise ValueError("truncated OSC arguments") from None
+    return path, tags[1:], tuple(args)
+
+
+def iter_osc_messages(datagram: bytes):
+    """Yield the OSC messages in a datagram, unwrapping #bundle framing."""
+    if datagram.startswith(b"#bundle\x00"):
+        offset = 16  # "#bundle\0" plus 8-byte time tag
+        while offset + 4 <= len(datagram):
+            (size,) = struct.unpack_from(">i", datagram, offset)
+            offset += 4
+            if size <= 0 or offset + size > len(datagram):
+                return
+            yield from iter_osc_messages(datagram[offset:offset + size])
+            offset += size
+    else:
+        yield datagram
+
+
+def sd_notify(state: str) -> None:
+    """Best-effort readiness notification for systemd (Type=notify)."""
+    address = os.environ.get("NOTIFY_SOCKET")
+    if not address:
+        return
+    if address.startswith("@"):
+        address = "\x00" + address[1:]
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        try:
+            sock.connect(address)
+            sock.sendall(state.encode("ascii"))
+        finally:
+            sock.close()
+    except OSError as exc:
+        log.debug("sd_notify(%s) failed: %s", state, exc)
+
+
 # --------------------------------------------------------------------------
 # Configuration
 # --------------------------------------------------------------------------
@@ -114,6 +195,7 @@ class Config:
     device_name: str = DEFAULT_DEVICE_NAME
     usb_id: str = DEFAULT_USB_ID
     osc_port: int = DEFAULT_OSC_PORT
+    osc_recv_port: int = DEFAULT_OSC_RECV_PORT
     routes: List[Route] = field(default_factory=list)
 
 
@@ -181,7 +263,7 @@ def _parse_bool(raw: str, section: str, option: str) -> bool:
 
 _KNOWN_OPTIONS = {
     "device": {"name", "usb-id"},
-    "osc": {"port"},
+    "osc": {"port", "recv-port"},
     "route": {"playback", "output", "level", "volume", "stereo"},
 }
 
@@ -252,14 +334,20 @@ def load_config(path: Optional[Path]) -> Config:
             config.usb_id = usb_id.lower()
         elif section == "osc":
             _check_options(section, "osc", parser.options(section))
-            raw = parser.get(section, "port", fallback=str(config.osc_port))
-            try:
-                port = int(raw)
-            except ValueError:
-                raise ConfigError("[osc] port: %r is not a port number" % raw) from None
-            if not 1 <= port <= 65535:
-                raise ConfigError("[osc] port: %d out of range 1..65535" % port)
-            config.osc_port = port
+            for option, attr in (("port", "osc_port"),
+                                 ("recv-port", "osc_recv_port")):
+                raw = parser.get(section, option, fallback=str(getattr(config, attr)))
+                try:
+                    port = int(raw)
+                except ValueError:
+                    raise ConfigError(
+                        "[osc] %s: %r is not a port number" % (option, raw)
+                    ) from None
+                if not 1 <= port <= 65535:
+                    raise ConfigError(
+                        "[osc] %s: %d out of range 1..65535" % (option, port)
+                    )
+                setattr(config, attr, port)
         elif section.startswith("route:"):
             config.routes.append(_parse_route(parser, section))
         else:
@@ -330,6 +418,136 @@ def apply_routing(routes: Sequence[Route], port: int) -> None:
             )
     finally:
         sock.close()
+
+
+# --------------------------------------------------------------------------
+# Routing verification (read back the device state oscmix reports)
+# --------------------------------------------------------------------------
+
+def expected_registers(routes: Sequence[Route]) -> "dict":
+    """The register state the routes should produce, keyed by OSC path."""
+    registers = {}
+    for route in routes:
+        for path, types, args in route_messages(route):
+            registers[path] = (types, tuple(args))
+    return registers
+
+
+def _register_matches(want_types: str, want_args: Sequence[object],
+                      got_args: Sequence[object]) -> bool:
+    """Compare a reported register against the expected value.
+
+    Floats get a 0.5 dB tolerance (the device quantizes levels); extra
+    trailing arguments in the report are ignored so a richer upstream
+    dump format cannot break verification.
+    """
+    if len(got_args) < len(want_args):
+        return False
+    for tag, want, got in zip(want_types, want_args, got_args):
+        try:
+            if tag == "f":
+                if abs(float(want) - float(got)) > 0.5:  # type: ignore[arg-type]
+                    return False
+            elif int(want) != int(got):  # type: ignore[call-overload]
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+def register_verifiable(path: str) -> bool:
+    """Whether a register can reliably be read back from a /refresh dump.
+
+    Two exclusions, both measured against the real device:
+    - upstream dumps the input mix matrix (``/mix/<out>/input/<in>``,
+      oscmix.c) but not the playback mix matrix, so ``/mix/*/playback/*``
+      never appears at all;
+    - the ``/playback/*`` section sits near the end of a dump that
+      streams several thousand messages over MIDI for many seconds, so
+      it cannot be observed within a sane verification window.
+    What remains -- the ``/output/*`` registers, i.e. the audible signal
+    path -- arrives early in the dump and verifies reliably.
+    """
+    if path.startswith("/mix/") and "/playback/" in path:
+        return False
+    if path.startswith("/playback/"):
+        return False
+    return True
+
+
+def verify_routing(registers: "dict", send_port: int, recv_port: int,
+                   timeout: float = VERIFY_TIMEOUT) -> Optional[List[str]]:
+    """Ask oscmix to dump its state and compare it against ``registers``.
+
+    Returns ``None`` when verification is impossible (the receive port is
+    taken, normally because the mixer GUI is listening there), otherwise
+    the sorted list of register paths that could not be confirmed --
+    empty meaning the device state matches the configuration.
+    """
+    unconfirmed = dict(registers)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        try:
+            sock.bind(("127.0.0.1", recv_port))
+        except OSError:
+            return None
+        sock.settimeout(0.25)
+        sock.sendto(encode_osc("/refresh"), ("127.0.0.1", send_port))
+        deadline = time.monotonic() + timeout
+        while unconfirmed and time.monotonic() < deadline:
+            try:
+                datagram, _ = sock.recvfrom(65536)
+            except socket.timeout:
+                continue
+            for message in iter_osc_messages(datagram):
+                try:
+                    path, _tags, args = decode_osc(message)
+                except (ValueError, struct.error):
+                    continue
+                pending = unconfirmed.get(path)
+                if pending and _register_matches(pending[0], pending[1], args):
+                    del unconfirmed[path]
+        return sorted(unconfirmed)
+    finally:
+        sock.close()
+
+
+def verify_and_repair(config: Config) -> None:
+    """Read the applied routing back and re-send once on mismatch.
+
+    Verification is advisory: OSC over UDP has no delivery guarantee, so
+    a failed read-back is logged (and retried once) but never brings the
+    service down -- a restart loop would not improve anything.
+    """
+    all_registers = expected_registers(config.routes)
+    verifiable = {path: value for path, value in all_registers.items()
+                  if register_verifiable(path)}
+    unreported = len(all_registers) - len(verifiable)
+    if not verifiable:
+        log.info("none of the %d configured registers appear in the device "
+                 "dump; skipping verification", len(all_registers))
+        return
+    unconfirmed: List[str] = []
+    for attempt in (1, 2):
+        result = verify_routing(verifiable, config.osc_port,
+                                config.osc_recv_port)
+        if result is None:
+            log.info("routing verification skipped: UDP %d in use "
+                     "(mixer GUI running?)", config.osc_recv_port)
+            return
+        unconfirmed = result
+        if not unconfirmed:
+            log.info("routing verified against device state "
+                     "(%d of %d registers; %d not reliably readable)%s",
+                     len(verifiable), len(all_registers), unreported,
+                     "" if attempt == 1 else " -- after retry")
+            return
+        if attempt == 1:
+            log.warning("%d register(s) unconfirmed; re-sending routing",
+                        len(unconfirmed))
+            apply_routing(config.routes, config.osc_port)
+            time.sleep(VERIFY_SETTLE)
+    log.warning("unconfirmed after retry: %s", ", ".join(unconfirmed))
 
 
 # --------------------------------------------------------------------------
@@ -435,15 +653,227 @@ def resolve_binary(name: str, env_var: str) -> Optional[str]:
 
 
 # --------------------------------------------------------------------------
+# PipeWire named sinks (--pipewire-sinks)
+# --------------------------------------------------------------------------
+
+# Fallback mapping when the sink's real channel layout is unknown: how
+# PipeWire labels the device playback channels in the surround profile.
+SURROUND_POSITIONS = {1: "FL", 2: "FR", 3: "RL", 4: "RR",
+                      5: "FC", 6: "LFE", 7: "SL", 8: "SR"}
+
+
+def pipewire_positions(channels: Sequence[int],
+                       sink_positions: Optional[Sequence[str]] = None
+                       ) -> List[str]:
+    """Map device playback channels to the target sink's channel labels.
+
+    With the sink's real ``audio.position`` array (from pw-dump), channel
+    N is simply positions[N-1] -- correct for both the surround profile
+    (FL FR ... SR) and the pro-audio/Direct profile (AUX0 AUX1 ...).
+    Without it, fall back to the 7.1 surround table.
+    """
+    positions = []
+    for channel in channels:
+        if sink_positions:
+            if not 1 <= channel <= len(sink_positions):
+                raise ConfigError(
+                    "channel %d exceeds the %d channels of the target sink"
+                    % (channel, len(sink_positions))
+                )
+            positions.append(sink_positions[channel - 1])
+        elif channel in SURROUND_POSITIONS:
+            positions.append(SURROUND_POSITIONS[channel])
+        else:
+            raise ConfigError(
+                "cannot map channel %d without knowing the sink layout; "
+                "channels above 8 need pw-dump auto-detection" % channel
+            )
+    return positions
+
+
+def _parse_positions(raw: object) -> Optional[List[str]]:
+    """audio.position from pw-dump: either a list or '[ AUX0, AUX1 ]'."""
+    if isinstance(raw, list):
+        return [str(item) for item in raw] or None
+    if isinstance(raw, str):
+        parts = [p.strip() for p in raw.strip().strip("[]").split(",")]
+        return [p for p in parts if p] or None
+    return None
+
+
+def pw_sink_info(device_name: str, target: Optional[str] = None,
+                 dump_text: Optional[str] = None
+                 ) -> Optional[Tuple[str, Optional[List[str]]]]:
+    """(node.name, channel positions) of the device's sink, via pw-dump.
+
+    With ``target`` given, look that node up; otherwise search for a sink
+    matching the configured device name (or "fireface").
+    """
+    if dump_text is None:
+        pw_dump = shutil.which("pw-dump")
+        if not pw_dump:
+            return None
+        try:
+            dump_text = subprocess.run(
+                [pw_dump], capture_output=True, text=True, timeout=10,
+                check=True,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return None
+    try:
+        objects = json.loads(dump_text)
+    except ValueError:
+        return None
+    needle = device_name.lower()
+    for obj in objects:
+        props = obj.get("info", {}).get("props") or {}
+        if props.get("media.class") != "Audio/Sink":
+            continue
+        name = props.get("node.name")
+        if target is not None:
+            if name != target:
+                continue
+        else:
+            haystack = " ".join(
+                str(props.get(key, ""))
+                for key in ("node.description", "node.name", "node.nick",
+                            "alsa.card_name")
+            ).lower()
+            if needle not in haystack and "fireface" not in haystack:
+                continue
+        return name, _parse_positions(props.get("audio.position"))
+    return None
+
+
+_LOOPBACK_TEMPLATE = """\
+    {{ name = libpipewire-module-loopback
+        args = {{
+            node.description = "{description}"
+            capture.props = {{
+                node.name = "oscmix.{node}"
+                media.class = Audio/Sink
+                audio.position = [ FL FR ]
+            }}
+            playback.props = {{
+                node.name = "oscmix.{node}.out"
+                audio.position = [ {device_positions} ]
+                target.object = "{target}"
+                stream.dont-remix = true
+                node.passive = true
+            }}
+        }}
+    }}"""
+
+
+def generate_pipewire_conf(config: Config, target: Optional[str],
+                           sink_positions: Optional[Sequence[str]] = None
+                           ) -> str:
+    """One named virtual sink per stereo route, feeding the device
+    playback channels of the route's output pair."""
+    # One sink per unique output pair; several routes can feed the same
+    # outputs (e.g. a default-sink route plus the identity route for the
+    # named sink), and the first route's name wins.
+    pair_routes = []
+    dropped = []
+    seen_pairs = {}
+    for route in config.routes:
+        if len(route.output) != 2:
+            continue
+        if route.output in seen_pairs:
+            dropped.append((route, seen_pairs[route.output]))
+        else:
+            pair_routes.append(route)
+            seen_pairs[route.output] = route.name
+    if not pair_routes:
+        raise ConfigError(
+            "no stereo pair routes configured; nothing to generate"
+        )
+    if target is None:
+        target = "FIXME-fireface-sink-node-name"
+    identity_pairs = {r.output for r in config.routes if r.playback == r.output}
+    parts = [
+        "# PipeWire named sinks, generated by oscmix-session --pipewire-sinks",
+        "# Install to ~/.config/pipewire/pipewire.conf.d/oscmix-sinks.conf,",
+        "# then restart: systemctl --user restart pipewire wireplumber",
+        "",
+    ]
+    for route, kept in dropped:
+        parts.append(
+            "# NOTE: route %r also targets outputs %s; one sink per output "
+            "pair,\n# so the sink is named after route %r.\n"
+            % (route.name, "/".join(map(str, route.output)), kept)
+        )
+    for route in pair_routes:
+        if route.output not in identity_pairs:
+            pair = "/".join(map(str, route.output))
+            parts.append(
+                "# NOTE: sink %r feeds device playback channels %s, which "
+                "need an\n# identity route in routing.conf to reach the "
+                "outputs:\n#   [route:%s-direct]\n#   playback = %s\n"
+                "#   output = %s\n"
+                % (route.name, pair, route.name, pair, pair)
+            )
+    parts.append("context.modules = [")
+    for route in pair_routes:
+        parts.append(_LOOPBACK_TEMPLATE.format(
+            description=route.name,
+            node=re.sub(r"[^\w.-]", "_", route.name),
+            device_positions=" ".join(
+                pipewire_positions(route.output, sink_positions)),
+            target=target,
+        ))
+    parts.append("]")
+    return "\n".join(parts) + "\n"
+
+
+# --------------------------------------------------------------------------
 # Backend supervision
 # --------------------------------------------------------------------------
+
+def find_stale_backends(proc_root: Path) -> List[int]:
+    """PIDs of oscmix processes owned by this user.
+
+    Matches the kernel comm name (what ``pkill -x`` used) as well as the
+    argv0 basename, so a rewritten or empty cmdline cannot hide a stale
+    backend.
+    """
+    pids = []
+    uid = os.getuid()
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat().st_uid != uid:
+                continue
+            comm = (entry / "comm").read_text().strip()
+        except OSError:
+            comm = ""
+        try:
+            argv0 = (entry / "cmdline").read_bytes().split(b"\x00", 1)[0]
+        except OSError:
+            argv0 = b""
+        if comm == "oscmix" or \
+                os.path.basename(argv0.decode("utf-8", "replace")) == "oscmix":
+            pids.append(int(entry.name))
+    return sorted(pids)
+
 
 def _cleanup_stale_backend(port: int, proc_root: Path) -> None:
     """A stale oscmix (e.g. from a manual run) would hold the OSC port."""
     if not udp_port_listening(port, proc_root):
         return
-    log.warning("UDP port %d already in use; terminating stale oscmix", port)
-    subprocess.run(["pkill", "-x", "oscmix"], check=False)
+    pids = find_stale_backends(proc_root)
+    if not pids:
+        log.warning("UDP port %d is in use by an unknown process; "
+                    "oscmix may fail to bind it", port)
+        return
+    log.warning("UDP port %d already in use; terminating stale oscmix (pid %s)",
+                port, ", ".join(map(str, pids)))
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
     time.sleep(0.5)
 
 
@@ -475,6 +905,7 @@ def run_session(args: argparse.Namespace, config: Config) -> int:
     if client is None:
         if not usb_device_present(config.usb_id, sysfs_usb):
             log.info("device %s not connected; nothing to do", config.usb_id)
+            sd_notify("READY=1")  # Type=notify: a clean no-op start
             return EXIT_OK
         log.error(
             "USB device %s is connected but no ALSA sequencer client named %r "
@@ -499,14 +930,22 @@ def run_session(args: argparse.Namespace, config: Config) -> int:
 
     _cleanup_stale_backend(config.osc_port, proc_root)
 
-    log.info("starting: %s %d:1 %s", alsaseqio, client, backend)
-    child = subprocess.Popen([alsaseqio, "%d:1" % client, backend])
+    # Pass the configured ports through to oscmix -- its compiled-in
+    # defaults are 7222/8222 and would silently diverge from routing.conf
+    # otherwise. (oscmix-gtk keeps its own port settings; users changing
+    # these also need to adjust the GUI's connection settings.)
+    command = [alsaseqio, "%d:1" % client, backend,
+               "-r", "udp!127.0.0.1!%d" % config.osc_port,
+               "-s", "udp!127.0.0.1!%d" % config.osc_recv_port]
+    log.info("starting: %s", " ".join(command))
+    child = subprocess.Popen(command)
 
     stop_requested = {"stop": False}
 
     def _handle_stop(signum: int, _frame: object) -> None:
         stop_requested["stop"] = True
         log.info("received %s; stopping backend", signal.Signals(signum).name)
+        sd_notify("STOPPING=1")
         if child.poll() is None:
             child.terminate()
 
@@ -528,19 +967,37 @@ def run_session(args: argparse.Namespace, config: Config) -> int:
     if child.poll() is None:
         if config.routes:
             apply_routing(config.routes, config.osc_port)
+            # Read-backs during oscmix's initial register sync are
+            # unreliable, so verification runs after a settling delay --
+            # in the background, without holding up the readiness signal.
+            def _deferred_verify() -> None:
+                time.sleep(VERIFY_DELAY)
+                if child.poll() is None and not stop_requested["stop"]:
+                    verify_and_repair(config)
+
+            threading.Thread(target=_deferred_verify, name="verify",
+                             daemon=True).start()
         else:
             log.info("no routes configured; leaving mixer state untouched")
+        # The service is "started": backend up, routing applied.
+        sd_notify("READY=1")
 
     returncode = supervise(child, stop_requested)
 
+    # Every clean exit must have signalled READY under Type=notify --
+    # exiting 0 without it counts as a protocol failure and would put
+    # the unit into a restart loop. Re-sending READY is harmless.
     if stop_requested["stop"]:
         log.info("backend stopped (shutdown requested)")
+        sd_notify("READY=1")
         return EXIT_OK
     if not usb_device_present(config.usb_id, sysfs_usb):
         log.info("backend exited (%d): device was disconnected", returncode)
+        sd_notify("READY=1")
         return EXIT_OK
     if returncode == 0:
         log.info("backend exited cleanly")
+        sd_notify("READY=1")
         return EXIT_OK
     log.error("backend exited with status %d", returncode)
     return EXIT_FAILURE
@@ -565,6 +1022,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="UDP port oscmix listens on (overrides config)")
     parser.add_argument("--dry-run", action="store_true",
                         help="show what would be started and sent, then exit")
+    parser.add_argument("--pipewire-sinks", action="store_true",
+                        help="print a PipeWire config with one named sink "
+                             "per stereo route, then exit")
+    parser.add_argument("--pipewire-target", metavar="NODE",
+                        help="Fireface sink node.name for --pipewire-sinks "
+                             "(default: auto-detect via pw-dump)")
     parser.add_argument("--verbose", action="store_true", help="debug logging")
     parser.add_argument("--version", action="version", version=__version__)
     return parser
@@ -593,6 +1056,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         config.device_name = args.device
     if args.osc_port:
         config.osc_port = args.osc_port
+
+    if args.pipewire_sinks:
+        target, positions = args.pipewire_target, None
+        info = pw_sink_info(config.device_name, target=target)
+        if info:
+            target, positions = info
+            log.info("target sink %s (%s channel layout)", target,
+                     "%d-channel" % len(positions) if positions else "unknown")
+        elif target is None:
+            log.warning("could not auto-detect the Fireface sink via pw-dump; "
+                        "replace the FIXME target in the output "
+                        "('wpctl status' shows the sink name)")
+        try:
+            sys.stdout.write(generate_pipewire_conf(config, target, positions))
+        except ConfigError as exc:
+            log.error("%s", exc)
+            return EXIT_CONFIG
+        return EXIT_OK
 
     return run_session(args, config)
 

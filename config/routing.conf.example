@@ -18,6 +18,11 @@ usb-id = 2a39:3fd9
 [osc]
 # UDP port the oscmix backend listens on.
 port = 7222
+# Port oscmix reports state changes to. Used to verify the routing after
+# applying it (and by oscmix-gtk while the mixer window is open).
+# recv-port = 8222
+# Both ports are passed through to the oscmix backend. oscmix-gtk keeps
+# its own connection settings, so adjust those too if you change these.
 
 # --------------------------------------------------------------------------
 # Routes: [route:<any-name>] sections, applied in file order.

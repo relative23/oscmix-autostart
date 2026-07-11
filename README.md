@@ -13,9 +13,10 @@ adds:
 | Piece | What it does |
 |---|---|
 | udev rule | starts the backend on hotplug, disables USB autosuspend |
-| systemd user service | supervises the backend, restarts it on failure |
-| `oscmix-session` | finds the ALSA MIDI port, launches `alsaseqio` + `oscmix`, applies your routing |
+| systemd user service | supervises the backend, restarts it on failure (`Type=notify`: "started" means "audio works") |
+| `oscmix-session` | finds the ALSA MIDI port, launches `alsaseqio` + `oscmix`, applies your routing and verifies it against the device state |
 | `routing.conf` | your default mixer routing, applied on every start |
+| `--pipewire-sinks` | optional: named outputs ("Monitors", "Headphones") in your desktop's sound settings |
 | desktop entry + launcher | "RME Fireface Mixer" in the app menu, with sanity checks and notifications |
 | `install.sh` | builds oscmix from source and installs everything per-user |
 
@@ -92,7 +93,32 @@ stereo audio to playback channels 1/2, so most setups only route 1/2 to
 wherever their speakers are connected.
 
 Changes made live in the mixer GUI stay active until the next backend
-start; the config is your reproducible baseline.
+start; the config is your reproducible baseline. Shortly after startup,
+`oscmix-session` also reads the state back from the device in the
+background and re-sends once on mismatch -- the journal line `routing
+verified against device state` is your proof that the hardware is
+actually configured.
+
+## Named outputs in your sound settings (PipeWire)
+
+PipeWire presents the Fireface's analog outputs as a single "7.1
+surround" device. If you would rather pick "Monitors" or "Headphones" by
+name in GNOME/KDE sound settings, generate one virtual sink per stereo
+route:
+
+```sh
+mkdir -p ~/.config/pipewire/pipewire.conf.d
+oscmix-session --pipewire-sinks > ~/.config/pipewire/pipewire.conf.d/oscmix-sinks.conf
+systemctl --user restart pipewire wireplumber
+```
+
+Each sink feeds the device playback channels that match the route's
+output pair, so those pairs need an identity route (`playback = output`)
+in routing.conf -- the generated file contains a ready-to-paste note if
+one is missing. The Fireface sink node and its real channel layout are
+auto-detected via `pw-dump`, so the mapping is correct in both the
+surround and the pro-audio/Direct profile; pass
+`--pipewire-target <node.name>` to override the detection.
 
 ## How it works
 

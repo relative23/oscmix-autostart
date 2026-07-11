@@ -26,7 +26,7 @@ from typing import Optional
 
 DEFAULT_USB_ID = "2a39:3fd9"
 DEFAULT_OSC_PORT = 7222
-BACKEND_WAIT = 5.0
+BACKEND_WAIT = float(os.environ.get("OSCMIX_BACKEND_WAIT", "5"))
 SERVICE = "oscmix.service"
 
 log = logging.getLogger("oscmix-launch")
@@ -124,7 +124,10 @@ def ensure_backend(port: int, proc_root: Path) -> bool:
     if systemctl_user("is-active", "--quiet", SERVICE) != 0:
         log.info("starting %s", SERVICE)
         systemctl_user("reset-failed", SERVICE)
-        systemctl_user("start", SERVICE)
+        # --no-block: the unit is Type=notify, a plain start would block
+        # until READY or TimeoutStartSec; the port poll below bounds the
+        # wait instead.
+        systemctl_user("start", "--no-block", SERVICE)
     deadline = time.monotonic() + BACKEND_WAIT
     while time.monotonic() < deadline:
         if udp_port_listening(port, proc_root):

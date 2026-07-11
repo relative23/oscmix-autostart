@@ -18,7 +18,15 @@ def test_defaults_without_file(session_mod):
     assert config.device_name == "Fireface UCX II"
     assert config.usb_id == "2a39:3fd9"
     assert config.osc_port == 7222
+    assert config.osc_recv_port == 8222
     assert config.routes == []
+
+
+def test_recv_port_option(session_mod, tmp_path):
+    path = write(tmp_path, "[osc]\nport = 9000\nrecv-port = 9001\n")
+    config = session_mod.load_config(path)
+    assert config.osc_port == 9000
+    assert config.osc_recv_port == 9001
 
 
 def test_shipped_example_config_parses(session_mod):

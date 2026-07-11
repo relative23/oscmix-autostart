@@ -2,8 +2,10 @@
 
 The stub replaces alsaseqio: it records its argv, binds the OSC UDP port,
 appends every received datagram (hex) to a file, and exits on SIGTERM.
-It also publishes the fake /proc/net/udp entry only after binding, so the
-session's port-readiness loop is exercised for real.
+It publishes the fake /proc/net/udp entry only after binding, so the
+session's port-readiness loop is exercised for real, and it answers a
+``/refresh`` request by replaying every register it received -- which
+exercises the verification path exactly like the real oscmix state dump.
 """
 
 import json
@@ -15,8 +17,11 @@ import sys
 import time
 from pathlib import Path
 
+from conftest import free_udp_port
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SESSION_BIN = PROJECT_ROOT / "bin" / "oscmix-session"
+LAUNCH_BIN = PROJECT_ROOT / "bin" / "oscmix-launch"
 
 SEQ_CLIENTS = """\
 Client info
@@ -40,6 +45,7 @@ import json, os, signal, socket, sys
 
 stub_dir = os.environ["STUB_DIR"]
 port = int(os.environ["STUB_PORT"])
+reply_port = int(os.environ.get("STUB_REPLY_PORT", "0"))
 
 with open(os.path.join(stub_dir, "argv.json"), "w") as f:
     json.dump(sys.argv[1:], f)
@@ -55,8 +61,12 @@ with open(os.environ["STUB_PROC_UDP"], "w") as f:
             "00:00000000 00000000  1000        0 1 2 0 0\\n" % port)
 
 running = [True]
-signal.signal(signal.SIGTERM, lambda *a: running.__setitem__(0, False))
+if os.environ.get("STUB_IGNORE_TERM"):
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+else:
+    signal.signal(signal.SIGTERM, lambda *a: running.__setitem__(0, False))
 
+stored = []
 log = open(os.path.join(stub_dir, "datagrams.hex"), "a")
 while running[0]:
     try:
@@ -65,12 +75,18 @@ while running[0]:
         continue
     log.write(data.hex() + "\\n")
     log.flush()
+    if data.startswith(b"/refresh") and reply_port:
+        for register in stored:
+            sock.sendto(register, ("127.0.0.1", reply_port))
+    else:
+        stored.append(data)
 sys.exit(0)
 """
 
 ROUTING_CONF = """\
 [osc]
 port = {port}
+recv-port = {recv_port}
 
 [route:monitors]
 playback = 1/2
@@ -80,15 +96,7 @@ volume = 0.0
 """
 
 
-def free_udp_port():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-    return port
-
-
-def make_env(tmp_path, *, with_client, with_usb, port=None):
+def make_env(tmp_path, *, with_client, with_usb, port=None, reply_port=None):
     proc_root = tmp_path / "proc"
     (proc_root / "asound" / "seq").mkdir(parents=True)
     (proc_root / "net").mkdir(parents=True)
@@ -114,6 +122,7 @@ def make_env(tmp_path, *, with_client, with_usb, port=None):
     backend.chmod(0o755)
 
     env = dict(os.environ)
+    env.pop("NOTIFY_SOCKET", None)
     env.update({
         # Keep the test hermetic: never read the real user config.
         "XDG_CONFIG_HOME": str(tmp_path / "xdg-config"),
@@ -124,8 +133,11 @@ def make_env(tmp_path, *, with_client, with_usb, port=None):
         "OSCMIX_BIN_BACKEND": str(backend),
         "STUB_DIR": str(stub_dir),
         "STUB_PORT": str(port or 0),
+        "STUB_REPLY_PORT": str(reply_port or 0),
         "STUB_PROC_UDP": str(proc_root / "net" / "udp"),
         "STUB_PROC_UDP_HEADER": UDP_HEADER,
+        # Background verification: no need to wait for the settle delay.
+        "OSCMIX_VERIFY_DELAY": "0.2",
     })
     return env, stub_dir, backend
 
@@ -146,50 +158,98 @@ def wait_for(predicate, timeout=10.0):
     return False
 
 
-def test_full_startup_routing_and_shutdown(tmp_path, session_mod):
-    port = free_udp_port()
+def terminate(proc):
+    if proc.poll() is None:
+        proc.kill()
+    proc.wait()
+
+
+def test_full_startup_verification_notify_and_shutdown(tmp_path, session_mod):
+    port, recv_port = free_udp_port(), free_udp_port()
     env, stub_dir, backend = make_env(
-        tmp_path, with_client=True, with_usb=True, port=port
+        tmp_path, with_client=True, with_usb=True, port=port,
+        reply_port=recv_port,
     )
     config = tmp_path / "routing.conf"
-    config.write_text(ROUTING_CONF.format(port=port))
+    config.write_text(ROUTING_CONF.format(port=port, recv_port=recv_port))
+
+    # Pretend to be the systemd notify socket (Type=notify readiness).
+    notify = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    notify.bind(str(tmp_path / "notify.sock"))
+    notify.settimeout(10)
+    env["NOTIFY_SOCKET"] = str(tmp_path / "notify.sock")
 
     proc = subprocess.Popen(
-        [sys.executable, str(SESSION_BIN), "--config", str(config), "--timeout", "5"],
+        [sys.executable, str(SESSION_BIN), "--config", str(config),
+         "--timeout", "5"],
         env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     try:
         datagram_log = stub_dir / "datagrams.hex"
-        expected_count = 5  # playback+output stereo links, 1 mix, 2 volume
+        # 5 routing registers + the /refresh from the verification pass.
         assert wait_for(
             lambda: datagram_log.exists()
-            and len(datagram_log.read_text().splitlines()) >= expected_count
-        ), "routing messages did not arrive: %s" % proc.stderr
+            and len(datagram_log.read_text().splitlines()) >= 6
+        ), "routing + verification traffic did not arrive"
 
-        # The stub must have been invoked with the discovered client:port
-        # and the resolved backend binary.
+        # The configured ports must reach the real backend as -r/-s flags.
         argv = json.loads((stub_dir / "argv.json").read_text())
-        assert argv == ["42:1", str(backend)]
+        assert argv == ["42:1", str(backend),
+                        "-r", "udp!127.0.0.1!%d" % port,
+                        "-s", "udp!127.0.0.1!%d" % recv_port]
 
-        # Byte-exact routing messages, in order.
+        # Byte-exact routing messages, in order, then the state request.
         expected = [
             session_mod.encode_osc("/playback/1/stereo", "i", 1),
             session_mod.encode_osc("/output/5/stereo", "i", 1),
             session_mod.encode_osc("/mix/5/playback/1", "fi", 0.0, 0),
             session_mod.encode_osc("/output/5/volume", "f", 0.0),
             session_mod.encode_osc("/output/6/volume", "f", 0.0),
+            session_mod.encode_osc("/refresh"),
         ]
         received = [bytes.fromhex(line)
                     for line in datagram_log.read_text().splitlines()]
-        assert received[:expected_count] == expected
+        assert received[:6] == expected
 
-        # Clean shutdown: SIGTERM -> child terminated -> exit code 0.
+        # READY=1 arrives once the backend is up and the routing was
+        # applied (verification then runs in the background).
+        assert notify.recv(4096) == b"READY=1"
+
         proc.send_signal(signal.SIGTERM)
         assert proc.wait(timeout=10) == 0
+        stderr = proc.stderr.read()
+        assert "routing verified against device state" in stderr
+        assert "re-sending" not in stderr
     finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait()
+        notify.close()
+        terminate(proc)
+
+
+def test_sigterm_ignoring_backend_gets_sigkilled(tmp_path):
+    port = free_udp_port()
+    env, stub_dir, _ = make_env(
+        tmp_path, with_client=True, with_usb=True, port=port
+    )
+    env["STUB_IGNORE_TERM"] = "1"
+    env["OSCMIX_STOP_GRACE"] = "1"  # shorten the SIGTERM->SIGKILL grace
+
+    proc = subprocess.Popen(
+        [sys.executable, str(SESSION_BIN), "--osc-port", str(port),
+         "--timeout", "5"],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        assert wait_for(lambda: (stub_dir / "argv.json").exists())
+        # Wait until the backend is considered up before stopping it.
+        assert wait_for(lambda: "0100007F" in Path(
+            env["STUB_PROC_UDP"]).read_text())
+        proc.send_signal(signal.SIGTERM)
+        # SIGTERM is ignored by the stub; after the 5s grace period the
+        # supervisor must escalate to SIGKILL and still exit cleanly.
+        assert proc.wait(timeout=15) == 0
+        assert "SIGKILL" in proc.stderr.read()
+    finally:
+        terminate(proc)
 
 
 def test_device_not_connected_exits_zero(tmp_path):
@@ -216,10 +276,11 @@ def test_config_error_exits_two(tmp_path):
 
 
 def test_dry_run_prints_plan_without_starting(tmp_path):
-    port = free_udp_port()
-    env, stub_dir, _ = make_env(tmp_path, with_client=True, with_usb=True, port=port)
+    port, recv_port = free_udp_port(), free_udp_port()
+    env, stub_dir, _ = make_env(tmp_path, with_client=True, with_usb=True,
+                                port=port)
     config = tmp_path / "routing.conf"
-    config.write_text(ROUTING_CONF.format(port=port))
+    config.write_text(ROUTING_CONF.format(port=port, recv_port=recv_port))
     result = run_session(["--config", str(config), "--dry-run"], env)
     assert result.returncode == 0
     assert "would run: alsaseqio 42:1" in result.stdout
@@ -231,8 +292,39 @@ def test_launcher_exits_one_without_device(tmp_path):
     env, _, _ = make_env(tmp_path, with_client=False, with_usb=False)
     env["OSCMIX_NO_NOTIFY"] = "1"
     result = subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "bin" / "oscmix-launch")],
+        [sys.executable, str(LAUNCH_BIN)],
         env=env, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 1
     assert "not connected" in result.stderr
+
+
+def test_launcher_starts_backend_and_execs_gui(tmp_path):
+    env, _, _ = make_env(tmp_path, with_client=True, with_usb=True)
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    systemctl_log = tmp_path / "systemctl.log"
+    systemctl = stub_bin / "systemctl"
+    systemctl.write_text(
+        "#!/bin/sh\n"
+        'echo "$@" >> "%s"\n'
+        'case "$2" in is-active) exit 1 ;; esac\n'
+        "exit 0\n" % systemctl_log
+    )
+    systemctl.chmod(0o755)
+    env.update({
+        "PATH": "%s:%s" % (stub_bin, env["PATH"]),
+        "OSCMIX_NO_NOTIFY": "1",
+        "OSCMIX_BACKEND_WAIT": "0.3",
+        "OSCMIX_BIN_GTK": "/bin/true",
+    })
+    result = subprocess.run(
+        [sys.executable, str(LAUNCH_BIN)],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0
+    calls = systemctl_log.read_text().splitlines()
+    assert "--user is-active --quiet oscmix.service" in calls
+    assert "--user reset-failed oscmix.service" in calls
+    # --no-block: a plain start would block on the Type=notify unit.
+    assert "--user start --no-block oscmix.service" in calls

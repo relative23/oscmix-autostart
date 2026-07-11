@@ -7,12 +7,22 @@ side-effect free.
 
 import importlib.machinery
 import importlib.util
+import socket
 import sys
 from pathlib import Path
 
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def free_udp_port():
+    """An ephemeral UDP port that was free a moment ago."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
 
 
 def load_executable(name):

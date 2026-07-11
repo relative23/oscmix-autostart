@@ -45,6 +45,25 @@ Common findings in the journal:
   problem, see step 2.
 - `device 2a39:3fd9 not connected; nothing to do` -- normal when the unit
   is off; the udev rule starts the service again on plug-in.
+- `routing verified against device state` -- the read-back confirmed the
+  hardware mixer matches routing.conf; this is the "everything works"
+  line.
+- `routing verification skipped: UDP 8222 in use` -- harmless; the mixer
+  GUI was listening on the state port, so the read-back was not possible.
+- `unconfirmed after retry: ...` -- the device never reported the listed
+  registers back. Check them in the mixer GUI; if the audio is fine, the
+  upstream dump format may simply have changed -- please open an issue.
+
+Verification starts ~12 s after the backend comes up, because the
+device's initial register sync saturates the MIDI link. If a slower
+machine or a larger interface logs spurious `unconfirmed` warnings,
+raise the delay via a systemd override
+(`systemctl --user edit oscmix.service`):
+
+```ini
+[Service]
+Environment=OSCMIX_VERIFY_DELAY=30
+```
 
 ## 4. Does the backend accept OSC?
 

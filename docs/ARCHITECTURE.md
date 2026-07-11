@@ -65,7 +65,30 @@ glue between them:
    The state ends up in the device's hardware mixer: zero latency,
    independent of PipeWire/PulseAudio/JACK.
 
-6. **Supervise.** On SIGTERM/SIGINT the child gets SIGTERM, after a 5 s
+6. **Signal readiness.** With the backend up and the routing sent, the
+   session reports `READY=1` (`Type=notify`), so for systemd -- and
+   anything ordered after the service -- "started" means "backend up,
+   routing applied". The no-device exit also notifies before exiting 0
+   to avoid a protocol failure.
+
+7. **Verify in the background.** OSC over UDP is fire-and-forget, so a
+   background thread reads the state back: it binds the receive port
+   (8222, where oscmix reports state), sends `/refresh`, and compares
+   the reported registers against the expected ones -- with a 0.5 dB
+   tolerance for the device's level quantization. On mismatch the
+   routing is re-sent once. The thread starts ~12 s after startup
+   because oscmix's initial register sync saturates the MIDI link and
+   makes earlier read-backs unreliable. Verification is advisory: a
+   failed read-back is logged, never fatal (a restart loop would not
+   improve anything), and it is skipped when the port is taken because
+   the mixer GUI is running. Two register families are excluded from the
+   comparison: `/mix/*/playback/*` (upstream dumps the input mix matrix
+   but not the playback matrix) and `/playback/*` (that section streams
+   so late in the multi-second dump that no sane window observes it).
+   The audible signal path -- output stereo links and volumes -- arrives
+   early in the dump and verifies reliably.
+
+8. **Supervise.** On SIGTERM/SIGINT the child gets SIGTERM, after a 5 s
    grace period SIGKILL, and the session exits 0. If the child dies on its
    own, the USB check decides again: device gone → 0 (normal unplug),
    device still there → 1 (systemd restarts).
@@ -104,6 +127,17 @@ glue between them:
   attributes are already gone, so an `ATTR{idVendor}` match never fires.
   This is easy to get wrong and results in a service that keeps running
   after unplug.
+
+- **Stale cleanup is surgical.** If the OSC port is already taken at
+  startup, only processes whose `/proc/<pid>/cmdline` is literally
+  `oscmix` and that belong to the current user get SIGTERM -- no blanket
+  `pkill` patterns.
+
+- **Named PipeWire sinks are generated, not hardcoded.**
+  `oscmix-session --pipewire-sinks` derives one loopback sink per stereo
+  route from routing.conf and auto-detects the Fireface sink node via
+  `pw-dump`, so the desktop integration follows the same single source of
+  truth as the hardware mixer.
 
 ## Installed files
 

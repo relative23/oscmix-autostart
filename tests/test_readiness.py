@@ -47,3 +47,17 @@ def test_missing_proc_files(session_mod, tmp_path):
     proc = tmp_path / "proc"
     proc.mkdir()
     assert session_mod.udp_port_listening(7222, proc) is False
+
+
+def test_find_stale_backends_matches_only_oscmix(session_mod, tmp_path):
+    proc = tmp_path / "proc"
+    for pid, argv0 in ((101, b"/usr/local/bin/oscmix"),
+                       (102, b"/usr/local/bin/alsaseqio"),
+                       (103, b"oscmix"),
+                       (104, b"oscmix-gtk")):
+        entry = proc / str(pid)
+        entry.mkdir(parents=True)
+        (entry / "cmdline").write_bytes(argv0 + b"\x00")
+    (proc / "self").mkdir()  # non-numeric entries are skipped
+    (proc / "105").mkdir()   # missing cmdline is skipped
+    assert session_mod.find_stale_backends(proc) == [101, 103]
