@@ -55,7 +55,7 @@ independent of the audio server.
 ## Install
 
 ```sh
-git clone https://github.com/relativesharp/oscmix-autostart
+git clone https://github.com/relative23/oscmix-autostart
 cd oscmix-autostart
 ./install.sh
 ```
