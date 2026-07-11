@@ -1,5 +1,8 @@
 # oscmix-autostart
 
+[![CI](https://github.com/relative23/oscmix-autostart/actions/workflows/ci.yml/badge.svg)](https://github.com/relative23/oscmix-autostart/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Plug-and-play RME Fireface UCX II on Linux.** Plug the interface in, the
 mixer backend starts automatically, your routing is applied, and the mixer
 GUI is one click away in your app menu. No terminal required after install.
