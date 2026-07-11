@@ -33,8 +33,9 @@ rm -f "$UNIT_DIR/oscmix.service" \
       "$DATA_DIR/applications/oscmix-gtk.desktop" \
       "$DATA_DIR/icons/hicolor/scalable/apps/oscmix.svg" \
       "$DATA_DIR/glib-2.0/schemas/oscmix.gschema.xml"
-[ -d "$DATA_DIR/glib-2.0/schemas" ] \
-    && glib-compile-schemas "$DATA_DIR/glib-2.0/schemas" 2>/dev/null || true
+if [ -d "$DATA_DIR/glib-2.0/schemas" ]; then
+    glib-compile-schemas "$DATA_DIR/glib-2.0/schemas" 2>/dev/null || true
+fi
 systemctl --user daemon-reload
 
 if [ -e "$UDEV_RULE" ]; then

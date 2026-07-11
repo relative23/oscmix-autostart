@@ -170,10 +170,12 @@ sed "s|^Exec=.*|Exec=$BIN_DIR/oscmix-launch|" \
     "$PROJECT_DIR/desktop/oscmix-gtk.desktop" > "$DESKTOP_TMP"
 install_file 644 "$DESKTOP_TMP" "$DATA_DIR/applications/oscmix-gtk.desktop"
 rm -f "$DESKTOP_TMP"
-command -v update-desktop-database >/dev/null 2>&1 \
-    && update-desktop-database "$DATA_DIR/applications" 2>/dev/null || true
-command -v gtk-update-icon-cache >/dev/null 2>&1 \
-    && gtk-update-icon-cache -q -t "$DATA_DIR/icons/hicolor" 2>/dev/null || true
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$DATA_DIR/applications" 2>/dev/null || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t "$DATA_DIR/icons/hicolor" 2>/dev/null || true
+fi
 
 # --------------------------------------------------------------------------
 # udev rule (the only step that needs root)
