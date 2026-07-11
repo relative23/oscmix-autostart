@@ -22,6 +22,10 @@ adds:
 
 [oscmix]: https://github.com/michaelforney/oscmix
 
+![oscmix-gtk showing the Fireface UCX II hardware mixer](docs/img/oscmix-gtk.png)
+*The upstream oscmix-gtk mixer on a UCX II -- this project makes it a
+one-click, always-configured part of your desktop.*
+
 ## Why you want this
 
 Out of the box, the UCX II works as a class-compliant USB audio device on

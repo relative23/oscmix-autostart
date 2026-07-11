@@ -81,12 +81,20 @@ glue between them:
    makes earlier read-backs unreliable. Verification is advisory: a
    failed read-back is logged, never fatal (a restart loop would not
    improve anything), and it is skipped when the port is taken because
-   the mixer GUI is running. Two register families are excluded from the
-   comparison: `/mix/*/playback/*` (upstream dumps the input mix matrix
-   but not the playback matrix) and `/playback/*` (that section streams
-   so late in the multi-second dump that no sane window observes it).
-   The audible signal path -- output stereo links and volumes -- arrives
-   early in the dump and verifies reliably.
+   the mixer GUI is running. Every expected register is classified
+   dynamically: **confirmed** (reported with a matching value),
+   **mismatched** (reported with a different value; a later matching
+   report overrides), or **unobserved** (never reported). Only
+   mismatches -- and the absence of registers the dump is known to
+   report promptly -- count as problems worth a re-send and a warning;
+   registers the device is known not to report in time are logged as
+   information. The known-not-prompt families, measured against the
+   real device, are `/mix/*/playback/*` (upstream dumps the input mix
+   matrix but not the playback matrix) and `/playback/*` (that section
+   streams so late in the multi-second dump that no sane window awaits
+   it) -- but if one of them does appear, it is compared like any
+   other, so a changed upstream dump format is handled without code
+   changes.
 
 8. **Supervise.** On SIGTERM/SIGINT the child gets SIGTERM, after a 5 s
    grace period SIGKILL, and the session exits 0. If the child dies on its

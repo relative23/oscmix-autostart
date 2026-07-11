@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 DEFAULT_DEVICE_NAME = "Fireface UCX II"
 DEFAULT_USB_ID = "2a39:3fd9"
@@ -455,18 +455,24 @@ def _register_matches(want_types: str, want_args: Sequence[object],
     return True
 
 
-def register_verifiable(path: str) -> bool:
-    """Whether a register can reliably be read back from a /refresh dump.
+def register_promptly_reported(path: str) -> bool:
+    """Whether a register is expected early in a /refresh dump.
 
-    Two exclusions, both measured against the real device:
-    - upstream dumps the input mix matrix (``/mix/<out>/input/<in>``,
-      oscmix.c) but not the playback mix matrix, so ``/mix/*/playback/*``
-      never appears at all;
-    - the ``/playback/*`` section sits near the end of a dump that
-      streams several thousand messages over MIDI for many seconds, so
-      it cannot be observed within a sane verification window.
-    What remains -- the ``/output/*`` registers, i.e. the audible signal
-    path -- arrives early in the dump and verifies reliably.
+    This is a hint, not a filter: every register that *does* appear in
+    the dump is compared, whatever this function says. It steers two
+    things only -- the early-exit condition of the observation window,
+    and whether an *absent* register counts as a problem (promptly
+    reported but missing = probably lost, worth a re-send) or as merely
+    unverifiable (logged as information).
+
+    Two families are not promptly reported, both measured against the
+    real device: upstream dumps the input mix matrix
+    (``/mix/<out>/input/<in>``, oscmix.c) but not the playback mix
+    matrix, so ``/mix/*/playback/*`` never appears at all; and the
+    ``/playback/*`` section sits near the end of a dump that streams
+    several thousand messages over MIDI for many seconds. The
+    ``/output/*`` registers -- the audible signal path -- arrive early
+    and verify reliably.
     """
     if path.startswith("/mix/") and "/playback/" in path:
         return False
@@ -475,16 +481,29 @@ def register_verifiable(path: str) -> bool:
     return True
 
 
+@dataclass
+class VerifyResult:
+    """Per-register outcome of a routing read-back."""
+
+    confirmed: List[str]
+    mismatched: List[str]
+    unobserved: List[str]
+
+
 def verify_routing(registers: "dict", send_port: int, recv_port: int,
-                   timeout: float = VERIFY_TIMEOUT) -> Optional[List[str]]:
+                   timeout: float = VERIFY_TIMEOUT) -> Optional[VerifyResult]:
     """Ask oscmix to dump its state and compare it against ``registers``.
 
     Returns ``None`` when verification is impossible (the receive port is
     taken, normally because the mixer GUI is listening there), otherwise
-    the sorted list of register paths that could not be confirmed --
-    empty meaning the device state matches the configuration.
+    a :class:`VerifyResult` classifying every expected register as
+    confirmed (reported with a matching value), mismatched (reported
+    with a different value -- a later matching report overrides), or
+    unobserved (never reported within the window).
     """
-    unconfirmed = dict(registers)
+    confirmed: set = set()
+    mismatched: set = set()
+    prompt = {path for path in registers if register_promptly_reported(path)}
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         try:
@@ -494,7 +513,15 @@ def verify_routing(registers: "dict", send_port: int, recv_port: int,
         sock.settimeout(0.25)
         sock.sendto(encode_osc("/refresh"), ("127.0.0.1", send_port))
         deadline = time.monotonic() + timeout
-        while unconfirmed and time.monotonic() < deadline:
+        while time.monotonic() < deadline:
+            # Exit early only while nothing is mismatched: a mismatch
+            # keeps the window open so a later correcting report (stale
+            # value echoed during settling) can still override it.
+            if not mismatched:
+                if len(confirmed) == len(registers):
+                    break  # every register observed and matching
+                if prompt and prompt <= confirmed:
+                    break  # the reliably-reported set fully matches
             try:
                 datagram, _ = sock.recvfrom(65536)
             except socket.timeout:
@@ -504,50 +531,60 @@ def verify_routing(registers: "dict", send_port: int, recv_port: int,
                     path, _tags, args = decode_osc(message)
                 except (ValueError, struct.error):
                     continue
-                pending = unconfirmed.get(path)
-                if pending and _register_matches(pending[0], pending[1], args):
-                    del unconfirmed[path]
-        return sorted(unconfirmed)
+                expected = registers.get(path)
+                if expected is None or path in confirmed:
+                    continue
+                if _register_matches(expected[0], expected[1], args):
+                    confirmed.add(path)
+                    mismatched.discard(path)
+                else:
+                    mismatched.add(path)
+        unobserved = [path for path in registers
+                      if path not in confirmed and path not in mismatched]
+        return VerifyResult(sorted(confirmed), sorted(mismatched),
+                            sorted(unobserved))
     finally:
         sock.close()
 
 
 def verify_and_repair(config: Config) -> None:
-    """Read the applied routing back and re-send once on mismatch.
+    """Read the applied routing back and re-send once on problems.
+
+    A register is a *problem* when the device reported a different value
+    (mismatched) or when a promptly-reported register never appeared
+    (probably lost). Registers the dump is known not to report in time
+    are logged as information, never as a warning -- but if one of them
+    does appear, it is compared like any other, so a future oscmix that
+    dumps more (or different) registers is handled without code changes.
 
     Verification is advisory: OSC over UDP has no delivery guarantee, so
     a failed read-back is logged (and retried once) but never brings the
     service down -- a restart loop would not improve anything.
     """
-    all_registers = expected_registers(config.routes)
-    verifiable = {path: value for path, value in all_registers.items()
-                  if register_verifiable(path)}
-    unreported = len(all_registers) - len(verifiable)
-    if not verifiable:
-        log.info("none of the %d configured registers appear in the device "
-                 "dump; skipping verification", len(all_registers))
-        return
-    unconfirmed: List[str] = []
+    registers = expected_registers(config.routes)
+    problems: List[str] = []
     for attempt in (1, 2):
-        result = verify_routing(verifiable, config.osc_port,
+        result = verify_routing(registers, config.osc_port,
                                 config.osc_recv_port)
         if result is None:
             log.info("routing verification skipped: UDP %d in use "
                      "(mixer GUI running?)", config.osc_recv_port)
             return
-        unconfirmed = result
-        if not unconfirmed:
+        lost = [path for path in result.unobserved
+                if register_promptly_reported(path)]
+        problems = sorted(result.mismatched + lost)
+        if not problems:
             log.info("routing verified against device state "
-                     "(%d of %d registers; %d not reliably readable)%s",
-                     len(verifiable), len(all_registers), unreported,
+                     "(%d confirmed; %d not reported by the device dump)%s",
+                     len(result.confirmed), len(result.unobserved),
                      "" if attempt == 1 else " -- after retry")
             return
         if attempt == 1:
-            log.warning("%d register(s) unconfirmed; re-sending routing",
-                        len(unconfirmed))
+            log.warning("%d register(s) unconfirmed (%s); re-sending routing",
+                        len(problems), ", ".join(problems))
             apply_routing(config.routes, config.osc_port)
             time.sleep(VERIFY_SETTLE)
-    log.warning("unconfirmed after retry: %s", ", ".join(unconfirmed))
+    log.warning("unconfirmed after retry: %s", ", ".join(problems))
 
 
 # --------------------------------------------------------------------------

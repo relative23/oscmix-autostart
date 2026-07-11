@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1 (2026-07-11)
+
+- Verification now classifies every expected register dynamically as
+  confirmed, mismatched, or unobserved. Warnings and automatic re-sends
+  happen only for real problems (a mismatched value, or a register the
+  dump reliably reports that went missing); registers the device is
+  known not to report in time are logged as information. Registers
+  outside the known-reported set are still compared whenever they do
+  appear, so a changed upstream dump format is handled without code
+  changes. A later matching report now overrides an earlier stale
+  mismatch.
+- README: screenshot of the mixer on a UCX II.
+
 ## 0.1.0 (2026-07-11)
 
 First release.
