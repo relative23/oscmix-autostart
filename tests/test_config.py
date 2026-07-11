@@ -105,20 +105,31 @@ def test_missing_explicit_file_raises(session_mod, tmp_path):
         session_mod.load_config(tmp_path / "nope.conf")
 
 
-def test_stereo_route_messages_match_legacy_script(session_mod):
-    # The proven message sequence from the original shell implementation.
+def test_stereo_route_writes_single_pair_register(session_mod):
+    # oscmix folds a stereo-linked pair onto its odd channel: one /mix
+    # message with pan 0 is the whole route. Hard-panned per-channel
+    # messages would overwrite each other (last pan wins -> hard right).
     route = session_mod.Route(
         name="monitors", playback=(1, 2), output=(5, 6),
         level=0.0, volume=0.0, stereo=True,
     )
     assert session_mod.route_messages(route) == [
+        ("/playback/1/stereo", "i", (1,)),
         ("/output/5/stereo", "i", (1,)),
-        ("/mix/5/playback/1", "fi", (0.0, -100)),
-        ("/mix/5/playback/2", "fi", (0.0, 100)),
-        ("/mix/6/playback/1", "fi", (0.0, -100)),
-        ("/mix/6/playback/2", "fi", (0.0, 100)),
+        ("/mix/5/playback/1", "fi", (0.0, 0)),
         ("/output/5/volume", "f", (0.0,)),
         ("/output/6/volume", "f", (0.0,)),
+    ]
+
+
+def test_unlinked_pair_route_uses_pair_balance(session_mod):
+    route = session_mod.Route(
+        name="split", playback=(1, 2), output=(5, 6), stereo=False,
+    )
+    assert session_mod.route_messages(route) == [
+        ("/playback/1/stereo", "i", (1,)),
+        ("/mix/5/playback/1", "fi", (0.0, -100)),
+        ("/mix/6/playback/1", "fi", (0.0, 100)),
     ]
 
 

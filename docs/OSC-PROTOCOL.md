@@ -18,16 +18,20 @@ TotalMix FX. Arguments: `,fi` = level (float, dB) + pan (int).
 - pan: `-100` (left) … `100` (right), `0` = center
 - all indices are 1-based
 
-A plain stereo pass-through of playback 1/2 to a stereo-linked output pair
-5/6 is expressed as four matrix entries (both playback channels into both
-outputs, panned hard left/right):
+**Stereo-linked pairs fold onto the odd channel:** a `/mix` message
+addressed to either half of a linked pair writes the *same* pair
+register, and pan acts as the pair's balance. Do NOT send per-channel
+messages panned hard left/right for linked pairs (the TotalMix pattern
+for unlinked channels) -- they overwrite each other and the last pan
+wins, leaving the whole mix panned hard to one side.
+
+A plain stereo pass-through of playback 1/2 to output pair 5/6 is one
+matrix entry, with both pairs linked:
 
 ```
+/playback/1/stereo  ,i   1
 /output/5/stereo    ,i   1
-/mix/5/playback/1   ,fi  0.0 -100
-/mix/5/playback/2   ,fi  0.0  100
-/mix/6/playback/1   ,fi  0.0 -100
-/mix/6/playback/2   ,fi  0.0  100
+/mix/5/playback/1   ,fi  0.0 0
 ```
 
 This is exactly what a `[route:...]` section with `playback = 1/2` and

@@ -160,7 +160,7 @@ def test_full_startup_routing_and_shutdown(tmp_path, session_mod):
     )
     try:
         datagram_log = stub_dir / "datagrams.hex"
-        expected_count = 7  # stereo + 4 mix + 2 volume messages
+        expected_count = 5  # playback+output stereo links, 1 mix, 2 volume
         assert wait_for(
             lambda: datagram_log.exists()
             and len(datagram_log.read_text().splitlines()) >= expected_count
@@ -173,11 +173,9 @@ def test_full_startup_routing_and_shutdown(tmp_path, session_mod):
 
         # Byte-exact routing messages, in order.
         expected = [
+            session_mod.encode_osc("/playback/1/stereo", "i", 1),
             session_mod.encode_osc("/output/5/stereo", "i", 1),
-            session_mod.encode_osc("/mix/5/playback/1", "fi", 0.0, -100),
-            session_mod.encode_osc("/mix/5/playback/2", "fi", 0.0, 100),
-            session_mod.encode_osc("/mix/6/playback/1", "fi", 0.0, -100),
-            session_mod.encode_osc("/mix/6/playback/2", "fi", 0.0, 100),
+            session_mod.encode_osc("/mix/5/playback/1", "fi", 0.0, 0),
             session_mod.encode_osc("/output/5/volume", "f", 0.0),
             session_mod.encode_osc("/output/6/volume", "f", 0.0),
         ]

@@ -277,21 +277,31 @@ def load_config(path: Optional[Path]) -> Config:
 def route_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
     """Translate one route into the OSC messages oscmix expects.
 
-    For a stereo pair the mix matrix of *both* outputs receives both
-    playback channels, panned hard left/right; with the outputs
-    stereo-linked this reproduces a plain stereo pass-through at
-    ``level`` dB (the same messages TotalMix would generate).
+    oscmix folds stereo-linked channels onto the odd (left) channel of a
+    pair: a ``/mix`` message addressed to either half of a linked pair
+    writes the *same* pair register, and the pan argument acts as the
+    pair's balance. Per-channel messages panned hard left/right (the
+    TotalMix pattern for unlinked channels) therefore self-overwrite --
+    the last message wins and the whole mix ends up panned hard right.
+    A pair route instead links the playback and output pairs and writes
+    the single pair register with pan 0 (= plain stereo pass-through at
+    ``level`` dB).
     """
     messages: List[Tuple[str, str, Tuple[object, ...]]] = []
     if len(route.output) == 2:
         left, right = route.output
-        pb_left, pb_right = route.playback
+        pb_left, _ = route.playback
+        messages.append(("/playback/%d/stereo" % pb_left, "i", (1,)))
         if route.stereo:
             messages.append(("/output/%d/stereo" % left, "i", (1,)))
-        for out in (left, right):
-            messages.append(("/mix/%d/playback/%d" % (out, pb_left), "fi",
+            messages.append(("/mix/%d/playback/%d" % (left, pb_left), "fi",
+                             (route.level, 0)))
+        else:
+            # Unlinked outputs: feed each side the matching half of the
+            # (linked) playback pair via the pair balance.
+            messages.append(("/mix/%d/playback/%d" % (left, pb_left), "fi",
                              (route.level, -100)))
-            messages.append(("/mix/%d/playback/%d" % (out, pb_right), "fi",
+            messages.append(("/mix/%d/playback/%d" % (right, pb_left), "fi",
                              (route.level, 100)))
         if route.volume is not None:
             for out in (left, right):
