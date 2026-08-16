@@ -43,12 +43,12 @@ class FakeOscmix(threading.Thread):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("127.0.0.1", send_port))
         self.sock.settimeout(3.0)
-        self._stopped = threading.Event()
+        self.stopping = threading.Event()
 
     def stop(self):
-        self._stopped.set()
+        self.stopping.set()
 
-    def _handle(self, path):
+    def record(self, path):
         self.order.append(path)
         parts = path.split("/")
         if path.startswith("/output/") and path.endswith("/stereo"):
@@ -57,7 +57,7 @@ class FakeOscmix(threading.Thread):
             if self.echo:
                 # The echo is what updates oscmix's state; it arrives
                 # only after the device round-trip.
-                timer = threading.Timer(self.echo_delay, self._link, [pair,
+                timer = threading.Timer(self.echo_delay, self.send_link_echo, [pair,
                                                                       path])
                 timer.daemon = True
                 timer.start()
@@ -69,13 +69,13 @@ class FakeOscmix(threading.Thread):
             pair = channel - (channel - 1) % 2
             self.mix_writes.append((path, pair in self.linked))
 
-    def _link(self, pair, path):
+    def send_link_echo(self, pair, path):
         self.linked.add(pair)
         self.sock.sendto(self.session_mod.encode_osc(path, "i", 1),
                          ("127.0.0.1", self.recv_port))
 
     def run(self):
-        while not self._stopped.is_set():
+        while not self.stopping.is_set():
             try:
                 data, _ = self.sock.recvfrom(65536)
             except socket.timeout:
@@ -87,7 +87,7 @@ class FakeOscmix(threading.Thread):
                     path, _tags, _args = self.session_mod.decode_osc(message)
                 except ValueError:
                     continue
-                self._handle(path)
+                self.record(path)
 
 
 def run_apply(session_mod, routes, **kwargs):
@@ -101,6 +101,31 @@ def run_apply(session_mod, routes, **kwargs):
         device.join(timeout=3)
         device.sock.close()
     return device
+
+
+def test_device_fakes_avoid_private_thread_names(session_mod):
+    """The fakes share a namespace with threading.Thread's internals.
+
+    ``Thread._stop`` is a method on every version and 3.13 added
+    ``Thread._handle``; shadowing either breaks the thread machinery on
+    exactly the interpreters that define it. Both slipped through a green
+    local run, so the rule is now mechanical: these classes use no
+    single-underscore names at all.
+    """
+    inherited = set(vars(threading.Thread(daemon=True)))
+    for cls in (FakeOscmix, DumpingOscmix):
+        device = cls(session_mod, free_udp_port(), free_udp_port(),
+                     *([] if cls is FakeOscmix else [[]]))
+        try:
+            names = (set(vars(device)) - inherited) | {
+                n for n in vars(cls) if not n.startswith("__")}
+        finally:
+            device.sock.close()
+        private = sorted(n for n in names
+                         if n.startswith("_") and not n.startswith("__"))
+        assert private == [], (
+            "%s uses private names that may collide with threading.Thread: %s"
+            % (cls.__name__, private))
 
 
 def test_mix_is_written_only_after_the_device_confirmed_the_link(session_mod):
@@ -263,10 +288,10 @@ class DumpingOscmix(threading.Thread):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("127.0.0.1", send_port))
         self.sock.settimeout(0.2)
-        self._stopped = threading.Event()
+        self.stopping = threading.Event()
 
     def stop(self):
-        self._stopped.set()
+        self.stopping.set()
 
     def drain(self, quiet=0.3, limit=5.0):
         """Wait until no further datagram arrives for ``quiet`` seconds.
@@ -284,7 +309,7 @@ class DumpingOscmix(threading.Thread):
             time.sleep(quiet)
 
     def run(self):
-        while not self._stopped.is_set():
+        while not self.stopping.is_set():
             try:
                 data, _ = self.sock.recvfrom(65536)
             except socket.timeout:
