@@ -47,6 +47,25 @@ multiplies the register surface by roughly ten.
   because absolute survivor numbers rise with every line added.
 - It found a real weakness: `_register_matches` was tested with an
   expected value of 0.0, where a sign error is invisible.
+- The coverage ratchet is 94 against a measured 94%. It had sat at 84
+  while the suite earned 91 -- seven points of erosion nothing would have
+  noticed. `bin/oscmix-launch` moved into the package, taking it from the
+  least covered file in the repository (61%) to 100% and inside the
+  architecture test, the mutation scope and the coverage.
+- A skipped contract suite no longer looks like a green run. Without
+  hypothesis the terminal summary prints what did not run and why, and
+  `OSCMIX_REQUIRE_CONTRACTS=1` makes the skip a collection error. CI sets
+  it.
+- `scripts/record-dump.py` and `tests/data/refresh-dump.json`: a real
+  `/refresh` from the pinned revision, recorded as register shape and
+  arrival times rather than values, with the continuously streaming level
+  meters separated out. `register_promptly_reported` is now tested
+  against a measurement instead of a memory.
+- `systemd-analyze verify` on the unit in CI, via
+  `scripts/verify-unit.sh` -- the tool reports an unknown directive name
+  on stderr and still exits 0, so the script reads the output. And
+  `install.sh` is now run end to end: three tests install into a
+  throwaway `HOME` and run what came out of it.
 
 ### Stability
 
@@ -57,6 +76,37 @@ multiplies the register surface by roughly ten.
 - `tests/test_performance.py` asserts **growth order**, not wall-clock. A
   millisecond budget on a shared runner would mostly measure the runner
   and add a flake source to a project whose bugs are already timing bugs.
+- Three fault cases that tear **state** rather than transport: the
+  backend killed between the link phase and the mix write, the device
+  vanishing while `/refresh` is still streaming, and the receive port
+  taken halfway through the dump rather than before it.
+- A restart soak that runs. `tests/test_soak.py` drives the real entry
+  point through start → `READY=1` → verify → SIGTERM → exit 0 and
+  asserts the routing datagrams byte for byte on every cycle;
+  `.github/workflows/soak.yml` runs 200 nightly. "Proven by: soak on
+  main" had been in the roadmap since the first draft with nothing
+  running one.
+- The background verifier has a stated contract: it checks for a stop
+  between every phase and before each of its three writes, every wait
+  wakes early rather than running out, and the session waits for it
+  before exiting. It previously read the stop flag once, before starting,
+  and then ran for up to two verification windows plus a 20 s blind
+  delay.
+- The timing budget composes. `constants.startup_budget()` sums the waits
+  on the path to `READY=1` (42.0 s against `TimeoutStartSec=75`) and the
+  unit is parsed and asserted against it, including `ExecStart`'s own
+  `--timeout`.
+
+### Fixed
+
+- `--dry-run` printed an order the apply never uses. It walked route by
+  route and printed link, mix, link, mix; `apply_routing` sends every
+  link of every route, waits for the barrier, then every mix. With one
+  route the two agree by accident -- and the one-route example config was
+  exactly what CI grepped to guard the defect that silenced every even
+  output, so the cheapest end-to-end check in the pipeline was inspecting
+  an artifact nothing sends. One function (`routing_plan`) now produces
+  the order and both consume it.
 
 ### Security and supply chain
 
@@ -75,6 +125,14 @@ multiplies the register surface by roughly ten.
 - `docs/SECURITY-MODEL.md` states what nobody had written down: UDP 7222
   is unauthenticated and any local process can write any mixer register.
   From 0.3.0 that includes phantom power.
+- ... and that "the session writes nothing" is a property of today's
+  feature set rather than a principle, with the four questions the first
+  writable path has to answer, so the sandbox cannot widen as an
+  implementation detail. The empty `ReadWritePaths` is now asserted.
+- `install.sh` gets its shallow clone back: `git clone --depth 1
+  --branch` takes a branch or a tag but not a commit, which is what the
+  pin is, so it uses `git init` + `git fetch --depth 1 origin <sha>`,
+  falling back to a full clone if the server refuses a bare SHA.
 
 ### Code quality and maintainability
 
@@ -84,8 +142,20 @@ multiplies the register surface by roughly ten.
   exception handling and correctness rules), with every exclusion
   carrying its reason. One rule was overruled on purpose: the launcher
   must not print a traceback to a desktop user.
-- `docs/decisions/`: five ADRs for the choices that each cost a
-  measurement session to reach.
+- `docs/decisions/`: nine ADRs for the choices that each cost a
+  measurement session to reach. The four added here are the ones a later
+  release cannot cheaply revisit: what `routing.conf` promises across
+  versions (unknown section warns, unknown option fails, no schema
+  field), why performance gates measure growth order, why upstream is
+  pinned and when the pin may move, and the verifier's stop contract.
+- `docs/RELEASE-CHECKLIST.md`: what must exist before a tag, including
+  the rule that a routing change is not done until its measurement is in
+  the release, and what is deliberately *not* on the list.
+- Compatibility: an unknown **section** in `routing.conf` is now a
+  warning and the rest of the file is applied. An unknown **option in a
+  known section** is still an error -- that is what a typo looks like,
+  and a silently ignored `levl = -20` is a wrong device state nobody is
+  told about.
 - `docs/ROADMAP.md` records where this goes next and, explicitly, that
   four of six known constraints are upstream limits -- with the patches
   and issues to raise there treated as work items rather than weather.

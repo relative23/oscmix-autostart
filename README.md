@@ -183,9 +183,15 @@ make typecheck        # mypy --strict over the runtime package
 make deadcode         # vulture
 make coverage         # with the ratchet from pyproject.toml
 make flake            # the suite five times over, to surface races
+make soak             # restart cycles; the gate is the scheduled workflow
 make mutation         # do the assertions actually catch a wrong value?
 make verify-hardware  # measure the audio itself (needs a Fireface)
 ```
+
+Install the dev requirements before trusting a green run. Without
+`hypothesis`, `tests/test_contracts.py` skips itself -- the suite says so
+loudly at the end, and `OSCMIX_REQUIRE_CONTRACTS=1` turns that skip into
+an error, which is how CI runs it.
 
 The integration tests run `oscmix-session` against a stub backend with a
 fake `/proc` and sysfs, so the full startup/routing/shutdown path is tested
@@ -200,6 +206,11 @@ a private `threading.Thread` attribute passed on 3.14 and failed on
 everything older. And `make flake` repeats the suite, because the tests
 bind real UDP sockets and drive background threads, where a teardown race
 survived several consecutive green runs.
+
+A third runs nightly rather than per commit: `.github/workflows/soak.yml`
+restarts the session 200 times and checks the routing datagrams byte for
+byte every time. Every failure mode found in this project so far was a
+timing bug, and every one of them survived a green single run.
 
 The runtime itself has no Python dependencies -- `oscmix-session` uses only
 the standard library, so it runs before any package manager is involved.

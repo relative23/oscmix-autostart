@@ -29,6 +29,61 @@ correct:
 | Desktop audio integration | none | named PipeWire sinks from the same config |
 | Scriptable / headless | no | yes |
 
+### The bar is the stack, not this repository
+
+**Draft, 2026-08-16 -- the matrix is measured, the conclusions are not
+yet decided.**
+
+"As complete as TotalMix FX, and better" is a claim about a *stack*. What
+a user actually runs is upstream `oscmix` (the protocol), upstream
+`oscmix-gtk` (the mixer GUI) and this project (the state). Measuring any
+one of the three against a product that is all three at once is how a
+feature gap turns into an argument about scope, and this document has an
+[explicit non-goals](#explicit-non-goals) section that reads as a refusal
+of the goal if the stack is never named.
+
+So the bar is written down once, for the stack, with an owner per row.
+The middle column is measured: it is what a `/refresh` dump on a UCX II
+reports, recorded in `tests/data/refresh-dump.json` (2002 registers, 70
+of them streamed without being asked, against the pinned revision). The
+oscmix-gtk column is **unverified** -- nobody has walked the GUI against
+this list, and until somebody does, "the GUI has it" is folklore of
+exactly the kind item **L** exists to end.
+
+| TotalMix FX capability | In the dump | Declarable here |
+|---|---|---|
+| Submix per output, playback sources | `/mix/<out>/playback/*` **absent** | today (re-established, never verified) |
+| Submix per output, input sources | `/mix/<out>/input/*` (100) | 0.3.0 |
+| Input strip: gain, `48v`, hi-z, reflevel, mute, phase, stereo | yes (42 shapes) | 0.3.0 |
+| Output strip: volume, pan, mute, phase, reflevel, stereo | yes (55 shapes) | today: volume, stereo. 0.3.0: rest |
+| EQ (3 band) and low cut, in and out | `eq/band1..3*`, `lowcut/*` | 0.4.0 |
+| Dynamics, auto level | `dynamics/*`, `autolevel/*` | 0.4.0 |
+| Room EQ (5 band + delay, outputs) | `roomeq/band1..5*`, `roomeq/delay` | 0.4.0, and see the constraint below |
+| Reverb and echo FX | `/reverb/*` (14), `/echo/*` (7) | 0.4.0 |
+| Control room: main out, dim, mono, recall volume | `/controlroom/*` (6) | 0.4.0 |
+| Crossfeed | `/output/<n>/crossfeed` | 0.4.0 |
+| Clock source, sample rate, word clock | `/clock/*` (5) | 0.4.0, and see the open decision below |
+| Optical/SPDIF mode, standalone, key lock | `/hardware/*` (10) | 0.4.0 |
+| Loopback, channel names | **absent** -- write-only | 0.4.0, unverifiable by construction |
+| Metering | 70 streamed registers | never: a meter is not state |
+| Snapshots (8) | -- | 0.3.0 as profiles, plural text files |
+| Workspaces, layouts, matrix view | -- | never: GUI, and no device state |
+| DURec transport | not in this dump | never: interactive |
+| Remote control (MIDI/OSC) | the whole interface is OSC | already better than the original |
+
+Read down the last column and the shape of the answer is: **the device
+surface is nearly all reachable and nearly all declarable, and the two
+rows that are not** -- the playback matrix and the write-only registers
+-- **are exactly the two this project already treats as special cases.**
+That is a stronger position than "we win at state management", and it is
+worth stating as the goal it is.
+
+What the matrix does *not* answer, and what has to be decided rather than
+measured: which rows this project should own at all, and which belong to
+a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
+the honest answer today is "turn it in the GUI, and hope nothing resets
+it" -- which is the same answer TotalMix gives, minus the snapshot.
+
 ## Where we are (0.2.0, unreleased)
 
 Working and verified: playback→output routing for mono and stereo pairs,
@@ -43,19 +98,22 @@ What 0.2.0 moved, measured rather than claimed (2026-08-16):
 
 | | 0.1.3 | 0.2.0 |
 |---|---|---|
-| runtime layout | 1386 lines, one file | 14 modules, 1726 lines, 52-line shim |
-| longest function | 106 lines | 70 (`verify_and_repair`), exactly at the ceiling |
-| tests | 118 | 283 cases from 194 test functions |
-| coverage | 65% (subprocess unmeasured) | 91% measured, gate still set to 84 |
-| `mypy --strict` | 12 errors | clean, 14 files |
+| runtime layout | 1386 lines, one file | 15 modules, 2119 lines, two shims of 52 and 42 lines |
+| longest function | 106 lines | 66 (`verify_and_repair`), under the 70 ceiling |
+| tests | 118 | 360 cases from 256 test functions |
+| coverage | 65% (subprocess unmeasured) | 94% measured, gate at 94 |
+| `mypy --strict` | 12 errors | clean, 15 files |
 | mutation score | not runnable | 0.728, floor 0.72 |
 | upstream backend | `master`, unpinned | pinned commit, verified at checkout |
-| hardware evidence | done by hand, once | committed tool, no artifact in a release yet |
-| structural guarantees | comments | 60+ assertions |
+| hardware evidence | done by hand, once | two committed tools, a recorded dump, no artifact in a release yet |
+| structural guarantees | comments | 60+ assertions, plus `systemd-analyze verify` and an install smoke test |
 
-Two of those numbers do not yet match a claim made below -- the coverage
-gate and the missing evidence artifact. They are items **C** and **D** in
-[Still open](#still-open-in-020).
+One number below still does not describe this suite: the mutation floor
+was measured before `tests/test_lifecycle.py` and `tests/test_process.py`
+existed, which is item **K** in [Still open](#still-open-in-020). The
+hardware evidence now has a tool, a dump fixture and a place in
+`docs/RELEASE-CHECKLIST.md`; what it does not have is a release to be
+attached to.
 
 ## 0.2.0 -- maturity
 
@@ -128,8 +186,11 @@ refusal paths.
 that every public function in the runtime package is named by at least
 one test.
 
-*Left over:* the ratchet was never actually raised. It still says 84
-while the suite measures 91 -- see **C** below.
+*Closed late:* the ratchet sat at 84 while the suite measured 91, and
+`bin/oscmix-launch` sat outside the package, the architecture test and
+the mutation scope. Both are fixed: the launcher is
+`src/oscmix_autostart/launcher.py` at 100%, and the gate is 94 against a
+measured 94 -- no margin left to erode unnoticed.
 
 ### 4. Provability -- **done**
 
@@ -149,7 +210,7 @@ even outputs silent, unlinked pair half-dead, unlinked route 6 dB low.
 *Proven by:* the artifact itself. A routing change is not done until the
 measurement is in the release.
 
-### 5. Stability -- **half done**
+### 5. Stability -- **done**
 
 *Was:* a flakiness gate runs the suite five times. There is no fault
 injection and no soak. Every failure mode found so far -- the link race,
@@ -160,12 +221,22 @@ datagrams; kill the backend mid-apply; unplug the device mid-verify;
 occupy the receive port halfway through) and a restart soak that applies
 the routing N times and asserts the result every time.
 
-*Done:* `tests/test_faults.py` -- drop, duplicate, reorder, a flood of
-unrelated registers, a device that never answers, a dead backend port.
+*Done, transport:* `tests/test_faults.py` -- drop, duplicate, reorder, a
+flood of unrelated registers, a device that never answers, a dead backend
+port.
 
-*Not done:* every case in that list that breaks **state** rather than
-**transport**, plus the soak. See **A** below; this is the one item of the
-nine that 0.2.0 should not claim.
+*Done, state:* the three cases that tear a transaction open -- the
+backend killed between the link phase and the mix write, the device
+vanishing while `/refresh` is still streaming, and the receive port taken
+*between* attempts rather than before the first one. Those are the shape
+every defect this project has shipped had, and they are what gave the
+verifier a stop contract (ADR 0009) rather than the other way round.
+
+*Done, soak:* `.github/workflows/soak.yml`, daily at 04:17 UTC -- 200
+restart cycles, each one a real `bin/oscmix-session` against the stub
+backend checked datagram for datagram, plus the fault suite repeated 15
+times. A scheduled workflow, not a Makefile target: `Proven by: soak on
+main` was in this document long before anything ran one.
 
 ### 6. Code quality -- **done**
 
@@ -242,10 +313,36 @@ leftovers from the nine above; **B** and **D** to **F** are gaps the
 release itself opened; **G** to **L** only became visible once there was
 a standard strict enough to measure against.
 
-The first three are the ones that would embarrass this release if someone
-looked: a stability item claimed as done, a CI check that guards the
-project's most expensive bug by inspecting the wrong artifact, and a
-coverage gate seven points below what the suite earns.
+The first three were the ones that would have embarrassed this release if
+someone had looked: a stability item claimed as done, a CI check that
+guarded the project's most expensive bug by inspecting the wrong
+artifact, and a coverage gate seven points below what the suite earned.
+
+**Eleven of the twelve are closed.** Each item below keeps its original
+diagnosis -- that is the reason it existed, and worth more than a tick --
+followed by a *Closed:* line naming what proves it. What is left is
+**K**, the mutation re-baseline, and the half of **D** that no checklist
+can supply: an actual measured artifact, which needs a release to be
+attached to.
+
+Two things were found while closing these and are recorded rather than
+acted on, because acting would have meant changing behaviour on a
+condition nobody measured:
+
+- **The dump is 1.9 s, not 15-20 s.** Measured against the pinned
+  revision on a UCX II, twice (cold backend + immediate `/refresh`, and
+  passively for 45 s after a restart): 2002 registers, all inside 2 s.
+  `/playback/*/stereo` arrives at **0.0 s**, not "near the end of a dump
+  that streams for many seconds" as `register_promptly_reported` says.
+  The condition *not* measured is a cold **device** -- this was an
+  already-enumerated interface with only the backend restarted -- and
+  `LINK_SYNC_BLIND_DELAY = 20` exists for the hotplug case. So the
+  constant stands and the measurement is in
+  `tests/data/refresh-dump.json` with its conditions attached. Settling
+  it needs one measurement after a real replug.
+- **The discrepancy went unseen because the verify loop hides it.** It
+  exits as soon as the *prompt* set matches, so `/playback/*` was never
+  looked at -- the classification made itself true.
 
 ### A. The fault cases that tear state, not just packets
 
@@ -274,6 +371,15 @@ draft.
 *Proven by:* the three cases in the normal suite; the soak as a scheduled
 workflow, not a Makefile target nobody invokes.
 
+*Closed:* the three state-tearing cases are in `tests/test_faults.py`.
+The soak is `tests/test_soak.py` driving the real entry point through
+start -> `READY=1` -> verify -> SIGTERM -> exit 0, asserting the routing
+datagrams byte for byte on *every* cycle, and
+`.github/workflows/soak.yml` runs 200 of them nightly plus 15 repeats of
+the fault, apply and verify suites. Measured locally: 50 cycles in 61 s,
+green. `make soak` exists to reproduce a scheduled failure, not to be
+the gate.
+
 ### B. What a `routing.conf` promises across versions
 
 *Today:* `config.py` rejects every unknown option and every unknown
@@ -298,6 +404,15 @@ a known section* stays an error; what is promised in each direction.
 parser, today's config on a parser that knows more) and an ADR, because
 this is a promise rather than an implementation detail.
 
+*Closed:* [ADR 0006](decisions/0006-routing-conf-compatibility.md). An
+unknown **section** is a warning and the rest of the file is applied; an
+unknown **option in a known section** stays a `ConfigError`. No schema
+version field -- the ADR records why, and when to revisit (the first
+*incompatible* change to an existing option). A test per direction, plus
+one pinning the known option surface so removing a name is a visible
+edit. The cost is stated: `[routes:x]`, a typo, is now a dropped route
+and a warning rather than an error.
+
 ### C. The gate, and the code outside the package
 
 *Today:* three measurement gaps, all small, all pointing the same way:
@@ -318,6 +433,16 @@ this is a promise rather than an implementation detail.
 covered like the rest or declared out of scope *in writing*; a skipped
 contract suite that says so loudly.
 
+*Closed:* the ratchet is 94 against a measured 94% (`fail_under` in
+`pyproject.toml`, with the reason for the jump written next to it). The
+launcher moved into the package -- so it is inside the architecture
+test, the mutation scope and the coverage -- and
+`tests/test_launcher.py` took it from 61% to **100%**, including every
+refusal path a user meets after a desktop double-click. The hypothesis
+skip is loud: without it the terminal summary prints what did not run
+and why, and `OSCMIX_REQUIRE_CONTRACTS=1` turns the skip into a
+collection error. CI sets it on the test and coverage jobs.
+
 ### D. Releasing 0.2.0
 
 *Today:* the version and the changelog are in place. What is not: the
@@ -336,6 +461,19 @@ neither has a record -- why performance gates measure growth order rather
 than wall-clock time, and why the upstream revision is pinned. Both belong
 in `docs/decisions/`, for exactly the reason item 9 gives.
 
+*Closed, except the artifact itself:* `docs/RELEASE-CHECKLIST.md` states
+what must exist before a tag, in six stages, and names what is
+deliberately *not* on it. The two missing decisions are
+[ADR 0007](decisions/0007-growth-order-not-wall-clock.md) (growth order,
+not wall-clock) and
+[ADR 0008](decisions/0008-pinned-upstream-revision.md) (the pin, and the
+bump rule).
+
+*Still open:* no measured hardware artifact exists yet. `make
+verify-hardware` plays a tone through the configured outputs, so it is
+not something to run unannounced on a machine somebody is listening to;
+it belongs in the release session, which is what the checklist now says.
+
 ### E. When the upstream pin moves
 
 *Today:* the pin is set, verified at checkout, and recorded in the
@@ -352,6 +490,13 @@ accepted, the order is bump, measure, *then* delete `LINK_ECHO_TIMEOUT`,
 `--depth 1 --branch` accepts a branch or a tag but not a commit. `git
 init` plus `git fetch --depth 1 origin <sha>` gets the shallow clone back.
 
+*Closed:* the bump rule is [ADR 0008](decisions/0008-pinned-upstream-revision.md),
+including the ordering for the upstream patch (bump, measure, *then*
+delete the constants). `install.sh` has its shallow clone back via `git
+init` + `git fetch --depth 1 origin <sha>`, with a fallback to a full
+clone for servers that refuse a bare SHA. Measured against upstream: one
+commit and 480K of `.git` instead of the full history at 632K.
+
 ### F. "The session writes nothing" has an expiry date
 
 *Today:* the unit runs with `ProtectHome=read-only` and an empty
@@ -364,6 +509,14 @@ model should record *now* that this is a property of the current feature
 set, and where it would have to be renegotiated -- otherwise the first
 feature that needs a file will quietly widen the sandbox instead of
 arguing for it.
+
+*Closed:* `docs/SECURITY-MODEL.md` now says that "writes nothing" is a
+property of today's feature set, names the four questions the first
+writable path has to answer (does the *service* need it or only the CLI;
+`StateDirectory=` rather than a hand-written path; the config itself
+stays read-only; partial writes), and points at the assertion that keeps
+the sandbox from widening quietly -- which did not exist and now does
+(`test_the_service_declares_no_writable_path`).
 
 ### G. The dry run is not the path it claims to check
 
@@ -393,6 +546,13 @@ the datagrams `apply_routing` sends, in the same order -- plus a second
 route in the config CI uses, because a single route cannot exhibit the bug
 class this check exists for.
 
+*Closed:* `routing_plan()` produces the order and both the dry run and
+the apply consume it. A contract test asserts the printed lines are
+exactly the datagrams `apply_routing` puts on the wire, in the same
+order, over three routes; reverting `_print_dry_run` to the old walk
+fails it at index 2. CI's dry run moved to `tests/data/two-routes.conf`
+and asserts *last* link < *first* mix rather than one link < one mix.
+
 ### H. The timing budget has to compose
 
 *Today:* eight waits (`DEFAULT_DEVICE_TIMEOUT` 30 s, `PORT_READY_TIMEOUT`
@@ -409,6 +569,18 @@ apply. That is item **A**'s torn state, reached by editing a number.
 already uses: parse the unit, read the constants, assert that the
 worst-case path to `READY=1` fits inside `TimeoutStartSec` with margin and
 that `CHILD_STOP_GRACE` fits inside `TimeoutStopSec`.
+
+*Closed:* `constants.startup_budget()` sums the waits on the path to
+`READY=1` -- **42.0 s** against `TimeoutStartSec=75`.
+`tests/test_unit_file.py` parses the unit and asserts the budget fits
+with at least 10 s of margin, that `ExecStart`'s own `--timeout` fits
+(so raising it past ~53 s fails the suite rather than the service), that
+`CHILD_STOP_GRACE` plus one poll step fits inside `TimeoutStopSec`, and
+that the sum still names every term. Verification's exclusion is
+asserted *structurally* rather than arithmetically -- `READY=1` follows
+the apply in the same block and `_apply_and_verify` still defers to a
+thread -- because with 33 s of margin the arithmetic would pass either
+way.
 
 ### I. The background verifier has no stated contract
 
@@ -431,6 +603,16 @@ phases and before every write, and the session does not exit until the
 verifier has stopped or its deadline passed. Item **A**'s kill-mid-apply
 case then has something to assert against.
 
+*Closed:* [ADR 0009](decisions/0009-verifier-stop-contract.md), and the
+code to match. The verifier asks `should_stop()` between every phase and
+before each of the three writes, and every wait wakes early
+(`wait_unless_stopped` replaced the sleeps -- the blind delay is 20 s
+against a `TimeoutStopSec` of 10, and it is the path a *user* hits,
+because it is taken when the mixer GUI holds the port). `run_session`
+joins the verifier for `VERIFIER_STOP_GRACE` (2 s) before exiting; 2 + 5
+fits inside 10, asserted against the unit file. A dead backend counts as
+a stop.
+
 ### J. Nothing proves the unit starts, or that an install works
 
 *Today:* `tests/test_unit_file.py` reads the unit as text. That catches
@@ -443,6 +625,16 @@ from `lib/` to `src/` and rewrote that path in three places.
 test: run `install.sh --no-build --no-udev` into a temporary `HOME`, then
 assert the installed file set and that `oscmix-session --dry-run` runs
 from it.
+
+*Closed:* `scripts/verify-unit.sh` runs `systemd-analyze verify --user`
+and fails on anything it says about this unit -- necessary because the
+tool reports an unknown key on stderr and still exits 0, so the exit
+status is not a gate. Wired into the quality job, where a missing
+`systemd-analyze` is a failure rather than a skip. Three install tests
+now run what `install.sh` produced, from a directory that is not the
+checkout: the session's `--dry-run`, the launcher's device-absent path
+(which would die with `ImportError` if `launcher.py` had not been
+installed), and the module set matching `src/` exactly.
 
 ### K. The mutation baseline predates half the suite
 
@@ -468,6 +660,23 @@ dump from exactly that revision belongs in the repository as a fixture,
 and the classification becomes a test against it rather than a memory. It
 is also what the verification classes in 0.3.0 should be derived from,
 instead of being written out a second time by hand.
+
+*Closed:* `scripts/record-dump.py` and `tests/data/refresh-dump.json` --
+a real dump from the pinned revision, recorded as register *shape* and
+arrival times, never values. It separates the 70 continuously streaming
+meter registers from the dump itself, which a first attempt did not:
+54970 messages in 60 s, and the dump never went quiet because the meters
+never stop.
+
+Confirmed against 2411b12 on a UCX II (24216011), 2002 registers:
+`/mix/*/playback/*` absent as the two-phase design assumes;
+`/mix/*/input/*` present (400 registers) as 0.3.0 assumes; `48v`,
+`hi-z`, `reflevel`, `gain`, `mute`, `phase` all present; `name` and
+`loopback` absent, i.e. still write-only. `tests/test_recorded_dump.py`
+binds the classification to that measurement in the direction that
+matters -- a register the dump never reports may never be called prompt,
+or the verifier warns and re-sends on every single run -- and holds the
+1.9 s finding above in place with its conditions.
 
 ## Upstream is part of the quality goal, not the weather
 
