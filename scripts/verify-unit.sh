@@ -32,11 +32,35 @@ if [ ! -f "$UNIT" ]; then
 fi
 
 BASENAME="$(basename "$UNIT")"
-OUTPUT="$(systemd-analyze verify --user "$UNIT" 2>&1 || true)"
+# LC_ALL=C: systemd translates its diagnostics, and the filter below
+# matches on their English text. A German runner reports "Datei oder
+# Verzeichnis nicht gefunden" and the exception would stop matching --
+# turning an environmental note back into a failing gate.
+OUTPUT="$(LC_ALL=C systemd-analyze verify --user "$UNIT" 2>&1 || true)"
 
 # Anything naming our unit is a finding: unknown keys, bad values,
 # unresolvable specifiers. Other units on the host are not our problem.
-FINDINGS="$(printf '%s\n' "$OUTPUT" | grep -F "$BASENAME" || true)"
+MINE="$(printf '%s\n' "$OUTPUT" | grep -F "$BASENAME" || true)"
+
+# One exception, and only one. systemd-analyze also resolves ExecStart=
+# and reports the binary as missing when it is not installed -- which is
+# the normal state of a CI checkout, and says nothing about the unit
+# being well-formed. It is reported rather than dropped, because a check
+# that hides findings is worse than no check.
+#
+# The property this gives up is covered better elsewhere:
+# tests/test_install_sh.py installs into a throwaway HOME and *runs* the
+# result, so whether ExecStart points at something that exists and works
+# is proven by executing it, not by resolving a path.
+NOT_INSTALLED="$(printf '%s\n' "$MINE" \
+    | grep -E 'Command .* is not executable' || true)"
+FINDINGS="$(printf '%s\n' "$MINE" \
+    | grep -vE 'Command .* is not executable' | grep -F "$BASENAME" || true)"
+
+if [ -n "$NOT_INSTALLED" ]; then
+    echo "note: not installed on this machine, so ExecStart was not resolved:" >&2
+    printf '%s\n' "$NOT_INSTALLED" >&2
+fi
 
 if [ -n "$FINDINGS" ]; then
     echo "systemd-analyze rejected $BASENAME:" >&2

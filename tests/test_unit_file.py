@@ -299,3 +299,50 @@ def test_the_verify_script_fails_on_an_unknown_directive(tmp_path):
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 1
     assert "NoNewPrivilegs" in result.stderr
+
+
+def test_the_verify_script_tolerates_an_uninstalled_execstart(tmp_path):
+    """The regression this check learned in CI.
+
+    `systemd-analyze verify` also resolves `ExecStart=` and reports the
+    binary as missing when it is not installed. That is the normal state
+    of a fresh checkout, and it says nothing about whether the unit is
+    well-formed -- but the first version of scripts/verify-unit.sh
+    treated every line naming the unit as a finding, so the gate passed
+    locally (where the unit *is* installed) and failed on the runner.
+
+    Whether ExecStart points at something that exists and works is
+    proven by tests/test_install_sh.py, which installs into a throwaway
+    HOME and runs the result.
+    """
+    import shutil
+    import subprocess
+
+    from conftest import repo_file
+
+    if shutil.which("systemd-analyze") is None:
+        pytest.skip("systemd-analyze is not installed")
+
+    uninstalled = tmp_path / "oscmix.service"
+    uninstalled.write_text("\n".join(
+        "ExecStart=/nonexistent/oscmix-session" if line.startswith("ExecStart=")
+        else line
+        for line in repo_file("systemd", "oscmix.service").read_text().splitlines()
+    ) + "\n")
+
+    script = repo_file("scripts", "verify-unit.sh")
+    result = subprocess.run(["sh", str(script), str(uninstalled)],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+    # Reported, not hidden: a check that swallows findings is worse than
+    # no check.
+    assert "not installed on this machine" in result.stderr
+
+    # ... and a real fault in the same file is still caught.
+    both = tmp_path / "broken.service"
+    both.write_text(uninstalled.read_text()
+                    .replace("NoNewPrivileges=yes", "NoNewPrivilegs=yes"))
+    result = subprocess.run(["sh", str(script), str(both)],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 1
+    assert "NoNewPrivilegs" in result.stderr
