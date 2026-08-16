@@ -1,0 +1,24 @@
+{
+  "recorded": "2026-08-16",
+  "note": [
+    "Mutation testing answers what coverage cannot: whether an assertion",
+    "catches a wrong value or merely executes the line. This file is a",
+    "ratchet, not a target -- survivors must not grow.",
+    "",
+    "Not every survivor is a gap. Roughly a quarter change a log or error",
+    "message, which nothing asserts on by design. Others are equivalent:",
+    "the guard `if not mismatched` only decides when the read-back loop",
+    "exits, not what it returns, so killing it would require asserting on",
+    "timing -- a worse test than the mutant is a risk.",
+    "",
+    "'not_covered' is code the in-process tests never execute: the CLI,",
+    "session and process modules are driven through a real subprocess,",
+    "which loads the checked-out source rather than the mutant. See",
+    "docs/decisions/0005-mutation-testing-scope.md."
+  ],
+  "total": 2066,
+  "killed": 1009,
+  "survived": 377,
+  "not_covered": 677,
+  "timeout": 3
+}

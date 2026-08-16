@@ -18,7 +18,21 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "lib"))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+
+def repo_file(*parts):
+    """Locate a file that ships with the repository.
+
+    Not simply ``PROJECT_ROOT / parts``: a mutation run executes a copied
+    tree that contains only sources and tests, no shipped data files. That
+    copy lives inside the real checkout, so walking up finds the original.
+    """
+    for base in Path(__file__).resolve().parents:
+        candidate = base.joinpath(*parts)
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError("/".join(parts))
 
 
 def free_udp_port():
@@ -31,7 +45,7 @@ def free_udp_port():
 
 
 def load_executable(name):
-    path = PROJECT_ROOT / "bin" / name
+    path = repo_file("bin", name)
     loader = importlib.machinery.SourceFileLoader(name.replace("-", "_"), str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)

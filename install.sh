@@ -150,7 +150,7 @@ fi
 info "installing the runtime package to $LIB_DIR"
 rm -rf "$LIB_DIR/oscmix_autostart"
 mkdir -p "$LIB_DIR/oscmix_autostart"
-for module in "$PROJECT_DIR/lib/oscmix_autostart/"*.py; do
+for module in "$PROJECT_DIR/src/oscmix_autostart/"*.py; do
     install -m 644 "$module" "$LIB_DIR/oscmix_autostart/$(basename "$module")"
 done
 

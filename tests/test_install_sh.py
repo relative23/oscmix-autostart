@@ -8,9 +8,20 @@ step is skipped (--no-build) with fake oscmix binaries pre-installed.
 import os
 import stat
 import subprocess
-from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+import pytest
+from conftest import repo_file  # noqa: E402
+
+PROJECT_ROOT = repo_file("install.sh").parent
+
+# These drive real subprocesses. The entry point resolves the package from
+# its own location, so a subprocess loads the checked-out source and never
+# the mutated copy: such a test cannot kill a mutant, and at ~35 s per run
+# it would dominate a mutation pass for nothing.
+pytestmark = pytest.mark.skipif(
+    bool(os.environ.get("MUTANT_UNDER_TEST")),
+    reason="subprocess tests cannot observe mutants",
+)
 
 
 def make_fake_home(tmp_path):

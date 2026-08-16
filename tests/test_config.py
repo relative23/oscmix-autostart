@@ -1,10 +1,7 @@
 """routing.conf parsing: valid configs, defaults, and error reporting."""
 
-from pathlib import Path
-
 import pytest
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from conftest import repo_file
 
 
 def write(tmp_path, text):
@@ -30,7 +27,7 @@ def test_recv_port_option(session_mod, tmp_path):
 
 
 def test_shipped_example_config_parses(session_mod):
-    config = session_mod.load_config(PROJECT_ROOT / "config" / "routing.conf.example")
+    config = session_mod.load_config(repo_file("config", "routing.conf.example"))
     assert config.device_name == "Fireface UCX II"
     assert len(config.routes) == 1
     route = config.routes[0]

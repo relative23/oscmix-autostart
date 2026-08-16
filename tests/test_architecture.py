@@ -12,13 +12,22 @@ true, so they are checked here rather than trusted:
 """
 
 import ast
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PACKAGE = PROJECT_ROOT / "lib" / "oscmix_autostart"
+PACKAGE = PROJECT_ROOT / "src" / "oscmix_autostart"
+
+# These assertions describe the *source* tree. A mutation run deliberately
+# rewrites it -- mutmut inserts its own import into every mutated module --
+# so asserting source properties there would only measure mutmut.
+pytestmark = pytest.mark.skipif(
+    bool(os.environ.get("MUTANT_UNDER_TEST")),
+    reason="architecture describes the source tree, not a mutated copy",
+)
 
 # Which modules a module may import. A module absent from a value list is
 # forbidden, so adding a dependency is a deliberate edit here, not an

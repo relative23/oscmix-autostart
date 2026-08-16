@@ -9,8 +9,11 @@ filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
 
 [tool.ruff]
 # The runtime package plus the extension-less executables in bin/.
-include = ["lib/**/*.py", "tests/**/*.py", "bin/oscmix-session",
-           "bin/oscmix-launch"]
+include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py",
+           "bin/oscmix-session", "bin/oscmix-launch"]
+# mutants/ holds machine-rewritten copies of the source; linting them
+# measures the mutation engine, not this project.
+extend-exclude = ["mutants", "build"]
 # 3.9 is the oldest interpreter the CI matrix covers; keeping it means no
 # PEP 604 unions (`X | None`) and no PEP 585 builtins in evaluated
 # annotations, which is why the modernization rules stay off below.
@@ -42,7 +45,7 @@ ignore = [
 
 [tool.coverage.run]
 branch = true
-source = ["lib/oscmix_autostart", "bin"]
+source = ["src/oscmix_autostart", "bin"]
 # The integration tests run oscmix-session as a real subprocess. Without
 # this the branches they exercise look untested, which understates the
 # suite and hides which of them genuinely are.
@@ -62,3 +65,11 @@ exclude_lines = [
 # the integration tests always drove the entry point, session and CLI, the
 # numbers just never showed it. Nothing about the tests changed.
 fail_under = 84
+
+[tool.mutmut]
+# Mutation testing answers the question coverage cannot: do the assertions
+# actually catch a wrong value, or do they merely execute the line?
+# Scoped to the modules that decide what the hardware does -- the ones
+# where a surviving mutant means silent, audible breakage.
+source_paths = ["src/oscmix_autostart/"]
+pytest_add_cli_args_test_selection = ["tests/"]

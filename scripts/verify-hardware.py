@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""Measure what the routing actually does to the audio, on real hardware.
+
+Every other test in this repository checks the OSC messages the routing
+produces. That is not the same as checking what comes out of the device,
+and the difference is not academic: all three defects fixed in 0.1.3 were
+invisible at message level. They were found by playing a tone and reading
+the device's own meters back off the wire, by hand. This makes that
+reproducible.
+
+What it does, per configured stereo route:
+
+  1. plays a left-only and then a right-only tone into the playback pair
+  2. captures ``/output/<n>/level`` reported by oscmix while it plays
+  3. asserts the tone appears on the matching output and not on the other
+
+Requires a connected interface and a running oscmix backend. Without them
+it exits 77 (skip), so it can be wired into CI without CI needing a
+Fireface.
+
+    python3 scripts/verify-hardware.py --evidence evidence.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import shutil
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+import wave
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from oscmix_autostart import (  # noqa: E402
+    decode_osc,
+    discover_config_path,
+    iter_osc_messages,
+    load_config,
+)
+
+EXIT_SKIP = 77
+# How much louder an output must be when its own side carries the tone
+# than when the other side does. Comparing a channel against *itself*
+# across the two runs is the discriminator that works: anything else
+# playing at the same time sits in both measurements, whereas comparing
+# left against right within one run is masked by it.
+MIN_RESPONSE_DB = 12.0
+# The tone must also stand clear of whatever else is on the bus, or the
+# comparison above measures the other audio's stereo image instead.
+MIN_ABOVE_BACKGROUND_DB = 12.0
+# The meter floor: oscmix reports -inf for digital silence, which is the
+# single most important reading this tool can take -- it is what a dead
+# output looks like. Mapping it to a number keeps it in the arithmetic
+# instead of dropping it as "no data".
+SILENCE_DB = -144.0
+TONE_SECONDS = 5.0
+TONE_HZ = 1000.0
+TONE_AMPLITUDE = 0.3
+
+
+def write_tone(path: Path, left: bool, right: bool, rate: int = 48000) -> None:
+    """A stereo WAV with the tone on the requested side(s)."""
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        frames = bytearray()
+        for n in range(int(rate * TONE_SECONDS)):
+            value = int(TONE_AMPLITUDE * 32767
+                        * math.sin(2 * math.pi * TONE_HZ * n / rate))
+            frames += struct.pack("<hh", value if left else 0,
+                                  value if right else 0)
+        handle.writeframes(bytes(frames))
+
+
+class LevelReader:
+    """Collects ``/output/<n>/level`` reports from oscmix.
+
+    Binds the receive port directly. The mixer GUI holds it while it is
+    open, which is why this refuses to run rather than competing for
+    datagrams: a split stream would produce quietly wrong numbers.
+    """
+
+    def __init__(self, recv_port: int) -> None:
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("127.0.0.1", recv_port))
+        self.sock.settimeout(0.2)
+        self.reports = 0            # any level message at all = backend alive
+
+    def close(self) -> None:
+        self.sock.close()
+
+    def peaks(self, seconds: float) -> Dict[int, float]:
+        """Highest peak level per output channel over ``seconds``."""
+        result: Dict[int, float] = {}
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            try:
+                datagram, _ = self.sock.recvfrom(65536)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            for message in iter_osc_messages(datagram):
+                try:
+                    path, _tags, args = decode_osc(message)
+                except (ValueError, struct.error):
+                    continue
+                if not (path.startswith("/output/") and path.endswith("/level")):
+                    continue
+                if not args or not isinstance(args[0], float):
+                    continue
+                channel = int(path.split("/")[2])
+                peak = args[0]
+                if peak != peak:                               # NaN
+                    continue
+                self.reports += 1
+                if peak == float("-inf"):
+                    peak = SILENCE_DB
+                result[channel] = max(result.get(channel, SILENCE_DB), peak)
+        return result
+
+
+def play(wav: Path, sink: Optional[str]) -> None:
+    command = ["pw-play"]
+    if sink:
+        command += ["--target", sink]
+    command.append(str(wav))
+    subprocess.run(command, capture_output=True, check=False)
+
+
+def measure(reader: LevelReader, wav: Path, sink: Optional[str]) -> Dict[int, float]:
+    """Play the tone and return the peak level seen per output."""
+    import threading
+
+    peaks: Dict[int, float] = {}
+
+    def collect() -> None:
+        peaks.update(reader.peaks(TONE_SECONDS + 1.0))
+
+    thread = threading.Thread(target=collect)
+    thread.start()
+    time.sleep(0.3)
+    play(wav, sink)
+    thread.join()
+    return peaks
+
+
+def check_route(name: str, outputs: Tuple[int, ...], left: Dict[int, float],
+                right: Dict[int, float], silence: Dict[int, float]) -> dict:
+    """Turn the measurements into a verdict for one stereo route.
+
+    Each output is compared against itself across the two runs: it must
+    be materially louder when its own side of the pair carries the tone.
+    That is what caught every routing defect so far -- a dead output
+    shows no response at all, and a mono-summed pair responds equally to
+    both tones.
+    """
+    low, high = outputs
+    finding = {
+        "route": name,
+        "outputs": list(outputs),
+        "peaks_db": {
+            "output_%d" % low: {"left_tone": left.get(low),
+                                "right_tone": right.get(low),
+                                "silence": silence.get(low)},
+            "output_%d" % high: {"left_tone": right.get(high) and left.get(high),
+                                 "right_tone": right.get(high),
+                                 "silence": silence.get(high)},
+        },
+    }
+    problems = []
+    for side, channel, driven_run, other_run in (("left", low, left, right),
+                                                 ("right", high, right, left)):
+        driven = driven_run.get(channel)
+        if driven is None:
+            problems.append("output %d never reported a level" % channel)
+            continue
+        floor = silence.get(channel)
+        if floor is not None and driven - floor < MIN_ABOVE_BACKGROUND_DB:
+            problems.append(
+                "output %d: tone only %.1f dB above what was already playing "
+                "-- stop other audio and retry"
+                % (channel, driven - floor))
+            continue
+        quiet = other_run.get(channel)
+        response = 999.0 if quiet is None else driven - quiet
+        finding["response_%s_db" % side] = round(response, 1)
+        if response < MIN_RESPONSE_DB:
+            problems.append(
+                "output %d responds to the %s tone by only %.1f dB -- it is "
+                "not carrying that channel alone"
+                % (channel, side, response))
+    finding["problems"] = problems
+    finding["ok"] = not problems
+    return finding
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, help="routing config to verify")
+    parser.add_argument("--evidence", type=Path,
+                        help="write the measurements here as JSON")
+    parser.add_argument("--sink", help="PipeWire sink to play into")
+    args = parser.parse_args()
+
+    if not shutil.which("pw-play"):
+        print("skip: pw-play not found", file=sys.stderr)
+        return EXIT_SKIP
+
+    config = load_config(args.config or discover_config_path())
+    pairs = [route for route in config.routes if len(route.output) == 2]
+    if not pairs:
+        print("skip: no stereo routes configured", file=sys.stderr)
+        return EXIT_SKIP
+
+    try:
+        reader = LevelReader(config.osc_recv_port)
+    except OSError:
+        print("skip: UDP %d is in use -- close the mixer GUI, its meters "
+              "and ours would split the stream" % config.osc_recv_port,
+              file=sys.stderr)
+        return EXIT_SKIP
+
+    with tempfile.TemporaryDirectory() as tmp:
+        left_wav, right_wav = Path(tmp) / "l.wav", Path(tmp) / "r.wav"
+        write_tone(left_wav, left=True, right=False)
+        write_tone(right_wav, left=False, right=True)
+        try:
+            silence = reader.peaks(2.0)          # whatever is already on the bus
+            left = measure(reader, left_wav, args.sink)
+            right = measure(reader, right_wav, args.sink)
+            reports = reader.reports
+        finally:
+            reader.close()
+
+    if reports == 0:
+        print("skip: no level reports -- is the oscmix backend running?",
+              file=sys.stderr)
+        return EXIT_SKIP
+
+    findings: List[dict] = []
+    # Routes fed from the same playback pair all carry the tone, so one
+    # measurement pair verifies every one of them.
+    for route in pairs:
+        if route.playback != (1, 2):
+            continue
+        findings.append(check_route(route.name, route.output, left,
+                                    right, silence))
+
+    evidence = {
+        "measured": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "device": config.device_name,
+        "min_response_db": MIN_RESPONSE_DB,
+        "min_above_background_db": MIN_ABOVE_BACKGROUND_DB,
+        "tone": {"hz": TONE_HZ, "seconds": TONE_SECONDS,
+                 "amplitude": TONE_AMPLITUDE},
+        "routes": findings,
+        "ok": all(finding["ok"] for finding in findings),
+    }
+    if args.evidence:
+        args.evidence.write_text(json.dumps(evidence, indent=2) + "\n")
+
+    for finding in findings:
+        status = "ok" if finding["ok"] else "FAIL"
+        print("%-4s %-16s outputs %s  response L/R: %s/%s dB"
+              % (status, finding["route"],
+                 "/".join(map(str, finding["outputs"])),
+                 finding.get("response_left_db", "-"),
+                 finding.get("response_right_db", "-")))
+        for problem in finding["problems"]:
+            print("       " + problem)
+
+    if not findings:
+        print("skip: no routes fed from playback 1/2", file=sys.stderr)
+        return EXIT_SKIP
+    return 0 if evidence["ok"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

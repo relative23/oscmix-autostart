@@ -17,11 +17,21 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 from conftest import free_udp_port
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SESSION_BIN = PROJECT_ROOT / "bin" / "oscmix-session"
 LAUNCH_BIN = PROJECT_ROOT / "bin" / "oscmix-launch"
+
+# These drive real subprocesses. The entry point resolves the package from
+# its own location, so a subprocess loads the checked-out source and never
+# the mutated copy: such a test cannot kill a mutant, and at ~35 s per run
+# it would dominate a mutation pass for nothing.
+pytestmark = pytest.mark.skipif(
+    bool(os.environ.get("MUTANT_UNDER_TEST")),
+    reason="subprocess tests cannot observe mutants",
+)
 
 SEQ_CLIENTS = """\
 Client info

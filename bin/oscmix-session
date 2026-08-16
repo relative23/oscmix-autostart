@@ -30,11 +30,11 @@ def _package_root() -> Path:
     """Locate the directory holding ``oscmix_autostart``.
 
     Two layouts have to work with no install step in between: a git
-    checkout (``<repo>/bin`` next to ``<repo>/lib``) and the installed
+    checkout (``<repo>/bin`` next to ``<repo>/src``) and the installed
     tree (``~/.local/bin`` next to ``~/.local/lib/oscmix-autostart``).
     """
     here = Path(__file__).resolve().parent
-    for candidate in (here.parent / "lib",
+    for candidate in (here.parent / "src",
                       here.parent / "lib" / "oscmix-autostart"):
         if (candidate / "oscmix_autostart" / "__init__.py").is_file():
             return candidate

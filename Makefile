@@ -1,12 +1,13 @@
 PYTHON ?= python3
 SCRIPTS = bin/oscmix-session bin/oscmix-launch
-PACKAGE = lib/oscmix_autostart
+PACKAGE = src/oscmix_autostart
 SHELL_SCRIPTS = install.sh uninstall.sh
 # Repeats for the flakiness gate. The suite binds real UDP sockets and
 # runs background threads, so a single green run proves little.
 REPEAT ?= 5
 
-.PHONY: all check test lint typecheck deadcode coverage flake install uninstall clean
+.PHONY: all check test lint typecheck deadcode coverage mutation flake \
+	verify-hardware install uninstall clean
 
 all: check
 
@@ -39,6 +40,19 @@ coverage:
 	$(PYTHON) -m coverage combine
 	$(PYTHON) -m coverage report
 
+# The only check that measures audio rather than messages. Needs a
+# connected interface, a running backend and a quiet bus; exits 77 and
+# says why when any of those is missing, so it is safe to wire into CI.
+verify-hardware:
+	$(PYTHON) scripts/verify-hardware.py --evidence hardware-evidence.json
+
+# Answers what coverage cannot: whether the assertions catch a wrong
+# value or merely execute the line. Slow (~15 min), so it is not part of
+# `check`; the baseline in quality/ turns the result into a ratchet.
+mutation:
+	$(PYTHON) -m mutmut run --max-children 4
+	$(PYTHON) scripts/mutation-policy.py
+
 # Runs the suite repeatedly: races in the UDP/threading fakes only show up
 # across runs, and one such race was shipped before this gate existed.
 flake:
@@ -55,4 +69,4 @@ uninstall:
 
 clean:
 	rm -rf build tests/__pycache__ .pytest_cache .ruff_cache .mypy_cache \
-		.coverage htmlcov
+		.coverage htmlcov mutants hardware-evidence.json
