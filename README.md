@@ -147,10 +147,12 @@ USB hotplug ── udev rule ── systemd user service ── oscmix-session
 
 Details, including the failure model and exit-code semantics, are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Notes on the OSC interface
-oscmix exposes are in [docs/OSC-PROTOCOL.md](docs/OSC-PROTOCOL.md). Where
-this is heading -- a maturity release first, then hardware input routing,
-per-channel state and profiles -- is in
-[docs/ROADMAP.md](docs/ROADMAP.md).
+oscmix exposes are in [docs/OSC-PROTOCOL.md](docs/OSC-PROTOCOL.md), and
+the choices that are not obvious from the code are recorded in
+[docs/decisions/](docs/decisions/). What the service is trusted with --
+including the fact that the control port is unauthenticated -- is in
+[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Where this is heading
+is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Troubleshooting
 
@@ -174,13 +176,15 @@ section); for hotplug you would additionally adapt the IDs in
 ```sh
 pip install -r requirements-dev.txt
 
-make check      # everything CI enforces, fastest failure first
-make test       # pytest unit + integration tests (no hardware needed)
-make lint       # ruff + shellcheck + syntax check
-make typecheck  # mypy
-make deadcode   # vulture
-make coverage   # coverage with the ratchet from pyproject.toml
-make flake      # the suite five times over, to surface races
+make check            # everything CI enforces, fastest failure first
+make test             # pytest, no hardware needed
+make lint             # ruff + shellcheck + syntax check
+make typecheck        # mypy --strict over the runtime package
+make deadcode         # vulture
+make coverage         # with the ratchet from pyproject.toml
+make flake            # the suite five times over, to surface races
+make mutation         # do the assertions actually catch a wrong value?
+make verify-hardware  # measure the audio itself (needs a Fireface)
 ```
 
 The integration tests run `oscmix-session` against a stub backend with a

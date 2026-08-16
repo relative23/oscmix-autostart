@@ -35,22 +35,23 @@ Working and verified: playback→output routing for mono and stereo pairs,
 stereo linking with the ordering that requires, output faders, PipeWire
 named sinks, hotplug autostart, readiness signalling, routing read-back.
 
-Measured state of the code itself:
-
-| | today | note |
-|---|---|---|
-| `bin/oscmix-session` | 1386 lines, one file | 8 concerns in one module |
-| longest function | 106 lines (`run_session`) | 6 functions over 50 lines |
-| tests | 118 | 3433 lines total |
-| coverage | 65% total, 71% session | subprocess paths unmeasured |
-| `mypy --strict` | 12 errors | non-strict is clean |
-| mutation testing | none | blocked on module structure |
-| performance budget | none | time-to-READY unmeasured |
-| hardware evidence | manual, ad hoc | not reproducible by others |
-
 Three release-blocking defects in 0.1.3 were found by measuring output
 levels off the wire, not by reading code. Two of them were invisible at
-message level. That sets the standard for everything below.
+message level. That set the standard for the release below.
+
+What 0.2.0 moved, measured rather than claimed:
+
+| | 0.1.3 | 0.2.0 |
+|---|---|---|
+| runtime layout | 1386 lines, one file | 14 modules, 52-line shim |
+| longest function | 106 lines | under the enforced 70 |
+| tests | 118 | 283 |
+| coverage | 65% (subprocess unmeasured) | 90% |
+| `mypy --strict` | 12 errors | clean |
+| mutation score | not runnable | 0.73, ratcheted |
+| upstream backend | `master`, unpinned | pinned commit, verified |
+| hardware evidence | done by hand, once | a committed tool with an artifact |
+| structural guarantees | comments | 60+ assertions |
 
 ## 0.2.0 -- maturity
 
@@ -62,9 +63,9 @@ structure will not carry it.
 Each item states what is true today, what has to become true, and how
 that is proven rather than asserted.
 
-### 1. Architecture and structure
+### 1. Architecture and structure -- **done**
 
-*Today:* one 1386-line script holding the OSC codec, config parsing,
+*Was:* one 1386-line script holding the OSC codec, config parsing,
 routing translation, verification, process supervision, PipeWire
 generation and the CLI. `run_session` is 106 lines and does device
 discovery, process launch, signal handling, readiness and supervision.
@@ -84,9 +85,9 @@ runtime package, no import cycles, a declared layering (config must not
 import supervise, routing must not import cli), and a function-length
 ceiling. Mechanical, so it cannot rot.
 
-### 2. Contracts
+### 2. Contracts -- **done**
 
-*Today:* the invariants exist in comments and in a few tests that happen
+*Was:* the invariants exist in comments and in a few tests that happen
 to cover them. Nothing states them as contracts.
 
 *Target:* written and machine-checked:
@@ -106,9 +107,9 @@ config parser, and a dedicated contract test module. Fuzzing the OSC
 decoder against malformed datagrams belongs here too: it parses data off
 a socket and currently trusts its own encoder.
 
-### 3. Testability
+### 3. Testability -- **done**
 
-*Today:* 118 tests, but `run_session`, `supervise` and
+*Was:* 118 tests, but `run_session`, `supervise` and
 `wait_for_seq_client` are exercised only through a subprocess, which
 coverage does not follow. The 71% figure for the session is therefore
 both understated and unearned in places. `_cleanup_stale_backend` -- which
@@ -123,9 +124,9 @@ refusal paths.
 that every public function in the runtime package is named by at least
 one test.
 
-### 4. Provability
+### 4. Provability -- **done**
 
-*Today:* the only proof that audio actually reaches both channels is that
+*Was:* the only proof that audio actually reaches both channels is that
 I measured it by hand with `tcpdump` and a test tone. Nobody else can
 reproduce that, and nothing stops it regressing.
 
@@ -141,9 +142,9 @@ even outputs silent, unlinked pair half-dead, unlinked route 6 dB low.
 *Proven by:* the artifact itself. A routing change is not done until the
 measurement is in the release.
 
-### 5. Stability
+### 5. Stability -- **done**
 
-*Today:* a flakiness gate runs the suite five times. There is no fault
+*Was:* a flakiness gate runs the suite five times. There is no fault
 injection and no soak. Every failure mode found so far -- the link race,
 two teardown races, the stub signal race -- was a timing bug.
 
@@ -154,9 +155,9 @@ the routing N times and asserts the result every time.
 
 *Proven by:* fault-injection tests in the normal suite, soak on `main`.
 
-### 6. Code quality
+### 6. Code quality -- **done**
 
-*Today:* ruff on a curated rule set, `mypy` non-strict, no mutation
+*Was:* ruff on a curated rule set, `mypy` non-strict, no mutation
 testing. `mypy --strict` reports 12 errors -- a small, closable gap.
 
 *Target:* `--strict` clean, an expanded ruff selection, and **mutation
@@ -168,7 +169,7 @@ removes that blocker, which is why these two belong in the same release.
 *Proven by:* a mutation baseline policy in CI, in the shape
 payload-live-preview uses.
 
-### 7. Performance -- reframed
+### 7. Performance -- **reframed and done**
 
 The original plan here measured the wrong thing. How fast the Python runs
 is not the question: time-to-`READY=1` is dominated by the device wait,
@@ -187,7 +188,7 @@ the handful of `/output/<n>/stereo` registers be queried directly instead
 of waiting out a full `/refresh`? If upstream cannot, that is a feature
 request (see below), not a number.
 
-### 8. Supply chain and blast radius
+### 8. Supply chain and blast radius -- **done**
 
 *Today (before this release):* `install.sh` built `OSCMIX_REF=master` --
 whatever upstream happened to be that day. The component that actually
@@ -212,9 +213,9 @@ can write any mixer register.** That is upstream's design and acceptable
 on a single-user desktop, but from 0.3.0 it means a local process can put
 48 V on a ribbon microphone. It deserved a sentence.
 
-### 9. Maintainability
+### 9. Maintainability -- **done**
 
-*Today:* the prose docs are good, but the expensive knowledge is
+*Was:* the prose docs are good, but the expensive knowledge is
 scattered through commit messages -- why the apply is two-phase, why
 verification and re-apply share one `/refresh`, why `volume` is opt-in.
 
