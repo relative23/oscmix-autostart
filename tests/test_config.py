@@ -87,7 +87,7 @@ output = 1/2    ; main out
     assert config.routes[0].playback == (1, 2)
 
 
-@pytest.mark.parametrize("snippet, hint", [
+@pytest.mark.parametrize(("snippet", "hint"), [
     ("[route:x]\nplayback = 1/2/3\noutput = 1/2\n", "playback"),
     ("[route:x]\nplayback = 1/2\noutput = five/6\n", "channel number"),
     ("[route:x]\nplayback = 1/2\noutput = 5\n", "both"),

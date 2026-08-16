@@ -179,7 +179,18 @@ def main() -> int:
         notify("RME Fireface Mixer", "oscmix-gtk is not installed.",
                urgency="critical")
         return 1
-    os.execv(gtk, [gtk])
+    try:
+        os.execv(gtk, [gtk])
+    except OSError as exc:
+        # execv only returns by failing -- a stale binary, a bad
+        # interpreter, a full exec format mismatch. Report it the same way
+        # as the other startup failures instead of dumping a traceback on
+        # a user who launched this from a desktop icon.
+        log.error("could not execute %s: %s", gtk, exc)
+        notify("RME Fireface Mixer", "The mixer could not be started: %s"
+               % exc, urgency="critical")
+        return 1
+    return 0  # unreachable: a successful execv never returns
 
 
 if __name__ == "__main__":

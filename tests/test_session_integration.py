@@ -136,8 +136,13 @@ def make_env(tmp_path, *, with_client, with_usb, port=None, reply_port=None):
         "STUB_REPLY_PORT": str(reply_port or 0),
         "STUB_PROC_UDP": str(proc_root / "net" / "udp"),
         "STUB_PROC_UDP_HEADER": UDP_HEADER,
-        # Background verification: no need to wait for the settle delay.
-        "OSCMIX_VERIFY_DELAY": "0.2",
+        # Background re-apply and verification: no need to sit through
+        # the real device's multi-second register sync.
+        "OSCMIX_LINK_TIMEOUT": "0.2",
+        "OSCMIX_LINK_SETTLE": "0.1",
+        "OSCMIX_LINK_SYNC_TIMEOUT": "0.5",
+        "OSCMIX_LINK_SYNC_DELAY": "0.2",
+        "OSCMIX_DUMP_DRAIN": "0.2",
     })
     return env, stub_dir, backend
 
@@ -186,10 +191,12 @@ def test_full_startup_verification_notify_and_shutdown(tmp_path, session_mod):
     )
     try:
         datagram_log = stub_dir / "datagrams.hex"
-        # 5 routing registers + the /refresh from the verification pass.
+        # 5 routing registers, the /refresh of the verification pass and
+        # the 3 mix registers it re-applies once the dump reported the
+        # link state.
         assert wait_for(
             lambda: datagram_log.exists()
-            and len(datagram_log.read_text().splitlines()) >= 6
+            and len(datagram_log.read_text().splitlines()) >= 9
         ), "routing + verification traffic did not arrive"
 
         # The configured ports must reach the real backend as -r/-s flags.
@@ -198,18 +205,23 @@ def test_full_startup_verification_notify_and_shutdown(tmp_path, session_mod):
                         "-r", "udp!127.0.0.1!%d" % port,
                         "-s", "udp!127.0.0.1!%d" % recv_port]
 
-        # Byte-exact routing messages, in order, then the state request.
-        expected = [
-            session_mod.encode_osc("/playback/1/stereo", "i", 1),
-            session_mod.encode_osc("/output/5/stereo", "i", 1),
+        # Byte-exact routing messages, in order: the links first, then the
+        # mix matrix, then the verification's state request, and finally
+        # the mix matrix once more -- re-applied the moment that dump
+        # reported the link state back. The links must not be repeated; a
+        # second link write would restart the race it repairs.
+        mix = [
             session_mod.encode_osc("/mix/5/playback/1", "fi", 0.0, 0),
             session_mod.encode_osc("/output/5/volume", "f", 0.0),
             session_mod.encode_osc("/output/6/volume", "f", 0.0),
-            session_mod.encode_osc("/refresh"),
         ]
+        expected = [
+            session_mod.encode_osc("/playback/1/stereo", "i", 1),
+            session_mod.encode_osc("/output/5/stereo", "i", 1),
+        ] + mix + [session_mod.encode_osc("/refresh")] + mix
         received = [bytes.fromhex(line)
                     for line in datagram_log.read_text().splitlines()]
-        assert received[:6] == expected
+        assert received[:9] == expected
 
         # READY=1 arrives once the backend is up and the routing was
         # applied (verification then runs in the background).
@@ -328,3 +340,24 @@ def test_launcher_starts_backend_and_execs_gui(tmp_path):
     assert "--user reset-failed oscmix.service" in calls
     # --no-block: a plain start would block on the Type=notify unit.
     assert "--user start --no-block oscmix.service" in calls
+
+
+def test_launcher_reports_a_failing_exec_instead_of_crashing(tmp_path):
+    # os.execv only returns by failing. A desktop-icon launch must end in
+    # a readable error, not a traceback.
+    env, _, _ = make_env(tmp_path, with_client=True, with_usb=True)
+    broken = tmp_path / "broken-gtk"
+    broken.write_text("#!/nonexistent/interpreter\n")
+    broken.chmod(0o755)
+    env.update({
+        "OSCMIX_NO_NOTIFY": "1",
+        "OSCMIX_BACKEND_WAIT": "0.3",
+        "OSCMIX_BIN_GTK": str(broken),
+    })
+    result = subprocess.run(
+        [sys.executable, str(LAUNCH_BIN)],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 1
+    assert "could not execute" in result.stderr
+    assert "Traceback" not in result.stderr

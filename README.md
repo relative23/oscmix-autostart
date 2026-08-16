@@ -162,13 +162,33 @@ section); for hotplug you would additionally adapt the IDs in
 ## Development
 
 ```sh
-make test    # pytest unit + integration tests (no hardware needed)
-make lint    # shellcheck + Python syntax check
+pip install -r requirements-dev.txt
+
+make check      # everything CI enforces, fastest failure first
+make test       # pytest unit + integration tests (no hardware needed)
+make lint       # ruff + shellcheck + syntax check
+make typecheck  # mypy
+make deadcode   # vulture
+make coverage   # coverage with the ratchet from pyproject.toml
+make flake      # the suite five times over, to surface races
 ```
 
 The integration tests run `oscmix-session` against a stub backend with a
 fake `/proc` and sysfs, so the full startup/routing/shutdown path is tested
-without a Fireface attached.
+without a Fireface attached. The device stand-ins in
+`tests/test_apply_routing.py` go one step further and model oscmix's
+stereo-link state machine, which is what pins down the ordering the mixer
+matrix depends on.
+
+Two gates exist because this project got burned by exactly what they
+catch. The Python matrix runs 3.9 through 3.13: a test helper that shadowed
+a private `threading.Thread` attribute passed on 3.14 and failed on
+everything older. And `make flake` repeats the suite, because the tests
+bind real UDP sockets and drive background threads, where a teardown race
+survived several consecutive green runs.
+
+The runtime itself has no Python dependencies -- `oscmix-session` uses only
+the standard library, so it runs before any package manager is involved.
 
 ## Uninstall
 

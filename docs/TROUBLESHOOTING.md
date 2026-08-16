@@ -68,16 +68,37 @@ Common findings in the journal:
   registers back. Check them in the mixer GUI; if the audio is fine, the
   upstream dump format may simply have changed -- please open an issue.
 
-Verification starts ~12 s after the backend comes up, because the
-device's initial register sync saturates the MIDI link. If a slower
-machine or a larger interface logs spurious `unconfirmed` warnings,
-raise the delay via a systemd override
+- `no link change reported within ...` -- normal: the output pairs were
+  already stereo-linked, so the device had no change to report.
+- `mix matrix re-applied against the synchronized link state` -- the
+  routing was re-established after the device's register sync. This is
+  what guarantees the right-hand channel of every pair; see below.
+
+The mix matrix is written twice on purpose. oscmix only learns that an
+output pair is stereo-linked when the device reports
+`/output/<n>/stereo` back, and that report arrives with the initial
+register sync -- about 15 s after start on a UCX II, far too late to
+block the readiness signal on. A mix written before that point is
+evaluated against oscmix's startup link state and only reaches the odd
+channel of each pair, so every even output (2, 4, 6, 8) stays silent.
+The first write therefore gets audio going immediately, and the
+background re-apply repairs it once the link state is known. Unlike the
+`/output/*` registers the matrix cannot be verified -- a `/mix` write
+draws no reply and the device dump omits the playback matrix -- so it is
+re-established rather than checked.
+
+The wait adapts via a systemd override
 (`systemctl --user edit oscmix.service`):
 
 ```ini
 [Service]
-Environment=OSCMIX_VERIFY_DELAY=30
+Environment=OSCMIX_LINK_SYNC_TIMEOUT=45
+Environment=OSCMIX_LINK_SYNC_DELAY=30
 ```
+
+`OSCMIX_LINK_SYNC_TIMEOUT` bounds the wait for the sync report;
+`OSCMIX_LINK_SYNC_DELAY` is the blind fallback used when the mixer GUI
+holds UDP 8222 and the report cannot be observed.
 
 ## 4. Does the backend accept OSC?
 
