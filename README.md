@@ -147,7 +147,10 @@ USB hotplug ── udev rule ── systemd user service ── oscmix-session
 
 Details, including the failure model and exit-code semantics, are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Notes on the OSC interface
-oscmix exposes are in [docs/OSC-PROTOCOL.md](docs/OSC-PROTOCOL.md).
+oscmix exposes are in [docs/OSC-PROTOCOL.md](docs/OSC-PROTOCOL.md). Where
+this is heading -- a maturity release first, then hardware input routing,
+per-channel state and profiles -- is in
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Troubleshooting
 
