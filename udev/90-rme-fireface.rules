@@ -1,5 +1,10 @@
 # RME Fireface UCX II (2a39:3fd9) -- oscmix-autostart
 #
+# The ASMedia ASM4242 xHCI controller (1b21:2426) can fail its runtime
+# suspend and remain in power/runtime_status=error.  Keep that controller
+# active so a powered Fireface can always enumerate after disconnect/replug.
+ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x1b21", ATTR{device}=="0x2426", TEST=="power/control", ATTR{power/control}="on"
+
 # On plug-in: disable USB autosuspend (the interface must stay awake) and
 # ask the user's systemd instance to start the oscmix backend.
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2a39", ATTR{idProduct}=="3fd9", ATTR{power/control}="on", TAG+="systemd", ENV{SYSTEMD_USER_WANTS}+="oscmix.service"

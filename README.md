@@ -15,7 +15,7 @@ adds:
 
 | Piece | What it does |
 |---|---|
-| udev rule | starts the backend on hotplug, disables USB autosuspend |
+| udev rule | starts the backend on hotplug, disables Fireface USB autosuspend, and keeps affected ASM4242 host controllers awake |
 | systemd user service | supervises the backend, restarts it on failure (`Type=notify`: "started" means "audio works") |
 | `oscmix-session` | finds the ALSA MIDI port, launches `alsaseqio` + `oscmix`, applies your routing and verifies it against the device state |
 | `routing.conf` | your default mixer routing, applied on every start |

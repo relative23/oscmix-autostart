@@ -17,6 +17,20 @@ with:
 cat /sys/bus/usb/devices/<dev>/power/control    # should print "on"
 ```
 
+On systems where the Fireface is connected through an ASMedia ASM4242
+controller (`1b21:2426`), the same rule also disables runtime power
+management for that controller. This avoids a failed xHCI runtime suspend
+leaving its ports unable to enumerate the interface. Verify with the PCI
+address reported by `lspci -Dnn`:
+
+```sh
+cat /sys/bus/pci/devices/0000:<bus>:00.0/power/control  # should print "on"
+```
+
+If `power/runtime_status` already says `error`, changing the policy cannot
+repair the controller retroactively. Move the Fireface to a non-USB4 port or
+cold-boot once; the rule prevents the same runtime suspend on later boots.
+
 ## 2. Is the MIDI control port there?
 
 ```sh

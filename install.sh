@@ -186,6 +186,11 @@ if [ "$DO_UDEV" = 1 ]; then
     if SUDO=""; [ "$(id -u)" != 0 ]; then SUDO="sudo"; fi
     if $SUDO install -m 644 "$PROJECT_DIR/udev/90-rme-fireface.rules" "$UDEV_RULE" \
         && $SUDO udevadm control --reload-rules; then
+        # Apply the ASM4242 host-controller runtime-PM workaround now; the
+        # rule will apply automatically on subsequent boots.
+        $SUDO udevadm trigger --subsystem-match=pci \
+            --attr-match="vendor=0x1b21" \
+            --attr-match="device=0x2426" --action=add 2>/dev/null || true
         $SUDO udevadm trigger --subsystem-match=usb \
             --attr-match="idVendor=$USB_VENDOR" \
             --attr-match="idProduct=$USB_PRODUCT" --action=add 2>/dev/null || true
