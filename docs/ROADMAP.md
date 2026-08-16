@@ -104,7 +104,7 @@ What 0.2.0 moved, measured rather than claimed (2026-08-16):
 |---|---|---|
 | runtime layout | 1386 lines, one file | 15 modules, 2119 lines, two shims of 52 and 42 lines |
 | longest function | 106 lines | 66 (`verify_and_repair`), under the 70 ceiling |
-| tests | 118 | 377 cases from 266 test functions |
+| tests | 118 | 385 cases from 274 test functions |
 | coverage | 65% (subprocess unmeasured) | 94% measured, gate at 94 |
 | `mypy --strict` | 12 errors | clean, 15 files |
 | mutation score | not runnable | 0.643 over the whole runtime, floor 0.63 |
@@ -336,12 +336,16 @@ someone had looked: a stability item claimed as done, a CI check that
 guarded the project's most expensive bug by inspecting the wrong
 artifact, and a coverage gate seven points below what the suite earned.
 
-**Eleven of the twelve are closed.** Each item below keeps its original
-diagnosis -- that is the reason it existed, and worth more than a tick --
-followed by a *Closed:* line naming what proves it. What is left is
-**K**, the mutation re-baseline, and the half of **D** that no checklist
-can supply: an actual measured artifact, which needs a release to be
-attached to.
+**All twelve are closed.** Each item below keeps its original diagnosis
+-- that is the reason it existed, and worth more than a tick -- followed
+by a *Closed:* line naming what proves it.
+
+What is left is not an item. It is the release: `hardware-evidence.json`
+exists and passes, and the checklist requires it to be *attached to a
+tag* that does not exist yet. Nothing in this section is work; the
+heading stays until 0.2.0 ships, because a "Still open" section that
+empties itself before the release is how a claim outruns its evidence
+-- which is the failure mode this entire release was about.
 
 Two things were found while closing these and are recorded rather than
 acted on, because acting would have meant changing behaviour on a
