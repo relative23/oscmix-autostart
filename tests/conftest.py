@@ -4,9 +4,9 @@ Unit tests import the ``oscmix_autostart`` package directly; the thin
 executables in bin/ are covered end to end by the integration tests,
 which run them as real subprocesses.
 
-``bin/oscmix-launch`` is still a standalone script with no .py extension,
-so it is loaded via SourceFileLoader. Its ``if __name__ == "__main__"``
-guard keeps the import side-effect free.
+``load_executable`` remains for the bin/ shims themselves: they have no
+.py extension, so they need SourceFileLoader, and their
+``if __name__ == "__main__"`` guard keeps the import side-effect free.
 """
 
 import importlib.machinery
@@ -120,3 +120,45 @@ def empty_sysfs(tmp_path):
     (hub / "idVendor").write_text("1d6b\n")
     (hub / "idProduct").write_text("0002\n")
     return root
+
+
+def _hypothesis_available():
+    try:
+        import hypothesis  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def pytest_report_header(config):
+    """Say up front whether the contract tests are going to run at all."""
+    if _hypothesis_available():
+        return None
+    return ("contract tests: DISABLED -- hypothesis is not installed "
+            "(pip install -r requirements-dev.txt)")
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Refuse to let a skipped contract suite look like a green run.
+
+    tests/test_contracts.py skips itself without hypothesis. With `-q`
+    that is one digit in a summary line, so a checkout missing the dev
+    requirements reports "all passed" having checked no contract at all
+    -- including the two that exist because of shipped defects. Set
+    OSCMIX_REQUIRE_CONTRACTS=1 (CI does) to make it an error instead.
+    """
+    if _hypothesis_available():
+        return
+    terminalreporter.write_sep("=", "CONTRACT TESTS DID NOT RUN", red=True,
+                               bold=True)
+    terminalreporter.write_line(
+        "hypothesis is not installed, so tests/test_contracts.py was "
+        "skipped in full.")
+    terminalreporter.write_line(
+        "Nothing checked the OSC codec against hostile input, that a route "
+        "writes only")
+    terminalreporter.write_line(
+        "what it declares, or that config parsing is total. This run proves "
+        "less than it says.")
+    terminalreporter.write_line("")
+    terminalreporter.write_line("    pip install -r requirements-dev.txt")

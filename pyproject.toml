@@ -95,7 +95,12 @@ exclude_lines = [
 # It jumped from 60 to 84 when subprocess measurement was switched on --
 # the integration tests always drove the entry point, session and CLI, the
 # numbers just never showed it. Nothing about the tests changed.
-fail_under = 84
+#
+# 84 -> 94 (2026-08-16): the suite had measured 91 for some time without
+# the gate following, which is seven points of erosion nothing would have
+# noticed. The launcher moving into the package and gaining
+# tests/test_launcher.py took it from 61% to 100% and the total to 95%.
+fail_under = 94
 
 [tool.mutmut]
 # Mutation testing answers the question coverage cannot: do the assertions

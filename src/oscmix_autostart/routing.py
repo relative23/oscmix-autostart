@@ -8,7 +8,7 @@ from __future__ import annotations
 import socket
 import struct
 import time
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from .config import Config, Route
 from .constants import (
@@ -89,8 +89,47 @@ def mix_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
 
 
 def route_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
-    """Every OSC message a route consists of, in dependency order."""
+    """Every OSC message a route *declares*, in dependency order.
+
+    Per route, and therefore the right shape for the "written paths are a
+    subset of declared paths" contract and for verification. It is *not*
+    the order the datagrams go out in when there is more than one route --
+    that is ``routing_plan`` below.
+    """
     return link_messages(route) + mix_messages(route)
+
+
+class RoutingPlan(NamedTuple):
+    """The datagrams a routing consists of, split at the link barrier."""
+
+    links: List[Tuple[str, str, Tuple[object, ...]]]
+    mix: List[Tuple[str, str, Tuple[object, ...]]]
+
+    def messages(self) -> List[Tuple[str, str, Tuple[object, ...]]]:
+        """Every datagram in the order ``apply_routing`` sends it."""
+        return [*self.links, *self.mix]
+
+
+def routing_plan(routes: Sequence[Route]) -> RoutingPlan:
+    """Order the datagrams of *all* routes the way they are actually sent.
+
+    The barrier is per *routing*, not per route: every link of every route
+    goes out, then the device reports back, then every mix write follows.
+    Walking route by route and emitting link-then-mix for each -- the
+    obvious reading of ``route_messages`` -- writes the second route's mix
+    matrix before the first route's links have been confirmed, which is
+    the defect that silenced every even output.
+
+    Both the dry run and the apply consume this, so what ``--dry-run``
+    prints is what the wire sees. With a single route the two orders
+    coincide, which is why the difference went unnoticed.
+    """
+    plan = RoutingPlan([], [])
+    for route in routes:
+        plan.links.extend(link_messages(route))
+    for route in routes:
+        plan.mix.extend(mix_messages(route))
+    return plan
 
 
 def await_link_echo(expected: Mapping[str, int], recv_port: int,
@@ -158,14 +197,14 @@ def apply_routing(routes: Sequence[Route], port: int,
     Both phases are separated by the link barrier above. Sending them in
     one burst is what silences every even output (see LINK_ECHO_TIMEOUT).
     """
+    plan = routing_plan(routes)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # Only the output links need the barrier: /playback/<n>/stereo goes
         # through setinputstereo(), which updates oscmix's state right away,
         # while /output/<n>/stereo relies on the device report.
-        for route in routes:
-            for path, types, args in link_messages(route):
-                sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
+        for path, types, args in plan.links:
+            sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
 
         timeout = LINK_ECHO_TIMEOUT
         echoed = await_link_echo(output_link_state(routes), recv_port, timeout)
@@ -180,9 +219,9 @@ def apply_routing(routes: Sequence[Route], port: int,
         else:
             log.info("channel pairs linked and confirmed by the device")
 
+        for path, types, args in plan.mix:
+            sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
         for route in routes:
-            for path, types, args in mix_messages(route):
-                sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
             log.info(
                 "route %r: playback %s -> output %s at %+.1f dB",
                 route.name,

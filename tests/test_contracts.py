@@ -11,6 +11,7 @@ the counterexample. Two of them exist because of specific incidents:
 """
 
 import math
+import os
 import struct
 
 import pytest
@@ -18,9 +19,25 @@ import pytest
 # A missing dev dependency should say so, not abort collection for the
 # whole suite: `make test` on a fresh checkout is a reasonable thing to
 # try before reading requirements-dev.txt.
-hypothesis = pytest.importorskip(
-    "hypothesis", reason="property tests need hypothesis "
-                         "(pip install -r requirements-dev.txt)")
+#
+# But a silent skip means "all passed" while nothing in this file ran,
+# which is a worse lie than a collection error. Two things prevent that:
+# OSCMIX_REQUIRE_CONTRACTS=1 turns the skip into a hard failure (CI sets
+# it, so the gate is mechanical there), and conftest prints a banner at
+# the end of any run in which this module was skipped.
+try:
+    import hypothesis
+except ImportError as exc:  # pragma: no cover -- depends on the environment
+    if os.environ.get("OSCMIX_REQUIRE_CONTRACTS") == "1":
+        raise RuntimeError(
+            "OSCMIX_REQUIRE_CONTRACTS=1 but hypothesis is not installed -- "
+            "the contract tests would have been skipped silently. "
+            "pip install -r requirements-dev.txt"
+        ) from exc
+    pytest.skip("property tests need hypothesis "
+                "(pip install -r requirements-dev.txt)",
+                allow_module_level=True)
+
 given, settings = hypothesis.given, hypothesis.settings
 st = hypothesis.strategies
 

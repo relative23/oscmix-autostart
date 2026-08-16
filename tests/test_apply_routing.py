@@ -538,3 +538,105 @@ def test_verify_result_separates_the_three_verdicts(session_mod):
     assert result.confirmed == ["/output/5/stereo"]
     assert result.mismatched == ["/output/5/volume"]
     assert result.unobserved == ["/mix/5/playback/1"]
+
+
+class CapturingBackend(threading.Thread):
+    """A socket that only records, in arrival order, what reaches it.
+
+    FakeOscmix above models the link state machine and reports paths.
+    This one keeps the decoded message whole -- path, type tags and
+    arguments -- because that is what the dry run prints and therefore
+    what has to match.
+    """
+
+    def __init__(self, session_mod, port):
+        super().__init__(daemon=True)
+        self.session_mod = session_mod
+        self.received = []
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("127.0.0.1", port))
+        self.sock.settimeout(3.0)
+        self.stopping = threading.Event()
+
+    def stop(self):
+        self.stopping.set()
+
+    def run(self):
+        while not self.stopping.is_set():
+            try:
+                data, _ = self.sock.recvfrom(65536)
+            except (socket.timeout, OSError):
+                return
+            for message in self.session_mod.iter_osc_messages(data):
+                try:
+                    self.received.append(self.session_mod.decode_osc(message))
+                except ValueError:
+                    continue
+
+
+def test_the_dry_run_prints_exactly_the_datagrams_the_apply_sends(
+        session_mod, routing_mod, monkeypatch, capsys):
+    """Roadmap item G: the printed sequence *is* the sent sequence.
+
+    Two routes, because a single route cannot exhibit the bug class this
+    check exists for: walking route by route and printing link, mix,
+    link, mix agrees with the real order only when there is one route.
+    CI grepped that output to guard the defect that silenced every even
+    output, so for two routes it was inspecting an artifact nothing sends.
+    """
+    from oscmix_autostart import session as session_module
+
+    routes = [
+        make_route(session_mod, name="main", playback=(1, 2), output=(1, 2),
+                   volume=-10.0),
+        make_route(session_mod, name="phones", playback=(3, 4), output=(7, 8)),
+        make_route(session_mod, name="talkback", playback=(5,), output=(9,)),
+    ]
+    port, recv_port = free_udp_port(), free_udp_port()
+    config = session_mod.Config(osc_port=port, osc_recv_port=recv_port,
+                                routes=routes)
+
+    session_module._print_dry_run(42, config)
+    printed = [line[len("would send: "):]
+               for line in capsys.readouterr().out.splitlines()
+               if line.startswith("would send: ")]
+
+    # No echo will arrive on an unbound recv port, so the barrier would
+    # burn LINK_ECHO_TIMEOUT; the order under test does not depend on it.
+    monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.05)
+    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.05)
+    backend = CapturingBackend(session_mod, port)
+    backend.start()
+    try:
+        session_mod.apply_routing(routes, port, recv_port)
+        # The apply returns as soon as the last sendto did; give the
+        # reader a moment to drain the socket buffer.
+        deadline = time.monotonic() + 3.0
+        while len(backend.received) < len(printed) and time.monotonic() < deadline:
+            time.sleep(0.02)
+    finally:
+        backend.stop()
+        backend.join(timeout=3)
+        backend.sock.close()
+
+    sent = ["%s ,%s %s" % (path, tags, " ".join(map(str, args)))
+            for path, tags, args in backend.received]
+    assert printed == sent
+
+
+def test_the_plan_puts_every_link_before_every_mix(session_mod):
+    # The property routing_plan exists for, stated without a socket:
+    # the barrier is per routing, not per route.
+    routes = [
+        make_route(session_mod, name="main", playback=(1, 2), output=(1, 2)),
+        make_route(session_mod, name="phones", playback=(3, 4), output=(7, 8)),
+    ]
+    plan = session_mod.routing_plan(routes)
+    assert all(path.endswith("/stereo") for path, _t, _a in plan.links)
+    assert not any(path.endswith("/stereo") for path, _t, _a in plan.mix)
+    assert plan.messages() == plan.links + plan.mix
+    # ... and it is the same set of messages route_messages declares,
+    # only ordered for the wire rather than per route.
+    declared = [m for route in routes
+                for m in session_mod.route_messages(route)]
+    assert sorted(plan.messages()) == sorted(declared)

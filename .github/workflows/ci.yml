@@ -47,7 +47,12 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
+      # A checkout without hypothesis skips tests/test_contracts.py in
+      # full and still reports green. CI must never be that checkout, so
+      # here the skip is a collection error rather than a banner.
       - run: make test
+        env:
+          OSCMIX_REQUIRE_CONTRACTS: "1"
 
   coverage:
     name: Coverage
@@ -62,6 +67,8 @@ jobs:
       - run: pip install -r requirements-dev.txt
       # The threshold lives in pyproject.toml as a ratchet.
       - run: make coverage
+        env:
+          OSCMIX_REQUIRE_CONTRACTS: "1"
       - run: python -m coverage html
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         if: always()
@@ -156,10 +163,20 @@ jobs:
           Client  42 : "Fireface UCX II (00000000)" [Kernel]
             Port   1 : "Port" (RWeX) [In/Out]
           EOF
+          # Two routes on purpose: with one route the per-route order and
+          # the real order coincide, so a single-route config cannot show
+          # the defect this check guards. The dry run prints the same plan
+          # apply_routing sends (see test_the_dry_run_prints_exactly_the_
+          # datagrams_the_apply_sends), so the printed order is evidence.
           OSCMIX_PROC_ROOT=fake-proc python bin/oscmix-session \
-            --config config/routing.conf.example --dry-run 2>&1 | tee dry-run.txt
-          link=$(grep -n "would send: /output/1/stereo" dry-run.txt | cut -d: -f1)
-          mix=$(grep -n "would send: /mix/1/playback/1" dry-run.txt | cut -d: -f1)
-          test -n "$link" && test -n "$mix"
-          test "$link" -lt "$mix" \
-            || { echo "mix matrix written before the channel link"; exit 1; }
+            --config tests/data/two-routes.conf --dry-run 2>&1 | tee dry-run.txt
+          last_link=$(grep -n "would send: .*/stereo " dry-run.txt \
+            | tail -1 | cut -d: -f1)
+          first_mix=$(grep -n "would send: /mix/" dry-run.txt \
+            | head -1 | cut -d: -f1)
+          test -n "$last_link" && test -n "$first_mix"
+          # Every link of every route, then the barrier, then every mix.
+          test "$last_link" -lt "$first_mix" \
+            || { echo "mix matrix written before the last channel link"; exit 1; }
+          test "$(grep -c 'would send: .*/stereo ' dry-run.txt)" -eq 4
+          test "$(grep -c 'would send: /mix/' dry-run.txt)" -eq 2

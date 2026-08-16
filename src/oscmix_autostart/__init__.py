@@ -59,6 +59,7 @@ from .routing import (
                         mix_messages,
                         output_link_state,
                         route_messages,
+                        routing_plan,
                         send_mix,
 )
 from .session import run_session
@@ -112,6 +113,7 @@ __all__ = [
                         "register_promptly_reported",
                         "resolve_binary",
                         "route_messages",
+                        "routing_plan",
                         "run_session",
                         "sd_notify",
                         "send_mix",
