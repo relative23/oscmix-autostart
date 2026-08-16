@@ -14,8 +14,15 @@ import math
 import struct
 
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
+
+# A missing dev dependency should say so, not abort collection for the
+# whole suite: `make test` on a fresh checkout is a reasonable thing to
+# try before reading requirements-dev.txt.
+hypothesis = pytest.importorskip(
+    "hypothesis", reason="property tests need hypothesis "
+                         "(pip install -r requirements-dev.txt)")
+given, settings = hypothesis.given, hypothesis.settings
+st = hypothesis.strategies
 
 # OSC paths as oscmix uses them: ASCII, no NUL, no comma-leading weirdness.
 osc_paths = st.builds(
@@ -177,7 +184,7 @@ def test_config_parsing_is_total(session_mod, tmp_path_factory, text):
         config = session_mod.load_config(path)
     except session_mod.ConfigError as exc:
         message = str(exc)
-        assert message, "ConfigError must say what is wrong"  # noqa: PT017
+        assert message, "ConfigError must say what is wrong"
         return
     assert isinstance(config, session_mod.Config)
     for route in config.routes:

@@ -168,21 +168,51 @@ removes that blocker, which is why these two belong in the same release.
 *Proven by:* a mutation baseline policy in CI, in the shape
 payload-live-preview uses.
 
-### 7. Performance
+### 7. Performance -- reframed
 
-*Today:* unmeasured. Time-to-`READY=1` is device wait + port wait + a
-1.5 s link barrier; the register dump streams for ~15-20 s in the
-background. Nothing is known to be slow, which is not the same as knowing
-it is fast.
+The original plan here measured the wrong thing. How fast the Python runs
+is not the question: time-to-`READY=1` is dominated by the device wait,
+the 1.5 s link barrier and the 15-20 s dump, none of which a benchmark
+against a stub would touch. A hard wall-clock budget on a shared runner
+would mostly measure the runner -- a new flake source in a project whose
+bugs are already timing bugs.
 
-*Target:* a measured budget with a regression test -- time-to-READY
-against the stub backend under a fixed bound, and the dump parser checked
-for accidental quadratic behaviour as register counts grow.
+*Done instead:* the tests assert **growth order**, not milliseconds.
+Doubling the input must not quadruple the time; an absurd absolute bound
+catches a hang. That survives a busy machine and still rejects an
+accidental quadratic in the dump parser.
 
-*Proven by:* a benchmark test in CI with a hard budget, failing on
-regression rather than reporting a number nobody reads.
+*The question with actual value* is not benchmarkable here at all: can
+the handful of `/output/<n>/stereo` registers be queried directly instead
+of waiting out a full `/refresh`? If upstream cannot, that is a feature
+request (see below), not a number.
 
-### 8. Maintainability
+### 8. Supply chain and blast radius
+
+*Today (before this release):* `install.sh` built `OSCMIX_REF=master` --
+whatever upstream happened to be that day. The component that actually
+talks to the hardware was unpinned, which makes the word "verified"
+hollow: a measurement is only evidence about the binary it was taken
+against. It is also the only path here that fetches and compiles code
+from the network.
+
+*Done:* the ref defaults to a full commit SHA, the checkout is verified
+to have landed on exactly it, tracking upstream is an explicit
+`OSCMIX_REF=master`, and the built revision is recorded in the hardware
+evidence artifact. No signature verification -- upstream publishes no
+signed tags, which is why the default is a commit that has been measured
+rather than a branch.
+
+*Also done:* `_cleanup_stale_backend` signals through `os.pidfd_open`
+instead of a bare PID, so a number recycled between the `/proc` scan and
+the signal cannot be hit; the unit gained the sandboxing a user manager
+can actually apply; and `docs/SECURITY-MODEL.md` states the thing nobody
+had written down -- **UDP 7222 is unauthenticated, and any local process
+can write any mixer register.** That is upstream's design and acceptable
+on a single-user desktop, but from 0.3.0 it means a local process can put
+48 V on a ribbon microphone. It deserved a sentence.
+
+### 9. Maintainability
 
 *Today:* the prose docs are good, but the expensive knowledge is
 scattered through commit messages -- why the apply is two-phase, why
@@ -191,6 +221,54 @@ verification and re-apply share one `/refresh`, why `volume` is opt-in.
 *Target:* an ADR trail (`docs/decisions/`) for the non-obvious choices.
 Each of those took a measurement session to derive; none of them should
 have to be rediscovered.
+
+## Upstream is part of the quality goal, not the weather
+
+Four of the six constraints below are upstream limits: the playback
+matrix cannot be read back, the register cache does not self-synchronise,
+a dump takes 15-20 s, the Room EQ registers are implausible. The ceiling
+on "provably correct" is therefore set by code this project does not own.
+Treating that as given would cap the whole effort.
+
+So, as work items rather than complaints:
+
+- **Offer the cache-synchronisation patch.** `setbool` not updating
+  oscmix's own view is the single root cause of `LINK_ECHO_TIMEOUT`,
+  `LINK_SETTLE` and `LINK_SYNC_BLIND_DELAY`. Upstream accepting a patch
+  that syncs link state on write would delete that entire class of
+  timing constant from this codebase.
+- **File the Room EQ and `unexpected enum value -1` issues** before
+  0.4.0 builds on those registers.
+- **Ask for a targeted register query.** `/refresh` dumps everything for
+  15-20 s when what this project needs is a handful of
+  `/output/<n>/stereo`. That is a feature request, not a benchmark --
+  see the reframing of point 7 above.
+
+### A backend seam (0.3.0)
+
+The OSC calls should sit behind a narrow interface, so the dependency on
+oscmix's behaviour is visible and replaceable rather than spread through
+the control flow. Two reasons beyond tidiness: the timing constants above
+exist purely because of an upstream implementation detail, and a seam is
+what makes the option below cheap to keep open.
+
+**The option worth keeping open** is not a competing mixer. It is an own
+*state path*: writing and reading the two dozen registers this project
+actually pins directly over SysEx, while oscmix keeps the GUI and
+metering. That removes the dual-writer problem, makes read-back possible
+where upstream does not dump, and kills the cache race at the root. The
+cost is owning register decoding for devices that cannot be tested here,
+which is why it is not worth doing today -- and exactly why the seam and
+the register model go in while the surface is still small.
+
+### The register model as data (0.3.0, before the surface grows)
+
+The channel-state work multiplies the register surface by roughly ten.
+Which channels have `48v` (1-2), `hi-z` (3-4), `reflevel` (3-8), which
+registers the device reports back and which are write-only -- all of that
+is currently knowledge in prose. It belongs in one data structure that
+validation, `--dump-config` and verification all read, introduced
+*before* ten times as much of it exists.
 
 ## 0.3.0 -- the whole signal path, declared
 

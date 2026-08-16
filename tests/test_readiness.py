@@ -85,3 +85,31 @@ def test_find_stale_backends_skips_unreadable_entries(session_mod, tmp_path):
         assert session_mod.find_stale_backends(proc) == []
     finally:
         process.Path.stat = real_stat
+
+
+def test_wait_for_seq_client_returns_the_client_number(session_mod, tmp_path):
+    proc = tmp_path / "proc"
+    (proc / "asound" / "seq").mkdir(parents=True)
+    (proc / "asound" / "seq" / "clients").write_text(
+        'Client info\n\nClient  24 : "Fireface UCX II (0)" [Kernel]\n')
+    assert session_mod.wait_for_seq_client("Fireface UCX II", 1.0, proc) == 24
+
+
+def test_wait_for_seq_client_gives_up_and_says_so(session_mod, tmp_path):
+    # The timeout is the difference between "device is off" (exit 0) and
+    # "driver problem" (exit 1), so it has to actually expire.
+    import time
+
+    proc = tmp_path / "proc"
+    (proc / "asound" / "seq").mkdir(parents=True)
+    (proc / "asound" / "seq" / "clients").write_text("Client info\n")
+    started = time.monotonic()
+    assert session_mod.wait_for_seq_client("Fireface UCX II", 0.5, proc) is None
+    assert time.monotonic() - started >= 0.4
+
+
+def test_wait_for_seq_client_tolerates_a_missing_proc_file(session_mod,
+                                                           tmp_path):
+    # snd_seq not loaded yet: the file simply is not there.
+    assert session_mod.wait_for_seq_client("Fireface UCX II", 0.3,
+                                           tmp_path / "nothing") is None

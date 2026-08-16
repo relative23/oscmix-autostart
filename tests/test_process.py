@@ -1,0 +1,230 @@
+"""Backend process handling: stale cleanup and stop escalation.
+
+``_cleanup_stale_backend`` sends SIGTERM to PIDs it selected itself. Code
+that signals processes deserves direct tests for its *refusals* more than
+for its successes, so most of what follows checks that it does nothing.
+"""
+
+import os
+import signal
+
+import pytest
+
+
+@pytest.fixture
+def process_mod():
+    from oscmix_autostart import process
+
+    return process
+
+
+def fake_proc(tmp_path, entries, listening_port=None):
+    """A /proc tree: {pid: (comm, argv0)} plus an optional net/udp entry."""
+    root = tmp_path / "proc"
+    (root / "net").mkdir(parents=True)
+    header = ("  sl  local_address rem_address   st tx_queue rx_queue tr "
+              "tm->when retrnsmt   uid  timeout inode\n")
+    rows = header
+    if listening_port is not None:
+        rows += ("  100: 0100007F:%04X 00000000:0000 07 00000000:00000000 "
+                 "00:00000000 00000000  1000        0 1\n" % listening_port)
+    (root / "net" / "udp").write_text(rows)
+    for pid, (comm, argv0) in entries.items():
+        entry = root / str(pid)
+        entry.mkdir()
+        (entry / "comm").write_text(comm + "\n")
+        (entry / "cmdline").write_bytes(argv0.encode() + b"\0")
+    return root
+
+
+def test_nothing_is_signalled_when_the_port_is_free(process_mod, tmp_path,
+                                                    monkeypatch):
+    # No stale backend can be holding a port nobody is listening on.
+    killed = []
+    monkeypatch.setattr(process_mod.os, "kill",
+                        lambda pid, sig: killed.append(pid))
+    proc = fake_proc(tmp_path, {"200": ("oscmix", "/usr/bin/oscmix")})
+    process_mod._cleanup_stale_backend(7222, proc)
+    assert killed == []
+
+
+def test_an_unknown_holder_is_reported_not_killed(process_mod, tmp_path,
+                                                  monkeypatch, caplog):
+    # Someone else has the port. Killing whatever we can find would be
+    # worse than failing to bind.
+    killed = []
+    monkeypatch.setattr(process_mod.os, "kill",
+                        lambda pid, sig: killed.append(pid))
+    proc = fake_proc(tmp_path, {"200": ("sshd", "/usr/sbin/sshd")},
+                     listening_port=7222)
+    with caplog.at_level("WARNING"):
+        process_mod._cleanup_stale_backend(7222, proc)
+    assert killed == []
+    assert "unknown process" in caplog.text
+
+
+def test_a_stale_backend_is_terminated(process_mod, tmp_path, monkeypatch):
+    signalled = []
+    monkeypatch.setattr(process_mod, "_terminate",
+                        lambda pid: signalled.append((pid, signal.SIGTERM)))
+    monkeypatch.setattr(process_mod.time, "sleep", lambda _s: None)
+    proc = fake_proc(tmp_path, {"201": ("oscmix", "/home/u/.local/bin/oscmix")},
+                     listening_port=7222)
+    process_mod._cleanup_stale_backend(7222, proc)
+    assert signalled == [(201, signal.SIGTERM)]
+
+
+def test_a_vanished_process_does_not_raise(process_mod, tmp_path, monkeypatch):
+    # Between listing /proc and signalling, the process may exit. That is
+    # the normal case, not an error.
+    def gone(pid):
+        raise ProcessLookupError(pid)
+
+    monkeypatch.setattr(process_mod.os, "pidfd_open", gone, raising=False)
+    monkeypatch.setattr(process_mod.os, "kill",
+                        lambda pid, sig: (_ for _ in ()).throw(
+                            ProcessLookupError(pid)))
+    monkeypatch.setattr(process_mod.time, "sleep", lambda _s: None)
+    proc = fake_proc(tmp_path, {"202": ("oscmix", "oscmix")},
+                     listening_port=7222)
+    process_mod._cleanup_stale_backend(7222, proc)
+
+
+def test_termination_uses_a_pidfd_so_pid_reuse_cannot_bite(process_mod,
+                                                           monkeypatch):
+    # The point of the pidfd: it names the process, not the number. If a
+    # pidfd is available, os.kill must not be reached at all.
+    opened, signalled, killed = [], [], []
+    # raising=False: pidfd_open is Linux-only and some builds lack it,
+    # which is exactly why the runtime has a fallback.
+    monkeypatch.setattr(process_mod.os, "pidfd_open",
+                        lambda pid: opened.append(pid) or 999, raising=False)
+    monkeypatch.setattr(process_mod.os, "close", lambda fd: None)
+    monkeypatch.setattr(process_mod.signal, "pidfd_send_signal",
+                        lambda fd, sig: signalled.append((fd, sig)),
+                        raising=False)
+    monkeypatch.setattr(process_mod.os, "kill",
+                        lambda pid, sig: killed.append(pid))
+    process_mod._terminate(4321)
+    assert opened == [4321]
+    assert signalled == [(999, signal.SIGTERM)]
+    assert killed == [], "os.kill must not run when a pidfd was obtained"
+
+
+def test_termination_falls_back_when_pidfds_are_unavailable(process_mod,
+                                                            monkeypatch):
+    # Blocked by seccomp, or a kernel without it: still clean up, just
+    # with the older race.
+    killed = []
+
+    def refuse(pid):
+        raise OSError("no pidfd here")
+
+    monkeypatch.setattr(process_mod.os, "pidfd_open", refuse, raising=False)
+    monkeypatch.setattr(process_mod.os, "kill",
+                        lambda pid, sig: killed.append((pid, sig)))
+    process_mod._terminate(4321)
+    assert killed == [(4321, signal.SIGTERM)]
+
+
+class Child:
+    """A backend that ignores SIGTERM for a while, then exits."""
+
+    def __init__(self, ignore_terminate=False, exit_after=0):
+        self.ignore_terminate = ignore_terminate
+        self.exit_after = exit_after
+        self.waits = 0
+        self.terminated = self.killed = False
+
+    def wait(self, timeout=None):
+        self.waits += 1
+        if self.killed or (self.terminated and not self.ignore_terminate):
+            return 0
+        if self.exit_after and self.waits >= self.exit_after:
+            return 0
+        if timeout is None:
+            return 0
+        import subprocess
+
+        raise subprocess.TimeoutExpired("backend", timeout)
+
+    def terminate(self):
+        self.terminated = True
+
+    def kill(self):
+        self.killed = True
+
+
+def test_supervise_returns_when_the_backend_exits(process_mod):
+    child = Child(exit_after=2)
+    assert process_mod.supervise(child, {"stop": False}) == 0
+    assert not child.killed
+
+
+def test_supervise_escalates_to_sigkill_after_the_grace(process_mod,
+                                                        monkeypatch):
+    # The unit's TimeoutStopSec is 10 s; a backend that ignores SIGTERM
+    # has to be killed inside that, or systemd kills the session instead
+    # and the shutdown looks like a failure.
+    monkeypatch.setattr(process_mod, "CHILD_STOP_GRACE", 0.0)
+    child = Child(ignore_terminate=True)
+    assert process_mod.supervise(child, {"stop": True}) == 0
+    assert child.killed
+
+
+def test_supervise_does_not_kill_while_no_stop_was_requested(process_mod,
+                                                             monkeypatch):
+    monkeypatch.setattr(process_mod, "CHILD_STOP_GRACE", 0.0)
+    child = Child(exit_after=3)
+    process_mod.supervise(child, {"stop": False})
+    assert not child.killed
+
+
+def test_resolve_binary_prefers_the_environment_override(process_mod,
+                                                         tmp_path,
+                                                         monkeypatch):
+    from oscmix_autostart import discovery
+
+    binary = tmp_path / "oscmix"
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+    monkeypatch.setenv("OSCMIX_BIN_BACKEND", str(binary))
+    assert discovery.resolve_binary("oscmix", "OSCMIX_BIN_BACKEND") == str(binary)
+
+
+def test_a_broken_override_fails_loudly_instead_of_falling_back(tmp_path,
+                                                                monkeypatch,
+                                                                caplog):
+    # An override names a specific binary. Quietly using a different one
+    # would start something the operator did not ask for; refusing sends
+    # the session down the "run install.sh first" path with a reason.
+    from oscmix_autostart import discovery
+
+    monkeypatch.setenv("OSCMIX_BIN_BACKEND", str(tmp_path / "missing"))
+    monkeypatch.setattr(discovery.shutil, "which",
+                        lambda name: "/usr/bin/" + name)
+    with caplog.at_level("ERROR"):
+        assert discovery.resolve_binary("oscmix", "OSCMIX_BIN_BACKEND") is None
+    assert "not an executable file" in caplog.text
+
+
+def test_resolve_binary_falls_back_to_the_standard_locations(monkeypatch):
+    # The systemd user manager's PATH need not contain ~/.local/bin,
+    # which is exactly where install.sh puts the backend.
+    from oscmix_autostart import discovery
+
+    home_bin = os.path.expanduser("~/.local/bin/oscmix")
+    monkeypatch.delenv("OSCMIX_BIN_BACKEND", raising=False)
+    monkeypatch.setattr(discovery.shutil, "which", lambda name: None)
+    monkeypatch.setattr(discovery.os, "access",
+                        lambda path, mode: path == home_bin)
+    assert discovery.resolve_binary("oscmix", "OSCMIX_BIN_BACKEND") == home_bin
+
+
+def test_resolve_binary_returns_none_when_nothing_is_found(monkeypatch):
+    from oscmix_autostart import discovery
+
+    monkeypatch.delenv("OSCMIX_BIN_BACKEND", raising=False)
+    monkeypatch.setattr(discovery.shutil, "which", lambda name: None)
+    monkeypatch.setattr(discovery.os, "access", lambda path, mode: False)
+    assert discovery.resolve_binary("oscmix", "OSCMIX_BIN_BACKEND") is None

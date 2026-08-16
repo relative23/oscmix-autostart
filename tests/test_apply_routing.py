@@ -488,3 +488,53 @@ def test_unlinked_route_cannot_be_pushed_above_unity(session_mod):
     route = make_route(session_mod, stereo=False, level=6.0)
     sent = {p: a for p, _t, a in session_mod.mix_messages(route)}
     assert abs(sent["/mix/5/playback/1"][0] - 6.0206) < 0.001
+
+
+def test_send_mix_writes_the_matrix_without_the_links(session_mod):
+    # The re-apply path used after the dump: only the matrix, because
+    # re-linking would restart the very race it repairs.
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    device = DumpingOscmix(session_mod, send_port, recv_port, [])
+    device.start()
+    config = make_config(session_mod, [make_route(session_mod, volume=0.0)],
+                         send_port, recv_port)
+    try:
+        session_mod.send_mix(config)
+        device.drain()
+    finally:
+        device.stop()
+        device.join(timeout=3)
+        device.sock.close()
+    assert device.order == ["/mix/5/playback/1", "/output/5/volume",
+                            "/output/6/volume"]
+
+
+def test_blind_reapply_asks_for_a_dump_then_writes(session_mod, routing_mod,
+                                                   monkeypatch):
+    # Used when the mixer GUI holds the receive port: the dump still has
+    # to go out, because it is what teaches oscmix the link state.
+    monkeypatch.setattr(routing_mod, "LINK_SYNC_BLIND_DELAY", 0.05)
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    device = DumpingOscmix(session_mod, send_port, recv_port, [])
+    device.start()
+    config = make_config(session_mod, [make_route(session_mod)], send_port,
+                         recv_port)
+    try:
+        session_mod.blind_reapply_mix(config)
+        device.drain()
+    finally:
+        device.stop()
+        device.join(timeout=3)
+        device.sock.close()
+    assert device.order == ["/refresh", "/mix/5/playback/1"]
+
+
+def test_verify_result_separates_the_three_verdicts(session_mod):
+    # The type the read-back reports through: confirmed, mismatched and
+    # unobserved mean different things and must not be conflated.
+    result = session_mod.VerifyResult(confirmed=["/output/5/stereo"],
+                                      mismatched=["/output/5/volume"],
+                                      unobserved=["/mix/5/playback/1"])
+    assert result.confirmed == ["/output/5/stereo"]
+    assert result.mismatched == ["/output/5/volume"]
+    assert result.unobserved == ["/mix/5/playback/1"]

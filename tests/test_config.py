@@ -202,3 +202,50 @@ def test_mono_routes_never_conflict(session_mod, tmp_path):
     path.write_text("[route:a]\nplayback = 3\noutput = 7\n\n"
                     "[route:b]\nplayback = 4\noutput = 7\n")
     assert len(session_mod.load_config(path).routes) == 2
+
+
+def test_the_documented_defaults_are_the_actual_defaults(session_mod):
+    # These are the values the README and routing.conf.example promise.
+    # A silent change would move a UDP port or a channel limit under
+    # users who never wrote them down.
+    assert session_mod.DEFAULT_DEVICE_NAME == "Fireface UCX II"
+    assert session_mod.DEFAULT_USB_ID == "2a39:3fd9"
+    assert session_mod.DEFAULT_OSC_PORT == 7222
+    assert session_mod.DEFAULT_OSC_RECV_PORT == 8222
+    assert session_mod.DEFAULT_DEVICE_TIMEOUT == 30.0
+    assert (session_mod.LEVEL_MIN, session_mod.LEVEL_MAX) == (-65.0, 6.0)
+    assert (session_mod.CHANNEL_MIN, session_mod.CHANNEL_MAX) == (1, 64)
+    # The compensation for oscmix halving the gain on the unlinked path.
+    assert abs(session_mod.UNLINKED_GAIN_OFFSET - 6.0206) < 0.001
+    assert session_mod.__version__.count(".") == 2
+
+
+def test_config_discovery_prefers_the_environment(session_mod, tmp_path,
+                                                  monkeypatch):
+    explicit = tmp_path / "explicit.conf"
+    explicit.write_text("[route:x]\nplayback = 1/2\noutput = 1/2\n")
+    monkeypatch.setenv("OSCMIX_CONFIG", str(explicit))
+    assert session_mod.discover_config_path() == explicit
+
+
+def test_config_discovery_finds_the_xdg_location(session_mod, tmp_path,
+                                                 monkeypatch):
+    monkeypatch.delenv("OSCMIX_CONFIG", raising=False)
+    xdg = tmp_path / "xdg"
+    (xdg / "oscmix").mkdir(parents=True)
+    expected = xdg / "oscmix" / "routing.conf"
+    expected.write_text("[route:x]\nplayback = 1/2\noutput = 1/2\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    assert session_mod.discover_config_path() == expected
+
+
+def test_config_discovery_returns_none_when_there_is_nothing(session_mod,
+                                                             tmp_path,
+                                                             monkeypatch):
+    # No config is a supported state: the defaults leave the mixer alone.
+    from oscmix_autostart import config as config_mod
+
+    monkeypatch.delenv("OSCMIX_CONFIG", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
+    monkeypatch.setattr(config_mod.Path, "is_file", lambda self: False)
+    assert session_mod.discover_config_path() is None

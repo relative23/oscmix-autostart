@@ -39,7 +39,7 @@ from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from oscmix_autostart import (  # noqa: E402
+from oscmix_autostart import (
     decode_osc,
     discover_config_path,
     iter_osc_messages,
@@ -127,6 +127,21 @@ class LevelReader:
                     peak = SILENCE_DB
                 result[channel] = max(result.get(channel, SILENCE_DB), peak)
         return result
+
+
+def backend_revision() -> Optional[str]:
+    """The upstream oscmix commit this measurement was taken against.
+
+    A measurement that does not say which backend produced it cannot be
+    compared against the next one. install.sh pins this; recording it
+    here is what makes the evidence artifact mean something.
+    """
+    build = Path(__file__).resolve().parent.parent / "build" / "oscmix"
+    if not (build / ".git").exists():
+        return None
+    result = subprocess.run(["git", "-C", str(build), "rev-parse", "HEAD"],
+                            capture_output=True, text=True, check=False)
+    return result.stdout.strip() or None
 
 
 def play(wav: Path, sink: Optional[str]) -> None:
@@ -259,6 +274,7 @@ def main() -> int:
     evidence = {
         "measured": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "device": config.device_name,
+        "oscmix_revision": backend_revision(),
         "min_response_db": MIN_RESPONSE_DB,
         "min_above_background_db": MIN_ABOVE_BACKGROUND_DB,
         "tone": {"hz": TONE_HZ, "seconds": TONE_SECONDS,

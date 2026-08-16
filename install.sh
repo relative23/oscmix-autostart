@@ -7,7 +7,13 @@
 set -euo pipefail
 
 OSCMIX_REPO="${OSCMIX_REPO:-https://github.com/michaelforney/oscmix}"
-OSCMIX_REF="${OSCMIX_REF:-master}"
+# Pinned to a commit, not a branch. oscmix is the component that actually
+# talks to the hardware, and every measurement this project publishes was
+# taken against this revision -- building "whatever master was that day"
+# would make the word "verified" meaningless, and this clone-and-compile
+# is the only path here that executes code from the network.
+# Override to track upstream: OSCMIX_REF=master ./install.sh
+OSCMIX_REF="${OSCMIX_REF:-2411b12d8a13b82829caf3b0b628078980c3d3a4}"
 USB_VENDOR="2a39"
 USB_PRODUCT="3fd9"
 
@@ -105,15 +111,31 @@ if [ "$DO_BUILD" = 1 ]; then
 
     if [ -d "$BUILD_DIR/.git" ]; then
         info "updating oscmix source in $BUILD_DIR"
-        git -C "$BUILD_DIR" fetch --quiet origin "$OSCMIX_REF"
-        git -C "$BUILD_DIR" checkout --quiet FETCH_HEAD
+        git -C "$BUILD_DIR" fetch --quiet origin "$OSCMIX_REF" 2>/dev/null \
+            || git -C "$BUILD_DIR" fetch --quiet origin
+        git -C "$BUILD_DIR" checkout --quiet "$OSCMIX_REF" 2>/dev/null \
+            || git -C "$BUILD_DIR" checkout --quiet FETCH_HEAD
     else
         info "cloning $OSCMIX_REPO ($OSCMIX_REF)"
         mkdir -p "$(dirname "$BUILD_DIR")"
-        git clone --quiet --depth 1 --branch "$OSCMIX_REF" \
-            "$OSCMIX_REPO" "$BUILD_DIR" 2>/dev/null \
-            || git clone --quiet "$OSCMIX_REPO" "$BUILD_DIR"
+        # A full clone: --depth 1 --branch only accepts a branch or tag,
+        # and the default ref here is a commit.
+        git clone --quiet "$OSCMIX_REPO" "$BUILD_DIR"
+        git -C "$BUILD_DIR" checkout --quiet "$OSCMIX_REF"
     fi
+
+    # State what was actually built. If the ref was a full SHA, the
+    # checkout must have landed on exactly it -- a silent fallback to
+    # master is the failure this pin exists to prevent.
+    OSCMIX_BUILT_SHA="$(git -C "$BUILD_DIR" rev-parse HEAD)"
+    case "$OSCMIX_REF" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*)
+            if [ ${#OSCMIX_REF} -eq 40 ] && [ "$OSCMIX_BUILT_SHA" != "$OSCMIX_REF" ]; then
+                fail "oscmix checkout is $OSCMIX_BUILT_SHA, expected $OSCMIX_REF"
+            fi
+            ;;
+    esac
+    info "building oscmix at $OSCMIX_BUILT_SHA"
 
     info "building oscmix ($GTK_FLAG)"
     make -C "$BUILD_DIR" "$GTK_FLAG" >/dev/null

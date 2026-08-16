@@ -20,7 +20,25 @@ RestartPreventExitStatus=2
 # Device wait (30s) + port wait (10s) + verification, with headroom.
 TimeoutStartSec=75
 TimeoutStopSec=10
+
+# Sandboxing, restricted to what a *user* unit can actually enforce.
+# Anything that drops capabilities (ProtectKernelTunables, ProtectClock,
+# RestrictSUIDSGID, ...) or needs a cgroup controller (DeviceAllow,
+# IPAddress*) fails here with 218/CAPABILITIES: the user manager is
+# unprivileged and cannot apply them. Verified by starting the unit, not
+# by reading the manual.
 NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+# OSC is UDP on loopback and readiness is a UNIX datagram; nothing here
+# has any business opening another kind of socket.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# The config lives under ~/.config and is only ever read.
+ReadWritePaths=
 
 [Install]
 WantedBy=default.target

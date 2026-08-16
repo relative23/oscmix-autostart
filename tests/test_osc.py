@@ -10,7 +10,7 @@ def test_mix_message_golden_bytes(session_mod):
     # shell implementation sent, byte for byte.
     expected = (
         b"/mix/5/playback/1\x00\x00\x00"  # 17 chars + NUL, padded to 20
-        + b",fi\x00"
+         b",fi\x00"
         + struct.pack(">f", 0.0)
         + struct.pack(">i", -100)
     )

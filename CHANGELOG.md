@@ -1,5 +1,95 @@
 # Changelog
 
+## Unreleased -- 0.2.0
+
+A maturity release: no new device features. Everything here makes the
+existing behaviour provably correct and cheap to change, because 0.3.0
+multiplies the register surface by roughly ten.
+
+### Architecture
+
+- The 1386-line `bin/oscmix-session` is now a package in
+  `src/oscmix_autostart/` (14 modules) with the executable reduced to a
+  52-line shim; `run_session` went from 106 lines to ~40.
+- `tests/test_architecture.py` enforces the properties that motivated the
+  split rather than asserting them in a comment: stdlib-only runtime,
+  declared per-module layering, an acyclic import graph, `__all__`
+  matching what is exported, no function over 70 lines, a docstring per
+  module, and every public name named by at least one test. It caught
+  `run_session` immediately.
+
+### Contracts
+
+- `tests/test_contracts.py`: 14 property-based tests (hypothesis) --
+  codec round-trip and alignment, hostile and corrupted datagrams,
+  config parsing totality, `a route writes only what it declares`,
+  `route == link + mix`, links before mix, and `level` meaning the same
+  gain linked or unlinked.
+- `tests/test_lifecycle.py`: the exit-code model and the readiness
+  protocol as assertions -- 0 for device-absent and clean stops, 1 for
+  runtime failures, 2 for config errors, and `READY=1` on every exit that
+  returns 0. Previously these lived in a docstring.
+
+### Testability and proof
+
+- Subprocess coverage (`COVERAGE_PROCESS_START` plus a `sitecustomize`
+  hook): measured coverage went from 65% to 86% without a single new
+  test, because the integration tests always drove the entry point,
+  session and CLI -- the measurement just never followed them. Ratchet
+  raised 60 → 84.
+- `scripts/verify-hardware.py` and `make verify-hardware`: play a tone,
+  read `/output/<n>/level` back, assert the audible result, emit an
+  evidence artifact including the upstream revision measured. Exits 77
+  when there is no device, so CI stays hardware-free.
+- Mutation testing now runs at all (the package extraction unblocked it):
+  2066 mutants, 1009 killed, score 0.73. `quality/mutation-baseline.json`
+  plus `scripts/mutation-policy.py` gate on the **ratio**, not on counts,
+  because absolute survivor numbers rise with every line added.
+- It found a real weakness: `_register_matches` was tested with an
+  expected value of 0.0, where a sign error is invisible.
+
+### Stability
+
+- `tests/test_faults.py`: dropped, duplicated and reordered datagrams; a
+  device that never answers; a dead backend port; a flood of unrelated
+  registers. Every failure this project has shipped was a timing or
+  delivery bug, so that is what the tests attack.
+- `tests/test_performance.py` asserts **growth order**, not wall-clock. A
+  millisecond budget on a shared runner would mostly measure the runner
+  and add a flake source to a project whose bugs are already timing bugs.
+
+### Security and supply chain
+
+- `install.sh` builds a **pinned upstream commit** instead of `master`,
+  verifies the checkout landed on exactly it, and records the revision in
+  the hardware evidence. Tracking upstream is now an explicit
+  `OSCMIX_REF=master`. The component that talks to the hardware being
+  unpinned made "verified" hollow, and it is the only path here that
+  compiles code from the network.
+- Stale-backend cleanup signals through `os.pidfd_open`, so a PID
+  recycled between the `/proc` scan and the signal cannot be hit.
+- The systemd unit is sandboxed as far as an unprivileged *user* unit
+  can be. The hardening that looks obvious but breaks it with
+  `218/CAPABILITIES` is listed in `tests/test_unit_file.py` with the
+  reason, having been discovered by the service refusing to start.
+- `docs/SECURITY-MODEL.md` states what nobody had written down: UDP 7222
+  is unauthenticated and any local process can write any mixer register.
+  From 0.3.0 that includes phantom power.
+
+### Code quality and maintainability
+
+- `mypy --strict` over the package, clean; the twelve errors it reported
+  were bare `dict`/`set`/`Popen` generics, now real types.
+- Expanded ruff selection (security, logging format, import hygiene,
+  exception handling and correctness rules), with every exclusion
+  carrying its reason. One rule was overruled on purpose: the launcher
+  must not print a traceback to a desktop user.
+- `docs/decisions/`: five ADRs for the choices that each cost a
+  measurement session to reach.
+- `docs/ROADMAP.md` records where this goes next and, explicitly, that
+  four of six known constraints are upstream limits -- with the patches
+  and issues to raise there treated as work items rather than weather.
+
 ## 0.1.3 (2026-08-16)
 
 ### Fixed

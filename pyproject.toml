@@ -22,7 +22,17 @@ target-version = "py39"
 line-length = 99
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "C4", "SIM", "RET", "ARG", "PIE", "PT"]
+select = ["E", "F", "W", "I", "B", "C4", "SIM", "RET", "ARG", "PIE", "PT",
+          # Added in 0.2.0, each for checking rather than taste:
+          "S",      # security -- this project spawns processes and signals PIDs
+          "A",      # shadowing a builtin
+          "G",      # logging call format (lazy %-args, not f-strings)
+          "ISC",    # implicit string concatenation, i.e. a forgotten comma
+          "TID",    # import hygiene
+          "RUF",    # ruff's own correctness checks
+          "PERF",   # loops that should not be loops
+          "FURB",   # genuinely simpler stdlib usage
+          "TRY"]    # exception handling that hides the cause
 ignore = [
     # `%`-formatting is deliberate and consistent here: logging takes its
     # arguments lazily, and the OSC paths read better as format strings.
@@ -33,9 +43,30 @@ ignore = [
     # dict(...) with keyword arguments is how the test fixtures express
     # named defaults; a literal would read worse.
     "C408",
+    # Launching a known binary by name is the entire point of this
+    # program: it starts alsaseqio and oscmix, resolved through
+    # resolve_binary() rather than taken from user input. Flagging every
+    # such call would mean 13 noqa comments saying "yes, on purpose".
+    "S603", "S607",
+    # A ConfigError names the section and the option that is wrong -- that
+    # detail is the contract, not a message that belongs in a subclass.
+    "TRY003",
+    # Rebuilding a list with extend() instead of append() in a loop is a
+    # micro-optimisation on paths that run once per start.
+    "PERF401",
+    # The try/except inside the read-back loop guards one malformed
+    # datagram out of thousands; hoisting it would abandon the dump.
+    "PERF203",
 ]
 
 [tool.ruff.lint.per-file-ignores]
+# assert is how a test states its expectation; S311 is a seeded RNG that
+# injects faults; monkeypatch stubs must match a signature whether or not
+# they use every parameter.
+"tests/*" = ["S101", "S311", "ARG001", "ARG005", "RUF005"]
+# The harness and policy scripts are CLIs: printing is their output, and
+# os.execv in the launcher is deliberate.
+"scripts/*" = ["S606"]
 # Verbatim /proc/net/udp fixtures -- wrapping them would break the parser
 # under test.
 "tests/test_readiness.py" = ["E501"]

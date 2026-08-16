@@ -29,8 +29,11 @@ typecheck:
 	$(PYTHON) -m mypy --strict $(PACKAGE)
 	$(PYTHON) -m mypy --ignore-missing-imports --scripts-are-modules $(SCRIPTS)
 
+# Runtime and tooling only. A monkeypatch stub must accept the signature
+# it replaces whether or not it uses every parameter, so "unused" in a
+# test says nothing; in the runtime it is a defect.
 deadcode:
-	$(PYTHON) -m vulture $(PACKAGE) $(SCRIPTS) tests/ --min-confidence 80
+	$(PYTHON) -m vulture $(PACKAGE) $(SCRIPTS) scripts/ --min-confidence 80
 
 # parallel mode plus a combine step: the integration tests measure the
 # session subprocess too, and each process writes its own data file.

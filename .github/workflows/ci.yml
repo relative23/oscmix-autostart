@@ -87,6 +87,32 @@ jobs:
       # fakes survived several full runs before it was caught.
       - run: make flake
 
+  mutation:
+    name: Mutation Score
+    # Not a blocking gate: ~15 minutes, and its number moves for reasons
+    # other than test quality (new code brings new mutants). It reports;
+    # the policy script fails only when the *score* drops.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt mutmut
+      - run: make mutation
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        if: always()
+        with:
+          name: mutation-stats
+          path: mutants/mutmut-cicd-stats.json
+          if-no-files-found: ignore
+          retention-days: 14
+
   build-oscmix:
     name: Build Upstream oscmix
     runs-on: ubuntu-latest
@@ -101,8 +127,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential pkg-config libasound2-dev libgtk-3-dev \
             libglib2.0-dev-bin
-      - run: |
-          git clone --depth 1 https://github.com/michaelforney/oscmix build/oscmix
+      # The pinned revision, not master: the point of the pin is that CI
+      # builds the same backend the hardware measurements were taken
+      # against. install.sh carries the SHA.
+      - name: Build the pinned upstream revision
+        run: |
+          ref=$(sed -n 's/^OSCMIX_REF="\${OSCMIX_REF:-\(.*\)}"$/\1/p' install.sh)
+          test -n "$ref" || { echo "no pinned OSCMIX_REF in install.sh"; exit 1; }
+          echo "pinned upstream ref: $ref"
+          git clone --quiet https://github.com/michaelforney/oscmix build/oscmix
+          git -C build/oscmix checkout --quiet "$ref"
+          test "$(git -C build/oscmix rev-parse HEAD)" = "$ref"
           make -C build/oscmix
           test -x build/oscmix/oscmix
           test -x build/oscmix/alsaseqio

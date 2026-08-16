@@ -173,3 +173,32 @@ def test_functions_stay_readable(path):
 @pytest.mark.parametrize("path", module_paths(), ids=lambda p: p.stem)
 def test_every_module_documents_itself(path):
     assert ast.get_docstring(parse(path)), "%s has no module docstring" % path.name
+
+
+def named_in_tests():
+    """Every identifier any test file mentions."""
+    mentioned = set()
+    for path in sorted(Path(__file__).resolve().parent.glob("test_*.py")):
+        for node in ast.walk(parse(path)):
+            if isinstance(node, ast.Attribute):
+                mentioned.add(node.attr)
+            elif isinstance(node, ast.Name):
+                mentioned.add(node.id)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    mentioned.add(alias.asname or alias.name.split(".")[0])
+    return mentioned
+
+
+def test_every_public_name_is_exercised_by_some_test(session_mod):
+    """A declared public surface nobody tests is a promise nobody checks.
+
+    Weaker than "has a dedicated test" on purpose: this catches a name
+    that was exported and then forgotten, without pretending that being
+    mentioned equals being covered. Coverage and the mutation score are
+    the measures of *how well*; this one is about *at all*.
+    """
+    untested = sorted(name for name in session_mod.__all__
+                      if name not in named_in_tests())
+    assert untested == [], (
+        "declared in __all__ but named by no test: %s" % untested)

@@ -1,24 +1,31 @@
 {
   "recorded": "2026-08-16",
   "note": [
-    "Mutation testing answers what coverage cannot: whether an assertion",
-    "catches a wrong value or merely executes the line. This file is a",
-    "ratchet, not a target -- survivors must not grow.",
+    "A ratio, not a count. Absolute survivor counts rise with every",
+    "line added -- new code means new mutants, so a healthy change",
+    "with good tests would trip an absolute ratchet. The score below",
+    "is killed / (killed + survived): it stays comparable as the",
+    "codebase grows and only moves when tests get better or worse.",
     "",
-    "Not every survivor is a gap. Roughly a quarter change a log or error",
-    "message, which nothing asserts on by design. Others are equivalent:",
-    "the guard `if not mismatched` only decides when the read-back loop",
-    "exits, not what it returns, so killing it would require asserting on",
+    "Not every survivor is a gap. About a quarter only change a log",
+    "or error message, which nothing asserts on by design. Others are",
+    "equivalent: `if not mismatched` decides when the read-back loop",
+    "exits, not what it returns, so killing it would mean asserting on",
     "timing -- a worse test than the mutant is a risk.",
     "",
-    "'not_covered' is code the in-process tests never execute: the CLI,",
-    "session and process modules are driven through a real subprocess,",
-    "which loads the checked-out source rather than the mutant. See",
-    "docs/decisions/0005-mutation-testing-scope.md."
+    "Mutants with no covering test are excluded from the score rather",
+    "than counted as failures: cli, session and process are driven",
+    "through a real subprocess that loads the original source, so a",
+    "mutation run says nothing about them. Coverage does follow them",
+    "(70-83%). See docs/decisions/0005-mutation-testing-scope.md."
   ],
-  "total": 2066,
-  "killed": 1009,
-  "survived": 377,
-  "not_covered": 677,
-  "timeout": 3
+  "measured": {
+    "total": 2066,
+    "killed": 1009,
+    "survived": 377,
+    "not_covered": 677,
+    "timeout": 3
+  },
+  "min_score": 0.72,
+  "tolerance": 0.01
 }

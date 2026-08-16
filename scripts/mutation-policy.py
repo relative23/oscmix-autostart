@@ -49,26 +49,25 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    problems = []
-    if counts["survived"] > baseline["survived"]:
-        problems.append(
-            "survivors grew: %d > %d (a new blind spot)"
-            % (counts["survived"], baseline["survived"]))
-    if counts["killed"] < baseline["killed"]:
-        problems.append(
-            "kills shrank: %d < %d (a test stopped catching something)"
-            % (counts["killed"], baseline["killed"]))
+    judged = counts["killed"] + counts["survived"]
+    if judged == 0:
+        print("mutation-policy: no mutant was judged", file=sys.stderr)
+        return 2
+    score = counts["killed"] / judged
+    floor = baseline["min_score"] - baseline["tolerance"]
 
     for name in ("killed", "survived", "not_covered"):
-        print("%-12s %5d  (baseline %d)" % (name, counts[name], baseline[name]))
-    if problems:
-        print("\nmutation policy failed:", file=sys.stderr)
-        for problem in problems:
-            print("  - " + problem, file=sys.stderr)
+        print("%-12s %5d" % (name, counts[name]))
+    print("%-12s %5.3f  (floor %.3f)" % ("score", score, floor))
+
+    if score < floor:
+        print("\nmutation policy failed: score %.3f is below the floor %.3f "
+              "-- assertions are catching less than they were"
+              % (score, floor), file=sys.stderr)
         return 1
-    if counts["survived"] < baseline["survived"]:
-        print("\nsurvivors dropped to %d; lower quality/mutation-baseline.json"
-              % counts["survived"])
+    if score > baseline["min_score"] + baseline["tolerance"]:
+        print("\nscore rose to %.3f; raise min_score in "
+              "quality/mutation-baseline.json to lock it in" % score)
     print("\nmutation policy satisfied")
     return 0
 

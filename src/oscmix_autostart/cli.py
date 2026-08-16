@@ -50,7 +50,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         format="%(levelname)s: %(message)s",
     )
 
-    config_path = args.config if args.config else discover_config_path()
+    config_path = args.config or discover_config_path()
     try:
         config = load_config(config_path)
     except ConfigError as exc:

@@ -58,11 +58,37 @@ def _cleanup_stale_backend(port: int, proc_root: Path) -> None:
     log.warning("UDP port %d already in use; terminating stale oscmix (pid %s)",
                 port, ", ".join(map(str, pids)))
     for pid in pids:
+        _terminate(pid)
+    time.sleep(0.5)
+
+
+def _terminate(pid: int) -> None:
+    """Send SIGTERM to a PID that was identified a moment ago.
+
+    Between scanning /proc and signalling, that process may exit and the
+    kernel may hand its number to something else; a plain os.kill would
+    then signal a stranger. A pidfd refers to the process itself rather
+    than to the number, so the race cannot be lost -- signalling a dead
+    one fails instead of hitting its successor.
+
+    os.pidfd_open landed in 3.9, the oldest interpreter supported here,
+    but it is Linux-only and can be blocked by a seccomp policy, so a
+    failure to obtain one falls back rather than skipping the cleanup.
+    """
+    try:
+        fd = os.pidfd_open(pid)
+    except (AttributeError, OSError):
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError:
             pass
-    time.sleep(0.5)
+        return
+    try:
+        signal.pidfd_send_signal(fd, signal.SIGTERM)
+    except (AttributeError, OSError):
+        pass
+    finally:
+        os.close(fd)
 
 
 def supervise(child: "subprocess.Popen[bytes]",
