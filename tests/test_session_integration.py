@@ -54,17 +54,23 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(("127.0.0.1", port))
 sock.settimeout(0.2)
 
-# Only now advertise the port in the fake /proc/net/udp.
-with open(os.environ["STUB_PROC_UDP"], "w") as f:
-    f.write(os.environ["STUB_PROC_UDP_HEADER"])
-    f.write("  100: 0100007F:%04X 00000000:0000 07 00000000:00000000 "
-            "00:00000000 00000000  1000        0 1 2 0 0\\n" % port)
-
+# The signal disposition has to be in place before the port is
+# advertised: the tests treat that entry as "the backend is up" and send
+# SIGTERM right after seeing it. Installed later, a SIGTERM landing in
+# between would kill this stub with the default disposition instead of
+# being ignored, and the SIGTERM->SIGKILL escalation would never be
+# exercised.
 running = [True]
 if os.environ.get("STUB_IGNORE_TERM"):
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
 else:
     signal.signal(signal.SIGTERM, lambda *a: running.__setitem__(0, False))
+
+# Only now advertise the port in the fake /proc/net/udp.
+with open(os.environ["STUB_PROC_UDP"], "w") as f:
+    f.write(os.environ["STUB_PROC_UDP_HEADER"])
+    f.write("  100: 0100007F:%04X 00000000:0000 07 00000000:00000000 "
+            "00:00000000 00000000  1000        0 1 2 0 0\\n" % port)
 
 stored = []
 log = open(os.path.join(stub_dir, "datagrams.hex"), "a")
