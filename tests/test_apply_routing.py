@@ -44,9 +44,14 @@ class FakeOscmix(threading.Thread):
         self.sock.bind(("127.0.0.1", send_port))
         self.sock.settimeout(3.0)
         self.stopping = threading.Event()
+        self.timers = []             # pending echo timers, cancelled on stop
 
     def stop(self):
         self.stopping.set()
+        # An echo timer that fires after teardown writes to a closed
+        # socket; cancelling here keeps the fake from outliving its test.
+        for timer in self.timers:
+            timer.cancel()
 
     def record(self, path):
         self.order.append(path)
@@ -57,9 +62,10 @@ class FakeOscmix(threading.Thread):
             if self.echo:
                 # The echo is what updates oscmix's state; it arrives
                 # only after the device round-trip.
-                timer = threading.Timer(self.echo_delay, self.send_link_echo, [pair,
-                                                                      path])
+                timer = threading.Timer(self.echo_delay, self.send_link_echo,
+                                        [pair, path])
                 timer.daemon = True
+                self.timers.append(timer)
                 timer.start()
         elif path.startswith("/playback/") and path.endswith("/stereo"):
             # setinputstereo() updates oscmix's state synchronously.
@@ -70,9 +76,14 @@ class FakeOscmix(threading.Thread):
             self.mix_writes.append((path, pair in self.linked))
 
     def send_link_echo(self, pair, path):
+        if self.stopping.is_set():
+            return               # cancel() lost the race with the timer
         self.linked.add(pair)
-        self.sock.sendto(self.session_mod.encode_osc(path, "i", 1),
-                         ("127.0.0.1", self.recv_port))
+        try:
+            self.sock.sendto(self.session_mod.encode_osc(path, "i", 1),
+                             ("127.0.0.1", self.recv_port))
+        except OSError:
+            pass                 # socket already closed by teardown
 
     def run(self):
         while not self.stopping.is_set():
