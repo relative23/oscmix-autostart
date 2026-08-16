@@ -42,23 +42,27 @@ feature gap turns into an argument about scope, and this document has an
 [explicit non-goals](#explicit-non-goals) section that reads as a refusal
 of the goal if the stack is never named.
 
-So the bar is written down once, for the stack, with an owner per row.
-The middle column is measured: it is what a `/refresh` dump on a UCX II
-reports, recorded in `tests/data/refresh-dump.json` (2002 registers, 70
-of them streamed without being asked, against the pinned revision). The
-oscmix-gtk column is **unverified** -- nobody has walked the GUI against
-this list, and until somebody does, "the GUI has it" is folklore of
-exactly the kind item **L** exists to end.
+So the bar is written down once, for the stack. The middle column is
+measured: it is what a `/refresh` dump on a UCX II reports, recorded in
+`tests/data/refresh-dump.json` (2002 registers, 70 of them streamed
+without being asked, against the pinned revision). The third says when
+the state becomes *declarable* here.
+
+**There is deliberately no oscmix-gtk column.** Nobody has walked that
+GUI against this list, and a column of guesses next to a column of
+measurements is the exact failure mode item **L** was about. Filling it
+in is a task, not an assumption: for every row below, does upstream's
+GUI expose it at all?
 
 | TotalMix FX capability | In the dump | Declarable here |
 |---|---|---|
 | Submix per output, playback sources | `/mix/<out>/playback/*` **absent** | today (re-established, never verified) |
 | Submix per output, input sources | `/mix/<out>/input/*` (100) | 0.3.0 |
-| Input strip: gain, `48v`, hi-z, reflevel, mute, phase, stereo | yes (42 shapes) | 0.3.0 |
-| Output strip: volume, pan, mute, phase, reflevel, stereo | yes (55 shapes) | today: volume, stereo. 0.3.0: rest |
-| EQ (3 band) and low cut, in and out | `eq/band1..3*`, `lowcut/*` | 0.4.0 |
-| Dynamics, auto level | `dynamics/*`, `autolevel/*` | 0.4.0 |
-| Room EQ (5 band + delay, outputs) | `roomeq/band1..5*`, `roomeq/delay` | 0.4.0, and see the constraint below |
+| Input strip: gain, `48v`, hi-z, reflevel, mute, phase, stereo | all seven reported | 0.3.0 |
+| Output strip: volume, pan, mute, phase, reflevel, stereo | all six reported | today: volume, stereo. 0.3.0: the rest |
+| EQ (3 band) and low cut, in and out | `eq/band1..3{freq,gain,q}`, `type` on bands 1 and 3 only, `lowcut/{freq,slope}` | 0.4.0 |
+| Dynamics, auto level | `dynamics/{attack,release,comp*,exp*,gain}`, `autolevel/{headroom,maxgain,risetime}` | 0.4.0 |
+| Room EQ (outputs) | `roomeq/band1..4{freq,gain,q}`, `band5gain`, `delay` | 0.4.0, and see the constraint below |
 | Reverb and echo FX | `/reverb/*` (14), `/echo/*` (7) | 0.4.0 |
 | Control room: main out, dim, mono, recall volume | `/controlroom/*` (6) | 0.4.0 |
 | Crossfeed | `/output/<n>/crossfeed` | 0.4.0 |
@@ -100,7 +104,7 @@ What 0.2.0 moved, measured rather than claimed (2026-08-16):
 |---|---|---|
 | runtime layout | 1386 lines, one file | 15 modules, 2119 lines, two shims of 52 and 42 lines |
 | longest function | 106 lines | 66 (`verify_and_repair`), under the 70 ceiling |
-| tests | 118 | 360 cases from 256 test functions |
+| tests | 118 | 377 cases from 266 test functions |
 | coverage | 65% (subprocess unmeasured) | 94% measured, gate at 94 |
 | `mypy --strict` | 12 errors | clean, 15 files |
 | mutation score | not runnable | 0.728, floor 0.72 |
@@ -256,10 +260,18 @@ payload-live-preview uses.
 
 The original plan here measured the wrong thing. How fast the Python runs
 is not the question: time-to-`READY=1` is dominated by the device wait,
-the 1.5 s link barrier and the 15-20 s dump, none of which a benchmark
-against a stub would touch. A hard wall-clock budget on a shared runner
-would mostly measure the runner -- a new flake source in a project whose
-bugs are already timing bugs.
+the 1.5 s link barrier and the dump, none of which a benchmark against a
+stub would touch. A hard wall-clock budget on a shared runner would
+mostly measure the runner -- a new flake source in a project whose bugs
+are already timing bugs.
+
+*One premise of that reasoning is now in doubt.* This said "the 15-20 s
+dump", and the dump measures 1.9 s (see the finding under [Still
+open](#still-open-in-020)). The conclusion survives -- the device wait
+and the barrier still dominate, and neither is benchmarkable against a
+stub -- but the sentence was carrying a number nobody had checked, in the
+one item of the nine that exists because a number was being measured for
+its own sake.
 
 *Done instead:* the tests assert **growth order**, not milliseconds.
 Doubling the input must not quadruple the time; an absurd absolute bound
@@ -469,10 +481,24 @@ not wall-clock) and
 [ADR 0008](decisions/0008-pinned-upstream-revision.md) (the pin, and the
 bump rule).
 
-*Still open:* no measured hardware artifact exists yet. `make
-verify-hardware` plays a tone through the configured outputs, so it is
-not something to run unannounced on a machine somebody is listening to;
-it belongs in the release session, which is what the checklist now says.
+*Measured (2026-08-16), against pinned revision 2411b12 on a UCX II
+(24216011):* `krk-monitors` (outputs 5/6) and `phones` (7/8) pass, each
+output responding **119.2 dB** to its own side of the tone and nothing
+to the other. `main-out` (1/2) fails.
+
+It fails truthfully: `/output/1/volume` and `/output/2/volume` are at
+**-65.0 dB**, the fader shut on a rear output. That is user state -- the
+route declares no `volume`, so ADR 0003 leaves the fader alone -- and
+the routing itself is applied. But the run also exposed a defect in the
+tool: it blamed "other audio on the bus" for a silence it had the
+information to explain. `LevelReader.output_state()` now reads volume
+and mute for every measured output and the verdict names the cause.
+
+*Still open:* the artifact needs a release to be attached to, and one
+decision that is not the tool's to make -- whether `main-out` should
+carry a `volume` (pinning the fader open), be removed, or stay as a
+route whose output is deliberately off, in which case the checklist's
+"every route `ok: true`" needs a way to say so.
 
 ### E. When the upstream pin moves
 
@@ -678,13 +704,126 @@ matters -- a register the dump never reports may never be called prompt,
 or the verifier warns and re-sends on every single run -- and holds the
 1.9 s finding above in place with its conditions.
 
+## Decisions that are free now and expensive later
+
+**Draft, 2026-08-16. None of these is decided.** They are here for the
+reason item **B** turned out to be right: each one costs a paragraph
+today and a migration after 0.3.0. Item B was the only one of the twelve
+that was a *promise* rather than a task, and it was the one that would
+have been unfixable a release later.
+
+### Two writers, one device
+
+*Today:* this project writes the routing at start, and through the
+verifier for up to a minute after. `oscmix-gtk` writes whenever the user
+turns something. Neither knows the other exists. The device takes the
+last write, and nothing anywhere states who is supposed to win.
+
+That stays invisible for one reason: this project writes at start and
+then stops. `routing.conf` is not a *desired state* that is maintained,
+it is an *initial state* that is applied. The difference does not show at
+six registers wide.
+
+*What makes it visible:* the pin/remember model in 0.3.0. "`48v` wants
+pinning" is a statement about what happens **after** start, when
+something else has changed it. With a start-only writer, `pin` means "set
+once, then hope" -- which is not what the word says, and is not more than
+TotalMix already offers.
+
+*Three positions, in increasing cost:*
+
+- **Start-only, stated.** Applied at every start, the GUI always wins
+  afterwards. Cheapest and perfectly honest -- but then the option is
+  not called `pin`.
+- **Reconcile on a signal.** Re-apply on hotplug, on resume, on a sample
+  rate change, on `SIGHUP`. Never on a timer. Bounded, explainable, and
+  it covers the cases where state is actually lost.
+- **Continuously reconcile.** The device snaps back within a second of
+  any GUI change. Maximally declarative, and the point where the two
+  writers genuinely fight: a user watching a knob undo itself files a
+  bug, not a compliment.
+
+*What would settle it, and it is measurable today:* does a GUI-initiated
+change show up as a report on the receive port? The device reports on
+change, so it should -- but this is one measurement, not an argument.
+
+It cannot be done with `scripts/record-dump.py`, which binds UDP 8222 and
+therefore cannot run while the GUI holds it. Sniff the loopback instead,
+which is how the three 0.1.3 defects were found in the first place:
+
+    sudo tcpdump -i lo -n -s 0 -U -w gui.pcap 'udp port 8222'
+    tshark -r gui.pcap -T fields -e udp.payload -Y udp.dstport==8222
+
+Turn one fader in oscmix-gtk and the answer is in the capture. If the
+reports arrive, position two is cheap and position three is possible at
+all; if they do not, only position one is honest.
+
+### Sample rate and clock changes destroy state
+
+*Today:* nothing in this repository says what happens to the mixer when
+the clock source or the sample rate changes. 0.4.0 lists "clock source"
+as a *feature to declare*, which is a different thing from the *event* it
+is.
+
+*Why it belongs here:* a sample rate change is the routine way a Fireface
+loses mixer state in ordinary use -- more routine than a reboot, which
+this project handles, and more routine than a hotplug, which it also
+handles. A project whose premise is "the state survives" has an
+unexamined hole exactly where the state does not survive.
+
+*Open, and unmeasured:* does the UCX II reset the matrix on a rate
+change, and which registers survive it? `/clock/samplerate` is in the
+dump, so a session can *see* the change happen. What it should do about
+it is the reconciler question above, in its first concrete instance --
+which is why these two are one decision, not two.
+
+*A first step that needs no decision:* notice it and log it. A session
+that reports `/clock/samplerate` changing costs nothing and turns a
+future "the routing was gone after I switched to 96k" into a readable
+journal.
+
+### More than one Fireface
+
+*Today:* the udev rule, the unit and `routing.conf` are singletons. Two
+interfaces on one host is not supported, and not refused either. It is
+undefined, which is the worse of the two.
+
+*Why the timing matters:* the answer is a template unit
+(`oscmix@.service`) with the device instance as `%i` and the config path
+derived from it. Today that is a rename and a path change. After profiles
+land it is a rename, a path change, a config schema change and a
+migration for every existing user.
+
+*The decision is not "implement it".* It is whether the single-device
+assumption is **stated as a limit** in the README and the config, or
+**designed out** while it is still a rename. Both are defensible.
+Silence is not, and silence is what ships today.
+
+### The upgrade path is untested, in the release that moves everything
+
+*Today:* 0.2.0 moves the runtime from `lib/` to `src/` and rewrites that
+path in three places. `install.sh` is now smoke-tested end to end -- but
+into an *empty* `HOME`. Nobody has run it over an existing 0.1.3 install,
+which is what every current user will do exactly once.
+
+*The specific risks, none of them confirmed:* a stale `lib/` tree left
+behind and still resolving first; a running unit that keeps the old code
+until it is restarted rather than reloaded; and a `routing.conf` written
+against 0.1.3 now read under ADR 0006's rules.
+
+*Target:* one more case in the install smoke test -- install `v0.1.3`,
+install this revision over it, then assert what the empty-`HOME` case
+asserts. It is the cheapest test in the release, and it covers the one
+path taken by everybody who already has this installed.
+
 ## Upstream is part of the quality goal, not the weather
 
 Four of the six constraints below are upstream limits: the playback
 matrix cannot be read back, the register cache does not self-synchronise,
-a dump takes 15-20 s, the Room EQ registers are implausible. The ceiling
-on "provably correct" is therefore set by code this project does not own.
-Treating that as given would cap the whole effort.
+a dump is slow enough to have to be waited out, the Room EQ registers are
+implausible. The ceiling on "provably correct" is therefore set by code
+this project does not own. Treating that as given would cap the whole
+effort.
 
 So, as work items rather than complaints:
 
@@ -695,10 +834,15 @@ So, as work items rather than complaints:
   timing constant from this codebase.
 - **File the Room EQ and `unexpected enum value -1` issues** before
   0.4.0 builds on those registers.
-- **Ask for a targeted register query.** `/refresh` dumps everything for
-  15-20 s when what this project needs is a handful of
-  `/output/<n>/stereo`. That is a feature request, not a benchmark --
-  see the reframing of point 7 above.
+- **Ask for a targeted register query.** `/refresh` dumps 2002 registers
+  when what this project needs is a handful of `/output/<n>/stereo`.
+  That is a feature request, not a benchmark -- see the reframing of
+  point 7 above. **Worth less than this document assumed:** the ask was
+  sized against a 15-20 s dump, and the measurement says 1.9 s on a warm
+  device. Settle the cold-hotplug case first (the finding under Still
+  open); if the dump is fast there too, this is a tidiness request rather
+  than a fix, and the cache-synchronisation patch above is the one that
+  earns its keep.
 
 ## Structural work before the surface grows (0.3.0)
 
@@ -880,8 +1024,18 @@ does not mention.
 - **Metering and DSP.** Upstream's ground.
 - **DURec transport control.** Interactive by nature; a config file is the
   wrong shape.
-- **Matching TotalMix FX feature for feature.** The aim is to win where
-  being declarative and verifiable wins.
+- **Matching TotalMix FX feature for feature *in this repository*.** A
+  knob to turn is a GUI's job; this project's job is the state behind it.
+
+  That is a division of labour, **not a ceiling on the stack**. The
+  goal for oscmix + oscmix-gtk + this project together is to be at least
+  as complete as TotalMix FX and better where being declarative and
+  verifiable wins -- see [the bar is the
+  stack](#the-bar-is-the-stack-not-this-repository), which puts numbers
+  on how much of the device surface is already within reach. Every row
+  in that matrix has to land somewhere; a non-goal here is a statement
+  about *which component owns it*, and it is only honest as long as some
+  component does.
 
 ## Known constraints and upstream issues
 
@@ -892,8 +1046,13 @@ All measured, all things the design has to live with:
   re-established from a known link state, never verified. Input routing
   does not share this limitation.
 - **oscmix does not sync its register cache on its own.** It learns the
-  device's values only from a `/refresh` dump, which streams for ~15-20 s
-  on a UCX II.
+  device's values only from a `/refresh` dump. How long that takes is
+  **measured at 1.9 s** for 2002 registers on a UCX II whose backend was
+  restarted (`tests/data/refresh-dump.json`), against the ~15-20 s this
+  document asserted from an earlier, unrecorded observation. The
+  unmeasured case is a cold device after a replug, which is what
+  `LINK_SYNC_BLIND_DELAY = 20` is sized for, so the constant stands until
+  somebody measures a real hotplug.
 - **The device reports a register only when it changes.** Writing a value
   it already holds produces no report, so "wait for the echo" cannot be
   the only synchronisation mechanism.
