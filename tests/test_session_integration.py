@@ -51,11 +51,33 @@ UDP_HEADER = (
 
 STUB_ALSASEQIO = """\
 #!/usr/bin/env python3
-import json, os, signal, socket, sys
+import ctypes, json, os, signal, socket, sys
 
 stub_dir = os.environ["STUB_DIR"]
 port = int(os.environ["STUB_PORT"])
 reply_port = int(os.environ.get("STUB_REPLY_PORT", "0"))
+
+# Die with the session that started us. Without this the stub outlives
+# any run that does not shut down cleanly -- an interrupted pytest, a
+# SIGKILLed session -- and sits in its 0.2s recv loop forever holding a
+# UDP port. Three of them were found alive 21 hours after the run that
+# started them. SIGKILL rather than SIGTERM because one test installs
+# SIG_IGN for SIGTERM on purpose, and that stub is exactly the one most
+# likely to be left behind.
+#
+# PR_SET_PDEATHSIG is 1. It is preserved across exec, so setting it here
+# is correct, and it is armed before anything else so the window where
+# the parent can die unnoticed is as small as possible -- the getppid
+# check below closes what is left of it.
+try:
+    ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)
+    if os.getppid() == 1:      # parent died between fork and prctl
+        sys.exit(0)
+except OSError:
+    pass                       # not Linux, or no libc: leak rather than fail
+
+with open(os.path.join(stub_dir, "pid"), "w") as f:
+    f.write(str(os.getpid()))
 
 with open(os.path.join(stub_dir, "argv.json"), "w") as f:
     json.dump(sys.argv[1:], f)
@@ -390,3 +412,60 @@ def test_launcher_reports_a_failing_exec_instead_of_crashing(tmp_path):
     assert result.returncode == 1
     assert "could not execute" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def test_the_stub_dies_with_the_session_that_started_it(tmp_path):
+    """A hard-killed session must not leave its backend behind.
+
+    Found by looking, not by a failing test: three stubs from this
+    module were still alive 21 hours after the run that started them,
+    each holding a UDP port, orphaned to pid 1. They loop on a 0.2 s
+    recv timeout and only exit on SIGTERM, so any run that does not shut
+    down cleanly -- an interrupted pytest, a SIGKILLed session -- leaks
+    one.
+
+    That is a leak in the harness rather than in the runtime, which is
+    why it survived: the soak starts and stops 200 sessions without
+    leaving a thing, because that path *is* clean. This covers the path
+    that is not.
+    """
+    port, recv_port = free_udp_port(), free_udp_port()
+    env, stub_dir, _backend = make_env(
+        tmp_path, with_client=True, with_usb=True, port=port,
+        reply_port=recv_port,
+    )
+    config = tmp_path / "routing.conf"
+    config.write_text(ROUTING_CONF.format(port=port, recv_port=recv_port))
+
+    proc = subprocess.Popen(
+        [sys.executable, str(SESSION_BIN), "--config", str(config),
+         "--timeout", "5"],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        pid_file = stub_dir / "pid"
+        assert wait_for(lambda: pid_file.exists()), "the stub never started"
+        stub_pid = int(pid_file.read_text())
+        assert _alive(stub_pid), "the stub was not running to begin with"
+
+        # SIGKILL, so the session gets no chance to clean up after
+        # itself -- the whole point is what happens when it cannot.
+        proc.kill()
+        proc.wait(timeout=10)
+
+        assert wait_for(lambda: not _alive(stub_pid), timeout=5.0), (
+            "stub %d outlived the session that started it; it will sit in "
+            "its recv loop holding UDP %d until the machine reboots"
+            % (stub_pid, port))
+    finally:
+        terminate(proc)
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
