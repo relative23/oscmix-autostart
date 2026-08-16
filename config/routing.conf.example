@@ -3,8 +3,12 @@
 # Copied to ~/.config/oscmix/routing.conf on install (only if none exists).
 # The routes below are applied to the Fireface's hardware mixer every time
 # the backend starts, so the device state is predictable after every boot
-# and hotplug. Changes you make in oscmix-gtk stay active until the next
-# backend start.
+# and hotplug.
+#
+# A route rewrites exactly the registers it declares, and nothing else.
+# Whatever you change in oscmix-gtk survives every restart unless a route
+# declares that same register -- so mute, EQ and (unless you add a
+# 'volume' line) the output faders are yours to keep.
 #
 # Reload after editing:  systemctl --user restart oscmix.service
 
@@ -30,8 +34,16 @@ port = 7222
 #   playback  software playback channel(s):  a pair "1/2" or a single "3"
 #   output    hardware output channel(s), same shape as playback
 #   level     mix gain in dB   (0 = unity, -65 = mute; default 0)
-#   volume    optional hardware output volume in dB
+#   volume    optional: pins the hardware output fader, in dB
 #   stereo    stereo-link the output pair (default true for pairs)
+#
+# 'level' is the routing itself -- how much of the playback pair reaches
+# the output -- and is always written. 'volume' is the output fader, the
+# knob you would reach for to set listening level. Adding it means every
+# backend start forces the fader back to that value, which is what you
+# want for a fixed installation and what you do NOT want if you set your
+# monitor level by hand. Leave it out to keep the fader under your
+# control.
 #
 # PipeWire/PulseAudio send stereo audio to playback 1/2, so most setups
 # only need to route 1/2 to wherever their speakers are connected.
@@ -44,8 +56,9 @@ output = 1/2
 level = 0.0
 
 # Example: studio monitors connected to outputs 5/6 on the rear panel.
+# Deliberately without 'volume', so the monitor level stays where you
+# leave it in the mixer.
 # [route:monitors]
 # playback = 1/2
 # output = 5/6
 # level = 0.0
-# volume = 0.0

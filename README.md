@@ -91,7 +91,6 @@ output = 1/2
 playback = 1/2
 output = 5/6
 level = 0.0               # mix gain in dB (0 = unity, -65 = mute)
-volume = 0.0              # optional hardware output volume in dB
 ```
 
 Apply with `systemctl --user restart oscmix.service`. Mono routes
@@ -99,8 +98,16 @@ Apply with `systemctl --user restart oscmix.service`. Mono routes
 stereo audio to playback channels 1/2, so most setups only route 1/2 to
 wherever their speakers are connected.
 
-Changes made live in the mixer GUI stay active until the next backend
-start; the config is your reproducible baseline. Shortly after startup,
+**A route rewrites exactly the registers it declares, and nothing else.**
+So mute, EQ and the output faders keep whatever you set in the mixer, and
+survive every restart. The one exception is opt-in: adding `volume = <dB>`
+to a route pins that output's fader, and every backend start forces it
+back to that value. That is what you want for a fixed installation, and
+what you do not want if you set your monitor level by hand -- in which
+case just leave the line out. Note that `level` is a different thing: it
+is the routing itself, the mix-matrix gain, and is always written.
+
+Shortly after startup,
 `oscmix-session` also reads the state back from the device in the
 background and re-sends once on mismatch -- the journal line `routing
 verified against device state` is your proof that the hardware is
