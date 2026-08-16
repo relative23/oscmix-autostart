@@ -4,27 +4,98 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A newer PR revision makes an older run obsolete; main runs are kept.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  quality:
+    name: Lint, Types & Dead Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: make lint
+      - run: make typecheck
+      - run: make deadcode
+
   test:
+    name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.9", "3.13"]
+        # 3.9 is the floor the code is written against (no PEP 604 unions);
+        # the newest release guards against upcoming stdlib changes.
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install pytest
-      - run: make lint
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
       - run: make test
 
-  build-oscmix:
-    # Prove that install.sh can build upstream oscmix on a clean system.
+  coverage:
+    name: Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      # The threshold lives in pyproject.toml as a ratchet.
+      - run: make coverage
+      - run: python -m coverage html
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 7
+
+  flake:
+    name: Flakiness Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      # The suite binds real UDP sockets and drives background threads, so
+      # a single green run proves little -- a teardown race in the device
+      # fakes survived several full runs before it was caught.
+      - run: make flake
+
+  build-oscmix:
+    name: Build Upstream oscmix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      # Proves install.sh can build upstream oscmix on a clean system.
       - run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -36,3 +107,24 @@ jobs:
           test -x build/oscmix/oscmix
           test -x build/oscmix/alsaseqio
           test -x build/oscmix/gtk/oscmix-gtk
+      # A dry run against a fake /proc resolves the config and prints the
+      # exact OSC messages the routing produces -- the cheapest end-to-end
+      # check that links are still emitted before the mix matrix.
+      - name: Dry-run the routing and assert the phase order
+        run: |
+          mkdir -p fake-proc/asound/seq
+          cat > fake-proc/asound/seq/clients <<'EOF'
+          Client info
+            cur  clients : 2
+
+          Client   0 : "System" [Kernel]
+          Client  42 : "Fireface UCX II (00000000)" [Kernel]
+            Port   1 : "Port" (RWeX) [In/Out]
+          EOF
+          OSCMIX_PROC_ROOT=fake-proc python bin/oscmix-session \
+            --config config/routing.conf.example --dry-run 2>&1 | tee dry-run.txt
+          link=$(grep -n "would send: /output/1/stereo" dry-run.txt | cut -d: -f1)
+          mix=$(grep -n "would send: /mix/1/playback/1" dry-run.txt | cut -d: -f1)
+          test -n "$link" && test -n "$mix"
+          test "$link" -lt "$mix" \
+            || { echo "mix matrix written before the channel link"; exit 1; }

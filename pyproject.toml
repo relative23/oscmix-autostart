@@ -1,0 +1,56 @@
+# Tool configuration only -- oscmix-autostart is installed by install.sh,
+# not by pip, so there is no [project] table and nothing to build here.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests bind real UDP sockets and start threads; surface anything that
+# escapes a worker thread instead of letting it pass as a warning.
+filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
+
+[tool.ruff]
+# The executables in bin/ have no .py suffix.
+include = ["tests/**/*.py", "bin/oscmix-session", "bin/oscmix-launch"]
+# 3.9 is the oldest interpreter the CI matrix covers; keeping it means no
+# PEP 604 unions (`X | None`) and no PEP 585 builtins in evaluated
+# annotations, which is why the modernization rules stay off below.
+target-version = "py39"
+# The code wraps at 79; a handful of pre-existing lines run to 90.
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "SIM", "RET", "ARG", "PIE", "PT"]
+ignore = [
+    # `%`-formatting is deliberate and consistent here: logging takes its
+    # arguments lazily, and the OSC paths read better as format strings.
+    "UP031",
+    # try/except/pass is clearer than contextlib.suppress in the
+    # best-effort teardown paths, and avoids an import in a hot loop.
+    "SIM105",
+    # dict(...) with keyword arguments is how the test fixtures express
+    # named defaults; a literal would read worse.
+    "C408",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Verbatim /proc/net/udp fixtures -- wrapping them would break the parser
+# under test.
+"tests/test_readiness.py" = ["E501"]
+# pytest.raises(ValueError) is the contract of the OSC decoder: it has one
+# error type and the message is not part of the API.
+"tests/test_osc.py" = ["PT011"]
+
+[tool.coverage.run]
+branch = true
+source = ["bin"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+# A ratchet, not a target: it sits just under what the suite covers today
+# so coverage cannot silently erode. Raise it when it earns the raise.
+# The launcher scores low because its tests exercise it as a subprocess,
+# which this measurement does not follow into.
+fail_under = 60

@@ -1,0 +1,8 @@
+# Development and CI tooling. Runtime has no Python dependencies at all --
+# oscmix-session deliberately uses nothing outside the standard library so
+# it can run on a bare system before any package manager is involved.
+pytest>=7.0
+coverage[toml]>=7.0
+ruff>=0.6
+mypy>=1.11
+vulture>=2.11
