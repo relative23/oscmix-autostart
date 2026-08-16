@@ -33,6 +33,21 @@
 - `tests/test_apply_routing.py`: device stand-ins that model oscmix's
   stereo-link state machine. Three of its tests fail against the previous
   single-burst routing.
+- The udev rule keeps ASMedia ASM4242 host controllers (`1b21:2426`)
+  out of runtime suspend, which could otherwise leave their ports unable
+  to enumerate a powered Fireface after a replug.
+
+### Documentation
+
+- ARCHITECTURE and TROUBLESHOOTING describe the two-phase routing;
+  the removed `OSCMIX_VERIFY_DELAY` and the never-shipped
+  `OSCMIX_LINK_SYNC_TIMEOUT` are gone from the docs, so no override
+  documents a setting that does nothing.
+- OSC-PROTOCOL carries the ordering constraint itself, since it is a
+  property of oscmix's interface rather than of this project: the device
+  has to report `/output/<n>/stereo` back before a `/mix` write is
+  evaluated, sending the messages back to back is not enough, and the
+  failure is silent because `/mix` can never be read back.
 
 ## 0.1.1 (2026-07-11)
 
