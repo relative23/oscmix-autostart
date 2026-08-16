@@ -16,12 +16,18 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from .config import Config
-from .constants import EXIT_FAILURE, EXIT_OK, PORT_READY_TIMEOUT, VERIFY_SETTLE
+from .constants import (
+    EXIT_FAILURE,
+    EXIT_OK,
+    PORT_READY_TIMEOUT,
+    VERIFIER_STOP_GRACE,
+    VERIFY_SETTLE,
+)
 from .discovery import resolve_binary, udp_port_listening, usb_device_present, wait_for_seq_client
 from .log import log
 from .notify import sd_notify
 from .process import _cleanup_stale_backend, supervise
-from .routing import apply_routing, routing_plan
+from .routing import apply_routing, routing_plan, wait_unless_stopped
 from .verify import verify_and_repair
 
 
@@ -88,26 +94,42 @@ def _await_backend_port(child: "subprocess.Popen[bytes]", config: Config,
 
 
 def _apply_and_verify(child: "subprocess.Popen[bytes]", config: Config,
-                      stop_requested: Dict[str, bool]) -> None:
+                      stop_requested: Dict[str, bool]
+                      ) -> Optional[threading.Thread]:
     """Apply the routing, then verify it in the background.
 
     One background dump does both jobs: it syncs oscmix's link state
     (which triggers the mix re-apply) and verifies the routing, without
     holding up the readiness signal.
+
+    Returns the verifier thread so ``run_session`` can wait for it to
+    stop before exiting. It used to read ``stop_requested`` and
+    ``child.poll()`` exactly once, here, before starting -- and then run
+    for two verification windows plus a blind delay, writing routing at
+    three points, with nobody looking again. See
+    docs/decisions/0009-verifier-stop-contract.md.
     """
     if not config.routes:
         log.info("no routes configured; leaving mixer state untouched")
-        return
+        return None
 
     apply_routing(config.routes, config.osc_port, config.osc_recv_port)
 
-    def deferred_verify() -> None:
-        time.sleep(VERIFY_SETTLE)
-        if child.poll() is None and not stop_requested["stop"]:
-            verify_and_repair(config)
+    def should_stop() -> bool:
+        # A dead backend counts as a stop: its port is gone, so every
+        # write from here would go nowhere and the log would claim a
+        # re-apply that never landed anywhere.
+        return stop_requested["stop"] or child.poll() is not None
 
-    threading.Thread(target=deferred_verify, name="verify",
-                     daemon=True).start()
+    def deferred_verify() -> None:
+        if wait_unless_stopped(VERIFY_SETTLE, should_stop):
+            return
+        verify_and_repair(config, should_stop)
+
+    thread = threading.Thread(target=deferred_verify, name="verify",
+                              daemon=True)
+    thread.start()
+    return thread
 
 
 def _exit_code_for(returncode: int, config: Config, sysfs_usb: Path,
@@ -165,10 +187,34 @@ def run_session(args: argparse.Namespace, config: Config) -> int:
     _install_stop_handlers(child, stop_requested)
     _await_backend_port(child, config, proc_root)
 
+    verifier = None
     if child.poll() is None:
-        _apply_and_verify(child, config, stop_requested)
+        verifier = _apply_and_verify(child, config, stop_requested)
         # The service is "started": backend up, routing applied.
         sd_notify("READY=1")
 
     returncode = supervise(child, stop_requested)
+    _await_verifier(verifier)
     return _exit_code_for(returncode, config, sysfs_usb, stop_requested)
+
+
+def _await_verifier(verifier: Optional[threading.Thread]) -> None:
+    """Do not exit while the verifier may still be writing routing.
+
+    "The mix is never left half-applied" is the property the two-phase
+    design exists for, and on the shutdown path nobody used to state it:
+    the process exited when ``supervise`` returned and cut the daemon
+    thread wherever it happened to be, possibly between two mix writes.
+
+    The verifier checks for a stop between every phase and before every
+    write, so once the backend is gone this returns within one socket
+    timeout. The grace period is the bound on being wrong about that,
+    and it fits inside ``TimeoutStopSec`` alongside ``CHILD_STOP_GRACE``
+    -- asserted in ``tests/test_unit_file.py``.
+    """
+    if verifier is None or not verifier.is_alive():
+        return
+    verifier.join(timeout=VERIFIER_STOP_GRACE)
+    if verifier.is_alive():
+        log.warning("verifier still running after %.1fs; exiting anyway",
+                    VERIFIER_STOP_GRACE)

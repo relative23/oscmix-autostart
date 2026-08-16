@@ -230,12 +230,16 @@ def test_verification_is_off_the_startup_path_structurally(unit):
     # never run together. (ast.walk is breadth-first, not source order,
     # which makes any index comparison over it meaningless anyway.)
     def called(statement):
-        if not isinstance(statement, ast.Expr):
+        # Expr *and* Assign: the apply's return value is bound to a name
+        # now (the verifier thread, which run_session has to join), and a
+        # check that only understood bare calls would silently find
+        # nothing and pass on `ordered is None`.
+        if not isinstance(statement, (ast.Expr, ast.Assign)):
             return ""
-        if not isinstance(statement.value, ast.Call):
+        value = statement.value
+        if not isinstance(value, ast.Call):
             return ""
-        func = statement.value.func
-        return getattr(func, "id", getattr(func, "attr", ""))
+        return getattr(value.func, "id", getattr(value.func, "attr", ""))
 
     ordered = None
     for node in ast.walk(ast.parse(inspect.getsource(session.run_session))):

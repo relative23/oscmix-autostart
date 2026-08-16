@@ -19,3 +19,4 @@ silences half the outputs.
 | [0006](0006-routing-conf-compatibility.md) | An unknown section warns, an unknown option fails |
 | [0007](0007-growth-order-not-wall-clock.md) | Performance gates measure growth order, not wall-clock time |
 | [0008](0008-pinned-upstream-revision.md) | The upstream backend is pinned, and the pin moves only after a measurement |
+| [0009](0009-verifier-stop-contract.md) | The background verifier stops between phases, and the session waits for it |

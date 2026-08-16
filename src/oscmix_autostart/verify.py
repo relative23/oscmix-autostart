@@ -12,7 +12,16 @@ from .config import Config, Route
 from .constants import VERIFY_SETTLE, VERIFY_TIMEOUT
 from .log import log
 from .osc import decode_osc, encode_osc, iter_osc_messages
-from .routing import apply_routing, blind_reapply_mix, output_link_state, route_messages, send_mix
+from .routing import (
+    StopCheck,
+    apply_routing,
+    blind_reapply_mix,
+    never_stop,
+    output_link_state,
+    route_messages,
+    send_mix,
+    wait_unless_stopped,
+)
 
 # One expected register: its OSC type tags and the arguments it must
 # report back. Keyed by OSC path.
@@ -85,10 +94,39 @@ class VerifyResult:
     unobserved: List[str]
 
 
+def _absorb_dump(datagram: bytes, registers: Registers,
+                 confirmed: Set[str], mismatched: Set[str],
+                 on_observed: Optional[Callable[[str, Sequence[object]],
+                                                None]]) -> None:
+    """Classify every register in one datagram of the device dump.
+
+    A datagram may be a bundle, so this is per datagram rather than per
+    message. Malformed messages are skipped rather than raised on: this
+    reads off a socket, and one bad message must not end a dump that is
+    otherwise confirming registers.
+    """
+    for message in iter_osc_messages(datagram):
+        try:
+            path, _tags, args = decode_osc(message)
+        except (ValueError, struct.error):
+            continue
+        if on_observed is not None:
+            on_observed(path, args)
+        expected = registers.get(path)
+        if expected is None or path in confirmed:
+            continue
+        if _register_matches(expected[0], expected[1], args):
+            confirmed.add(path)
+            mismatched.discard(path)
+        else:
+            mismatched.add(path)
+
+
 def verify_routing(registers: Registers, send_port: int, recv_port: int,
                    timeout: float = VERIFY_TIMEOUT,
                    on_observed: Optional[Callable[[str, Sequence[object]],
-                                                  None]] = None
+                                                  None]] = None,
+                   should_stop: StopCheck = never_stop
                    ) -> Optional[VerifyResult]:
     """Ask oscmix to dump its state and compare it against ``registers``.
 
@@ -118,6 +156,13 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
         sock.sendto(encode_osc("/refresh"), ("127.0.0.1", send_port))
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            # A stop request ends the window at the top of the loop, so
+            # the longest this can hold the shutdown is one socket
+            # timeout (0.25 s). What has been observed so far is
+            # returned rather than discarded -- the caller decides
+            # whether to act on it, and it will not.
+            if should_stop():
+                break
             # Exit early only while nothing is mismatched: a mismatch
             # keeps the window open so a later correcting report (stale
             # value echoed during settling) can still override it.
@@ -130,21 +175,8 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
                 datagram, _ = sock.recvfrom(65536)
             except socket.timeout:
                 continue
-            for message in iter_osc_messages(datagram):
-                try:
-                    path, _tags, args = decode_osc(message)
-                except (ValueError, struct.error):
-                    continue
-                if on_observed is not None:
-                    on_observed(path, args)
-                expected = registers.get(path)
-                if expected is None or path in confirmed:
-                    continue
-                if _register_matches(expected[0], expected[1], args):
-                    confirmed.add(path)
-                    mismatched.discard(path)
-                else:
-                    mismatched.add(path)
+            _absorb_dump(datagram, registers, confirmed, mismatched,
+                         on_observed)
         unobserved = [path for path in registers
                       if path not in confirmed and path not in mismatched]
         return VerifyResult(sorted(confirmed), sorted(mismatched),
@@ -153,7 +185,76 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
         sock.close()
 
 
-def verify_and_repair(config: Config) -> None:
+def _link_sync_observer(config: Config, pending_links: Dict[str, int],
+                        reapplied: Dict[str, bool], should_stop: StopCheck
+                        ) -> Callable[[str, Sequence[object]], None]:
+    """Watch the dump for the link state, and re-apply the mix once it lands.
+
+    This is the point of sharing one ``/refresh`` between verification
+    and the re-apply (ADR 0002): the moment the dump has reported every
+    ``/output/<n>/stereo`` at its expected value, oscmix's own link state
+    is correct and the mix matrix can be written from a known-good state.
+    Requesting a second dump for it measurably starves both.
+
+    ``pending_links`` and ``reapplied`` are mutated in place; they are
+    the caller's, because the caller still needs to know afterwards
+    whether the re-apply happened.
+    """
+    def on_observed(path: str, args: Sequence[object]) -> None:
+        # Only a report of the *expected* link value means oscmix's state
+        # is right; a stale opposite value must not release the re-apply.
+        if path in pending_links and args:
+            try:
+                reported = int(args[0])  # type: ignore[call-overload]
+            except (TypeError, ValueError):
+                return
+            if reported != pending_links[path]:
+                return
+            del pending_links[path]
+        if not pending_links and not reapplied["done"]:
+            # Write 1 of 3 (ADR 0009). Reached from inside the dump
+            # observation, so the verify loop's own stop check has not
+            # run since this datagram arrived.
+            if should_stop():
+                return
+            reapplied["done"] = True
+            send_mix(config)
+
+    return on_observed
+
+
+def _reapply_without_confirmation(config: Config,
+                                  pending_links: Dict[str, int],
+                                  reapplied: Dict[str, bool]) -> None:
+    """Write 2 of 3: the dump ended without ever reporting the links.
+
+    The device reports a register only when it *changes*, so a pair that
+    was already linked produces no report however long the window is.
+    Writing the mix anyway is correct in that case and harmless in the
+    other; leaving it unwritten would strand the routing on whatever the
+    foreground apply managed before the barrier.
+    """
+    reapplied["done"] = True
+    log.warning("dump never reported %s; re-applying mix anyway",
+                ", ".join(sorted(pending_links)))
+    send_mix(config)
+
+
+def _unconfirmed(result: VerifyResult) -> List[str]:
+    """The registers that count as a problem worth re-sending for.
+
+    Mismatched always counts. Absent counts only for the families the
+    dump reports promptly -- ``/mix/*/playback/*`` never appears at all,
+    so treating its absence as a problem would put every run into a
+    retry it cannot win.
+    """
+    lost = [path for path in result.unobserved
+            if register_promptly_reported(path)]
+    return sorted(result.mismatched + lost)
+
+
+def verify_and_repair(config: Config,
+                      should_stop: StopCheck = never_stop) -> None:
     """Read the applied routing back and re-send once on problems.
 
     A register is a *problem* when the device reported a different value
@@ -167,50 +268,39 @@ def verify_and_repair(config: Config) -> None:
     a failed read-back is logged (and retried once) but never brings the
     service down -- a restart loop would not improve anything.
 
-    The dump this requests doubles as the link-state sync: the moment it
-    has reported every ``/output/<n>/stereo``, oscmix's own link state is
-    correct and the mix matrix is re-sent from that known-good state. The
-    matrix itself is unverifiable (a ``/mix`` write draws no reply and the
-    dump omits the playback matrix), so it is re-established rather than
-    checked.
+    The dump this requests doubles as the link-state sync -- see
+    ``_link_sync_observer``. The mix matrix itself is unverifiable (a
+    ``/mix`` write draws no reply and the dump omits the playback
+    matrix), so it is re-established rather than checked.
+
+    ``should_stop`` is asked between every phase and before each of the
+    three writes below, and the session waits for this thread before
+    exiting: docs/decisions/0009-verifier-stop-contract.md.
     """
     registers = expected_registers(config.routes)
     pending_links = output_link_state(config.routes)
     reapplied = {"done": not pending_links}
-
-    def on_observed(path: str, args: Sequence[object]) -> None:
-        # Only a report of the *expected* link value means oscmix's state
-        # is right; a stale opposite value must not release the re-apply.
-        if path in pending_links and args:
-            try:
-                reported = int(args[0])  # type: ignore[call-overload]
-            except (TypeError, ValueError):
-                return
-            if reported != pending_links[path]:
-                return
-            del pending_links[path]
-        if not pending_links and not reapplied["done"]:
-            reapplied["done"] = True
-            send_mix(config)
+    on_observed = _link_sync_observer(config, pending_links, reapplied,
+                                      should_stop)
 
     problems: List[str] = []
     for attempt in (1, 2):
+        if should_stop():
+            return
         result = verify_routing(registers, config.osc_port,
                                 config.osc_recv_port, VERIFY_TIMEOUT,
-                                on_observed=on_observed)
+                                on_observed=on_observed,
+                                should_stop=should_stop)
+        if should_stop():
+            return
         if result is None:
             log.info("routing verification skipped: UDP %d in use "
                      "(mixer GUI running?)", config.osc_recv_port)
-            blind_reapply_mix(config)
+            blind_reapply_mix(config, should_stop)
             return
         if not reapplied["done"]:
-            reapplied["done"] = True
-            log.warning("dump never reported %s; re-applying mix anyway",
-                        ", ".join(sorted(pending_links)))
-            send_mix(config)
-        lost = [path for path in result.unobserved
-                if register_promptly_reported(path)]
-        problems = sorted(result.mismatched + lost)
+            _reapply_without_confirmation(config, pending_links, reapplied)
+        problems = _unconfirmed(result)
         if not problems:
             log.info("routing verified against device state "
                      "(%d confirmed; %d not reported by the device dump)%s",
@@ -218,9 +308,14 @@ def verify_and_repair(config: Config) -> None:
                      "" if attempt == 1 else " -- after retry")
             return
         if attempt == 1:
+            # Write 3 of 3, and the only full re-apply. Both phases of it
+            # would run against a terminating backend.
+            if should_stop():
+                return
             log.warning("%d register(s) unconfirmed (%s); re-sending routing",
                         len(problems), ", ".join(problems))
             apply_routing(config.routes, config.osc_port,
                           config.osc_recv_port)
-            time.sleep(VERIFY_SETTLE)
+            if wait_unless_stopped(VERIFY_SETTLE, should_stop):
+                return
     log.warning("unconfirmed after retry: %s", ", ".join(problems))

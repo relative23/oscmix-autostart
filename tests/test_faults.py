@@ -375,3 +375,139 @@ def test_applying_the_routing_is_repeatable(session_mod, routing_mod,
     assert "/mix/5/playback/1" in device.received
     assert device.received.index("/output/5/stereo") < \
         device.received.index("/mix/5/playback/1"), "phase order broke"
+
+
+# --------------------------------------------------------------------------
+# The verifier's stop contract -- roadmap item I, ADR 0009.
+#
+# The verifier runs on a daemon thread that may live for two verification
+# windows plus a 20 s blind delay after READY=1, and it writes routing at
+# three points. It used to read stop_requested and child.poll() exactly
+# once, before starting. A `systemctl --user stop` in that window
+# therefore had it writing routing at a backend being terminated, with
+# the thread cut wherever it happened to be when the process exited.
+# --------------------------------------------------------------------------
+
+def test_a_stop_between_the_phases_prevents_every_further_write(
+        session_mod, routing_mod, verify_mod, monkeypatch):
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    route = make_route(session_mod)
+    config = session_mod.Config(osc_port=send_port, osc_recv_port=recv_port,
+                                routes=[route])
+
+    stopped = {"now": False}
+    writes = []
+    for name in ("send_mix", "blind_reapply_mix", "apply_routing"):
+        monkeypatch.setattr(verify_mod, name,
+                            lambda *_a, _n=name, **_kw: writes.append(_n))
+    # The dump reports nothing, so verify_routing runs its window out and
+    # every register comes back unobserved -- the path with the most
+    # writes on it.
+    monkeypatch.setattr(verify_mod, "VERIFY_TIMEOUT", 0.2)
+
+    def should_stop():
+        return stopped["now"]
+
+    stopped["now"] = True
+    verify_mod.verify_and_repair(config, should_stop)
+    assert writes == [], "the verifier wrote after a stop was requested"
+
+
+def test_the_verifier_runs_normally_when_nothing_asks_it_to_stop(
+        session_mod, verify_mod, monkeypatch):
+    # The other half of the contract: the check must not be so eager that
+    # it breaks the repair path it guards.
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    config = session_mod.Config(osc_port=send_port, osc_recv_port=recv_port,
+                                routes=[make_route(session_mod)])
+    writes = []
+    for name in ("send_mix", "blind_reapply_mix", "apply_routing"):
+        monkeypatch.setattr(verify_mod, name,
+                            lambda *_a, _n=name, **_kw: writes.append(_n))
+    monkeypatch.setattr(verify_mod, "VERIFY_TIMEOUT", 0.2)
+    monkeypatch.setattr(verify_mod, "VERIFY_SETTLE", 0.01)
+    verify_mod.verify_and_repair(config)
+    assert writes, "the verifier repaired nothing at all"
+
+
+def test_the_blind_delay_is_abandoned_on_a_stop(session_mod, routing_mod,
+                                                monkeypatch):
+    # The path a user actually hits: the mixer GUI holds the receive
+    # port, so this is the normal desktop case, and it is 20 s long --
+    # twice TimeoutStopSec.
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    config = session_mod.Config(osc_port=send_port, osc_recv_port=recv_port,
+                                routes=[make_route(session_mod)])
+    sent = []
+    monkeypatch.setattr(routing_mod, "send_mix",
+                        lambda _c: sent.append("mix"))
+    monkeypatch.setattr(routing_mod, "LINK_SYNC_BLIND_DELAY", 5.0)
+
+    started = time.monotonic()
+    deadline = started + 0.2
+    routing_mod.blind_reapply_mix(config,
+                                  lambda: time.monotonic() > deadline)
+    elapsed = time.monotonic() - started
+    assert sent == [], "the mix was re-applied after a stop"
+    assert elapsed < 2.0, (
+        "the blind delay took %.1fs to notice the stop; TimeoutStopSec "
+        "is 10s and CHILD_STOP_GRACE already claims 5 of it" % elapsed)
+
+
+def test_the_wait_returns_promptly_and_reports_why(routing_mod):
+    started = time.monotonic()
+    assert routing_mod.wait_unless_stopped(10.0, lambda: True) is True
+    assert time.monotonic() - started < 0.5
+    # ... and it still waits when nothing is asking it to stop.
+    started = time.monotonic()
+    assert routing_mod.wait_unless_stopped(0.3, routing_mod.never_stop) is False
+    assert time.monotonic() - started >= 0.3
+
+
+def test_the_dump_window_ends_when_a_stop_arrives(session_mod, verify_mod):
+    # verify_routing binds the receive port and waits out VERIFY_TIMEOUT
+    # for a dump that never comes. A stop must end that window at the
+    # next loop turn, not at the deadline.
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    registers = verify_mod.expected_registers([make_route(session_mod)])
+    started = time.monotonic()
+    result = verify_mod.verify_routing(registers, send_port, recv_port,
+                                       timeout=10.0, should_stop=lambda: True)
+    elapsed = time.monotonic() - started
+    assert elapsed < 1.0, "the dump window ignored the stop for %.1fs" % elapsed
+    # What was seen is returned rather than discarded; the caller decides.
+    assert result is not None
+    assert result.confirmed == []
+
+
+def test_the_session_waits_for_the_verifier_before_exiting(session_mod):
+    from oscmix_autostart import constants, session
+
+    # The grace has to fit inside TimeoutStopSec next to CHILD_STOP_GRACE,
+    # or systemd kills the session during exactly the wait that exists to
+    # stop it being killed.
+    assert (constants.VERIFIER_STOP_GRACE + constants.CHILD_STOP_GRACE
+            < 10.0)
+
+    # A thread that refuses to stop is bounded, not waited on forever.
+    forever = threading.Event()
+    thread = threading.Thread(target=forever.wait, daemon=True)
+    thread.start()
+    try:
+        started = time.monotonic()
+        session._await_verifier(thread)
+        elapsed = time.monotonic() - started
+        assert constants.VERIFIER_STOP_GRACE <= elapsed < \
+            constants.VERIFIER_STOP_GRACE + 1.0
+    finally:
+        forever.set()
+        thread.join(timeout=2)
+
+    # A verifier that already finished costs nothing.
+    done = threading.Thread(target=lambda: None, daemon=True)
+    done.start()
+    done.join(timeout=2)
+    started = time.monotonic()
+    session._await_verifier(done)
+    session._await_verifier(None)
+    assert time.monotonic() - started < 0.5

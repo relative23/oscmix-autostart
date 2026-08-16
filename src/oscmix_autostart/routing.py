@@ -8,7 +8,7 @@ from __future__ import annotations
 import socket
 import struct
 import time
-from typing import Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from .config import Config, Route
 from .constants import (
@@ -20,6 +20,40 @@ from .constants import (
 )
 from .log import log
 from .osc import decode_osc, encode_osc, iter_osc_messages
+
+# Asked before every write and between every phase of the background
+# verifier. See docs/decisions/0009-verifier-stop-contract.md: the
+# verifier may run for two verification windows plus a blind delay after
+# READY=1, and everything it does in that time is a write to a device
+# somebody may just have asked to stop.
+StopCheck = Callable[[], bool]
+
+
+def never_stop() -> bool:
+    """The default stop check: nothing to stop for.
+
+    Used by the foreground apply and by tests, which have no session to
+    take a stop signal from.
+    """
+    return False
+
+
+def wait_unless_stopped(seconds: float, should_stop: StopCheck) -> bool:
+    """Sleep, waking early on a stop request. True if a stop was asked for.
+
+    A plain ``time.sleep`` here is what makes ``LINK_SYNC_BLIND_DELAY``
+    (20 s) outlast ``TimeoutStopSec`` (10 s): the session would exit with
+    the verifier still parked in it, and the daemon thread would be cut
+    wherever it happened to be -- possibly between two mix writes.
+    """
+    deadline = time.monotonic() + seconds
+    while True:
+        if should_stop():
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.1, remaining))
 
 
 def link_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
@@ -262,14 +296,22 @@ def send_mix(config: Config) -> None:
     log.info("mix matrix re-applied against the synchronized link state")
 
 
-def blind_reapply_mix(config: Config) -> None:
+def blind_reapply_mix(config: Config,
+                      should_stop: StopCheck = never_stop) -> None:
     """Re-apply the mix when the device dump cannot be observed.
 
     The mixer GUI holds the receive port, so the link reports are
     invisible; ``/refresh`` still has to go out because that dump is what
     teaches oscmix the device's real link state, and the wait afterwards
     is a plain guess at how long it takes.
+
+    This is the longest-running path in the verifier, and the one a user
+    actually hits: the GUI holding the port is the normal desktop case.
+    A stop during the delay abandons the re-apply rather than writing
+    routing at a backend that is being shut down.
     """
+    if should_stop():
+        return
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.sendto(encode_osc("/refresh"), ("127.0.0.1", config.osc_port))
@@ -277,5 +319,7 @@ def blind_reapply_mix(config: Config) -> None:
         sock.close()
     log.info("register sync unobservable (UDP %d in use); re-applying mix "
              "after %.0fs", config.osc_recv_port, LINK_SYNC_BLIND_DELAY)
-    time.sleep(LINK_SYNC_BLIND_DELAY)
+    if wait_unless_stopped(LINK_SYNC_BLIND_DELAY, should_stop):
+        log.info("stop requested during the blind delay; mix not re-applied")
+        return
     send_mix(config)

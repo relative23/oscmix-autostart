@@ -59,6 +59,13 @@ EXIT_OK = 0
 EXIT_FAILURE = 1
 EXIT_CONFIG = 2
 
+# How long the session waits for the background verifier to stop before
+# exiting anyway. The verifier checks for a stop between every phase and
+# before every write, so it normally returns within one socket timeout
+# (0.25 s); this is the bound on being wrong about that. Together with
+# CHILD_STOP_GRACE it has to fit inside the unit's TimeoutStopSec.
+VERIFIER_STOP_GRACE = 2.0
+
 # The pause _cleanup_stale_backend takes after signalling a leftover
 # backend, so the port it held is free before the new one binds.
 STALE_BACKEND_SETTLE = 0.5
