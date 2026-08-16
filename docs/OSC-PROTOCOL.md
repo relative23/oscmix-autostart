@@ -57,8 +57,13 @@ Two properties make this awkward to wait out, both measured on a UCX II:
 - The device reports a register only when it **changes**. Writing
   `stereo 1` to an already-linked pair produces no report at all.
 - oscmix never synchronizes its cache on its own. It learns the device's
-  values only from a `/refresh` dump, which streams over MIDI for
-  ~15-20 s.
+  values only from a `/refresh` dump, which streams over MIDI. This said
+  "~15-20 s" from an unrecorded observation; the recorded one
+  (`tests/data/refresh-dump.json`, pinned revision, backend restarted on
+  an already-enumerated UCX II) is **1.9 s for 2002 registers**. Nothing
+  has been changed on the strength of that -- a cold device after a
+  replug is the condition nobody has measured, and it is the one
+  `LINK_SYNC_BLIND_DELAY = 20` exists for.
 
 The reliable sequence is therefore: send the links, send the mix so audio
 works, then send `/refresh` and re-send the mix once the dump has reported

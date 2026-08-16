@@ -14,18 +14,59 @@
     "timing -- a worse test than the mutant is a risk.",
     "",
     "Mutants with no covering test are excluded from the score rather",
-    "than counted as failures: cli, session and process are driven",
-    "through a real subprocess that loads the original source, so a",
-    "mutation run says nothing about them. Coverage does follow them",
-    "(70-83%). See docs/decisions/0005-mutation-testing-scope.md."
+    "than counted as failures: the tests that drive a module through a",
+    "real subprocess load the original source, so a mutation run says",
+    "nothing about what they cover. See",
+    "docs/decisions/0005-mutation-testing-scope.md.",
+    "",
+    "0.72 -> 0.63 (2026-08-16). THE SCORE FELL AND THE SUITE GOT",
+    "BETTER. Both are true, and the second causes the first.",
+    "",
+    "The old floor was measured when 677 mutants counted as",
+    "not_covered, because cli, session and process were reachable only",
+    "through a subprocess. tests/test_lifecycle.py and",
+    "tests/test_process.py now drive them in process, and the launcher",
+    "moved into the package with tests/test_launcher.py behind it. That",
+    "took not_covered from 677 to 81 -- and every mutant that stops",
+    "being 'not covered' starts being judged. Four modules that had",
+    "been excluded from the denominator entirely are now in it,",
+    "carrying the survivors that were always there and were simply not",
+    "being counted.",
+    "",
+    "So this is not a relaxed floor, it is the first floor measured",
+    "against the whole runtime. Raising it means killing survivors in",
+    "code that was invisible to this gate until now, which is the",
+    "useful direction: the survivors are findable rather than",
+    "structurally out of reach."
   ],
   "measured": {
+    "total": 2501,
+    "killed": 1551,
+    "survived": 861,
+    "not_covered": 81,
+    "timeout": 8,
+    "score": 0.643
+  },
+  "previous": {
+    "recorded": "2026-08-16",
     "total": 2066,
     "killed": 1009,
     "survived": 377,
     "not_covered": 677,
-    "timeout": 3
+    "score": 0.728,
+    "why_not_comparable": [
+      "677 of those 2066 mutants were never judged. The 0.728 describes",
+      "the third of the runtime that in-process tests reached at the",
+      "time, not the runtime."
+    ]
   },
-  "min_score": 0.72,
-  "tolerance": 0.01
+  "min_score": 0.64,
+  "tolerance": 0.01,
+  "floor_note": [
+    "The gate is min_score - tolerance = 0.63. That is the number that",
+    "matters: the score may not fall below it. min_score itself is set",
+    "at the measured 0.643 rounded down, so the policy neither fails",
+    "nor nags on the run it was recorded from -- a baseline that prints",
+    "'raise me' on every CI run teaches people to ignore it."
+  ]
 }

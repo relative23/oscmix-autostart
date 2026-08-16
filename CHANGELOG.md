@@ -9,8 +9,9 @@ multiplies the register surface by roughly ten.
 ### Architecture
 
 - The 1386-line `bin/oscmix-session` is now a package in
-  `src/oscmix_autostart/` (14 modules) with the executable reduced to a
-  52-line shim; `run_session` went from 106 lines to ~40.
+  `src/oscmix_autostart/` (15 modules, 2119 lines) with both executables
+  reduced to shims of 52 and 42 lines; `run_session` went from 106 lines
+  to ~40, and the longest function left is 66.
 - `tests/test_architecture.py` enforces the properties that motivated the
   split rather than asserting them in a comment: stdlib-only runtime,
   declared per-module layering, an acyclic import graph, `__all__`
@@ -42,9 +43,16 @@ multiplies the register surface by roughly ten.
   evidence artifact including the upstream revision measured. Exits 77
   when there is no device, so CI stays hardware-free.
 - Mutation testing now runs at all (the package extraction unblocked it):
-  2066 mutants, 1009 killed, score 0.73. `quality/mutation-baseline.json`
-  plus `scripts/mutation-policy.py` gate on the **ratio**, not on counts,
+  2501 mutants, 1551 killed, 861 survived, 81 not covered -- score
+  **0.643**, floor 0.63. `quality/mutation-baseline.json` plus
+  `scripts/mutation-policy.py` gate on the **ratio**, not on counts,
   because absolute survivor numbers rise with every line added.
+- That score is lower than the 0.728 recorded mid-release, and the suite
+  got better, not worse: `not_covered` fell from 677 to 81 as
+  `tests/test_lifecycle.py`, `tests/test_process.py` and
+  `tests/test_launcher.py` brought four modules in process, and every
+  mutant that stops being uncovered starts being judged. 0.728 described
+  the third of the runtime that was under evaluation at the time.
 - It found a real weakness: `_register_matches` was tested with an
   expected value of 0.0, where a sign error is invisible.
 - The coverage ratchet is 94 against a measured 94%. It had sat at 84
@@ -159,6 +167,22 @@ multiplies the register surface by roughly ten.
 - `docs/ROADMAP.md` records where this goes next and, explicitly, that
   four of six known constraints are upstream limits -- with the patches
   and issues to raise there treated as work items rather than weather.
+- The roadmap also states the goal it had only implied. "Better than
+  TotalMix FX" is a claim about the **stack** -- oscmix, oscmix-gtk and
+  this project -- so the bar is written down once for all three, as a
+  matrix of TotalMix capabilities against what the recorded dump proves
+  is reachable. The non-goal that used to read as a refusal of that goal
+  now says what it meant: a division of labour, not a ceiling.
+- Four decisions are drafted rather than deferred, because each costs a
+  paragraph now and a migration after 0.3.0: who wins when the GUI and
+  the config both write; what a sample rate change does to state that is
+  supposed to survive; whether one device per host is a stated limit or
+  a design to undo; and the upgrade path, which is untested in the one
+  release that moves every path.
+- The 15-20 s dump figure is annotated everywhere it appears rather than
+  quietly corrected -- including in the item whose reasoning rested on
+  it -- because the measurement that contradicts it was taken under one
+  condition and the constant it sized exists for another.
 
 ## 0.1.3 (2026-08-16)
 

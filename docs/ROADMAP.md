@@ -107,16 +107,21 @@ What 0.2.0 moved, measured rather than claimed (2026-08-16):
 | tests | 118 | 377 cases from 266 test functions |
 | coverage | 65% (subprocess unmeasured) | 94% measured, gate at 94 |
 | `mypy --strict` | 12 errors | clean, 15 files |
-| mutation score | not runnable | 0.728, floor 0.72 |
+| mutation score | not runnable | 0.643 over the whole runtime, floor 0.63 |
 | upstream backend | `master`, unpinned | pinned commit, verified at checkout |
 | hardware evidence | done by hand, once | two committed tools, a recorded dump, no artifact in a release yet |
 | structural guarantees | comments | 60+ assertions, plus `systemd-analyze verify` and an install smoke test |
 
-One number below still does not describe this suite: the mutation floor
-was measured before `tests/test_lifecycle.py` and `tests/test_process.py`
-existed, which is item **K** in [Still open](#still-open-in-020). The
-hardware evidence now has a tool, a dump fixture and a place in
-`docs/RELEASE-CHECKLIST.md`; what it does not have is a release to be
+Every number above now describes this suite. The mutation score is the
+one that reads worse and means better: it fell from 0.728 to 0.643
+because `not_covered` fell from 677 to 81, and a mutant that stops being
+uncovered starts being judged. 0.728 measured the third of the runtime
+in-process tests reached at the time; 0.643 measures all of it.
+
+The hardware evidence has a tool, a dump fixture, a place in
+`docs/RELEASE-CHECKLIST.md`, and now a first real measurement -- two of
+three routes passing at 119.2 dB per output, the third failing on a
+fader the owner had shut. What it does not have is a release to be
 attached to.
 
 ## 0.2.0 -- maturity
@@ -673,6 +678,20 @@ run that no longer describes this suite.
 *Target:* re-run and re-baseline. The expectation is that `not_covered`
 shrinks rather than that the score moves; if it does not shrink, the
 reason is worth knowing before the number is trusted again.
+
+*Closed, and the expectation was half right.* Re-run against this
+revision: **2501 mutants, 1551 killed, 861 survived, 81 not covered, 8
+timeout -- score 0.643.** `not_covered` fell 677 → 81, as predicted. The
+score fell too, 0.728 → 0.643, and the second is caused by the first:
+every mutant that stops being "not covered" starts being *judged*. Four
+modules that were excluded from the denominator entirely are now in it,
+carrying survivors that were always there and simply were not counted.
+
+So 0.728 was never a measurement of this runtime -- it described the
+third of it that in-process tests reached at the time. 0.643 is the
+first number measured against the whole thing. The floor is 0.63, and
+raising it now means killing survivors in code that was structurally out
+of reach of this gate until this release, which is the useful direction.
 
 ### L. "Promptly reported" is folklore that could be a fixture
 

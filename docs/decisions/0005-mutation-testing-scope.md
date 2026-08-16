@@ -22,14 +22,31 @@ every mutated module. Left running, they would measure mutmut.
 
 ## Consequence, stated plainly
 
-677 of 2066 mutants are reported as "not covered". That is not dead code:
-`cli`, `session`, `process` and `notify` are covered end to end, and the
-coverage report (which does follow subprocesses) shows 70-83% for them.
-It means the mutation score says nothing about those modules. The number
-to read is the survivor count in `osc`, `config`, `routing` and `verify`.
+**When this was written (0.2.0, mid-release):** 677 of 2066 mutants were
+reported as "not covered". That was not dead code -- `cli`, `session`,
+`process` and `notify` were covered end to end, and the coverage report
+(which does follow subprocesses) showed 70-83% for them. It meant the
+mutation score said nothing about those modules, and the number to read
+was the survivor count in `osc`, `config`, `routing` and `verify`.
+
+**Now:** 81 of 2501. `tests/test_lifecycle.py`, `tests/test_process.py`
+and `tests/test_launcher.py` drive those modules *in process*, so they
+are under evaluation like everything else, and the score is a statement
+about the whole runtime rather than about its pure-logic core.
+
+The score went **down** as a result -- 0.728 to 0.643 -- and that is the
+arithmetic working, not the tests getting worse. A mutant that stops
+being "not covered" starts being judged, and four modules' worth of
+survivors joined a denominator they had never been in. The reasoning
+above still holds for what remains excluded: the subprocess-driven tests
+in `tests/test_session_integration.py`, `tests/test_install_sh.py` and
+`tests/test_soak.py` skip themselves under `MUTANT_UNDER_TEST`, because
+they load the original source and cannot kill a mutant.
 
 ## What this rules out
 
-Reading the mutation score as a whole-project quality figure. It is a
-statement about the pure-logic core, which is the part where a wrong
-value is silent and audible.
+Reading a *rise* in `not_covered` as good news. It means a test that
+used to reach a module in process stopped doing so, and the score will
+flatter itself by shrinking its own denominator -- which is exactly what
+made 0.728 an overstatement. `scripts/mutation-policy.py` prints
+`not_covered` next to the score for that reason.
