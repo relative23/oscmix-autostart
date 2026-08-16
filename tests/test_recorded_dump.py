@@ -1,0 +1,181 @@
+"""``register_promptly_reported`` against a recorded dump, not a memory.
+
+Roadmap item L. That function decides whether a missing register is a
+warning worth re-sending for or a note. It was a hand-maintained list,
+measured once against a UCX II and checked against nothing since -- and
+it is about to be the thing 0.3.0's verification classes are derived
+from, at ten times the register count.
+
+``tests/data/refresh-dump.json`` is a real ``/refresh`` from the pinned
+oscmix revision: which registers arrive, and how long after the request.
+No values -- those are the user's mixer state, and the question here is
+which registers a dump reports.
+
+Two of these tests state a rule the classification must obey. One states
+what the measurement actually found, including where it disagrees with
+the prose, so the disagreement cannot quietly become folklore again.
+"""
+
+import json
+
+import pytest
+from conftest import repo_file
+
+# Registers this project writes, in the families it cares about.
+ROUTED = [
+    "/output/1/stereo", "/output/5/stereo", "/output/7/stereo",
+    "/playback/1/stereo", "/playback/5/stereo", "/playback/7/stereo",
+    "/output/5/volume", "/output/6/volume",
+    "/mix/1/playback/1", "/mix/5/playback/1", "/mix/7/playback/1",
+]
+
+
+@pytest.fixture(scope="module")
+def dump():
+    return json.loads(repo_file("tests", "data", "refresh-dump.json")
+                      .read_text())
+
+
+def test_the_fixture_names_the_revision_it_was_taken_against(dump):
+    # A dump is evidence about one build of oscmix (ADR 0008). One that
+    # does not say which build is not evidence.
+    assert len(dump["oscmix_revision"]) == 40
+    assert dump["device"] == "Fireface UCX II"
+    assert dump["registers"], "empty fixture"
+
+
+def test_the_pinned_revision_is_the_one_the_dump_came_from(dump):
+    # If the pin moves without a re-record, the fixture describes a
+    # backend that is no longer shipped -- the exact failure ADR 0008
+    # exists to prevent, in the artifact rather than in the release.
+    install = repo_file("install.sh").read_text()
+    pinned = next(line.split('"')[1].split(":-")[1].rstrip("}")
+                  for line in install.splitlines()
+                  if line.startswith("OSCMIX_REF="))
+    assert dump["oscmix_revision"] == pinned, (
+        "tests/data/refresh-dump.json was recorded against %s but "
+        "install.sh pins %s -- re-record with scripts/record-dump.py"
+        % (dump["oscmix_revision"][:12], pinned[:12]))
+
+
+def test_a_register_the_dump_never_reports_is_never_called_prompt(
+        session_mod, dump):
+    """The rule that must hold, or verification retries what it cannot win.
+
+    A register classified prompt but absent from the dump becomes a
+    *problem*: the verifier warns and re-sends the whole routing, every
+    single run, forever. So absence in the recording is binding.
+    """
+    reported = set(dump["registers"])
+    for path in ROUTED:
+        if path not in reported:
+            assert not session_mod.register_promptly_reported(path), (
+                "%s is not in the recorded dump, so classifying it as "
+                "promptly reported makes every run warn and re-send"
+                % path)
+
+
+def test_a_register_called_prompt_really_does_arrive_in_the_window(
+        session_mod, dump):
+    """The other direction: a prompt register has to be observable.
+
+    ``VERIFY_TIMEOUT`` bounds the observation window. A register
+    classified prompt that arrives after it would be reported as lost on
+    every run -- a warning about nothing.
+    """
+    from oscmix_autostart import constants
+
+    registers = dump["registers"]
+    for path in ROUTED:
+        if path in registers and session_mod.register_promptly_reported(path):
+            _tags, first_seen = registers[path]
+            assert first_seen < constants.VERIFY_TIMEOUT, (
+                "%s is classified prompt but arrived %.1fs into the dump, "
+                "past the %.0fs window" % (path, first_seen,
+                                           constants.VERIFY_TIMEOUT))
+
+
+def test_the_playback_mix_matrix_is_absent_as_documented(dump):
+    # The constraint the whole two-phase design rests on: a /mix write
+    # draws no reply and the dump omits the playback matrix, so it can
+    # only be re-established from a known link state, never verified.
+    matrix = [path for path in dump["registers"]
+              if path.startswith("/mix/") and "/playback/" in path]
+    assert matrix == [], (
+        "the dump now reports the playback mix matrix: %s -- if upstream "
+        "started dumping it, the matrix becomes verifiable and ADR 0002 "
+        "needs revisiting" % matrix[:5])
+
+
+def test_the_input_mix_matrix_is_present_as_0_3_0_assumes(dump):
+    # The finding 0.3.0's feature set rests on: /mix/<out>/input/<in>
+    # *does* appear, so almost all of the new surface is verifiable,
+    # unlike the playback matrix this project started with.
+    inputs = [path for path in dump["registers"]
+              if path.startswith("/mix/") and "/input/" in path]
+    assert len(inputs) >= 100, "only %d input mix registers" % len(inputs)
+
+
+@pytest.mark.parametrize("path", [
+    "/input/1/48v", "/input/3/hi-z", "/input/3/reflevel",
+    "/output/5/reflevel", "/output/5/mute", "/output/5/phase",
+    "/input/1/gain", "/input/1/stereo",
+])
+def test_the_channel_state_0_3_0_plans_is_verifiable(path, dump):
+    # Each of these is a 0.3.0 config option. Their being in the dump is
+    # what makes "verified against the device" a promise the next release
+    # can keep, and it should fail loudly here if a pin bump removes one.
+    assert path in dump["registers"], "%s is not reported by the dump" % path
+
+
+def test_the_write_only_registers_stay_write_only(dump):
+    # Confirmed absent, and therefore unverifiable by construction. The
+    # verifier must report these as unverifiable, never as confirmed.
+    for path in ("/input/1/name", "/output/1/name", "/output/1/loopback"):
+        assert path not in dump["registers"], (
+            "%s is reported now; it was write-only when 0.3.0's "
+            "verification classes were designed around it" % path)
+
+
+def test_the_meters_are_the_only_thing_that_streams_unasked(dump):
+    # The recorder separates these out; if something else starts
+    # streaming, the dump's timing measurements stop meaning what they
+    # say and the verifier's early exit may fire on noise.
+    unexpected = [path for path in dump["streamed"]
+                  if not path.endswith(("/level", "/meter"))]
+    assert unexpected == [], "streaming without being asked: %s" % unexpected
+
+
+def test_the_measured_dump_disagrees_with_the_prose_and_says_so(
+        session_mod, dump):
+    """The finding this fixture exists to make impossible to forget.
+
+    ``register_promptly_reported`` excludes ``/playback/*`` because "the
+    /playback/* section sits near the end of a dump that streams several
+    thousand messages over MIDI for many seconds". **Measured against the
+    pinned revision, it arrives at 0.0 s and the whole dump takes 1.9 s.**
+
+    Nothing was changed on the strength of that, and this test does not
+    ask for it to be. The condition not measured is a cold *device*: this
+    was an already-enumerated UCX II with only the backend restarted, and
+    LINK_SYNC_BLIND_DELAY=20 exists for the hotplug case. What this test
+    does is hold the disagreement in place -- with the number attached --
+    so the next person meets a measurement rather than a memory.
+
+    It is also why the discrepancy went unseen: the verify loop exits as
+    soon as the *prompt* set matches, so /playback/* never got looked at.
+    """
+    registers = dump["registers"]
+    playback = {path: seen for path, (_tags, seen) in registers.items()
+                if path.startswith("/playback/") and path.endswith("/stereo")}
+    assert playback, "no /playback/*/stereo in the dump at all"
+    assert max(playback.values()) < 1.0, (
+        "the prose may be right after all: /playback/*/stereo arrived at "
+        "%.1fs" % max(playback.values()))
+    assert dump["dump_seconds"] < 5.0, (
+        "the dump took %.1fs; the 15-20s figure in constants.py and the "
+        "roadmap may be describing this after all" % dump["dump_seconds"])
+    # Still classified not-prompt, deliberately and conservatively.
+    # Changing this is a behaviour change on a path that has not been
+    # measured after a real hotplug -- so it is a decision, not a tidy-up.
+    assert session_mod.register_promptly_reported("/playback/1/stereo") is False
