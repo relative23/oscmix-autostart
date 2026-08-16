@@ -1,0 +1,76 @@
+name: Soak
+
+# Roadmap item A. The normal suite runs the soak twice, which only
+# proves the session can start twice. This is the gate that actually
+# earns the word: the same routing applied and asserted a few hundred
+# times, on a schedule, so a leak that needs fifty cycles to surface has
+# somewhere to surface.
+#
+# Every failure mode this project has found was a timing bug, and every
+# one of them survived a green single run. That is why this is a
+# scheduled workflow and not a Makefile target: a gate nobody invokes
+# proves nothing, and `Proven by: soak on main` was written in the
+# roadmap long before anything ran one.
+
+on:
+  schedule:
+    # 04:17 UTC daily. Off the hour on purpose -- the top of the hour is
+    # when GitHub's scheduler is most congested and runs get delayed.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      cycles:
+        description: "Restart cycles to run"
+        required: false
+        default: "200"
+
+permissions:
+  contents: read
+
+jobs:
+  restart-soak:
+    name: Restart soak (${{ github.event.inputs.cycles || 200 }} cycles)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      # Each cycle starts bin/oscmix-session for real against the stub
+      # backend, waits for READY=1, checks the routing datagrams byte for
+      # byte, then SIGTERMs it and requires exit 0. ~1.2 s per cycle.
+      - name: Soak the restart path
+        env:
+          OSCMIX_SOAK_CYCLES: ${{ github.event.inputs.cycles || 200 }}
+          OSCMIX_REQUIRE_CONTRACTS: "1"
+        run: python -m pytest tests/test_soak.py -q
+
+  fault-soak:
+    name: Fault injection, repeated
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      # The fault cases tear state while a transaction is open -- backend
+      # killed between the phases, device unplugged mid-dump, receive port
+      # taken halfway through. They bind real sockets and drive real
+      # threads, so they are exactly the tests worth running many times.
+      - name: Repeat the fault suite
+        env:
+          OSCMIX_REQUIRE_CONTRACTS: "1"
+        run: |
+          for i in $(seq 1 15); do
+            echo "--- fault run $i/15"
+            python -m pytest tests/test_faults.py tests/test_apply_routing.py \
+              tests/test_verify.py -q || exit 1
+          done

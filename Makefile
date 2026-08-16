@@ -5,8 +5,10 @@ SHELL_SCRIPTS = install.sh uninstall.sh
 # Repeats for the flakiness gate. The suite binds real UDP sockets and
 # runs background threads, so a single green run proves little.
 REPEAT ?= 5
+# Restart cycles for `make soak`. The scheduled workflow runs 200.
+SOAK_CYCLES ?= 50
 
-.PHONY: all check test lint typecheck deadcode coverage mutation flake \
+.PHONY: all check test lint typecheck deadcode coverage mutation flake soak \
 	verify-hardware install uninstall clean
 
 all: check
@@ -63,6 +65,13 @@ flake:
 		echo "--- run $$i/$(REPEAT)"; \
 		$(PYTHON) -m pytest -q || exit 1; \
 	done
+
+# A convenience, not the gate. The gate is .github/workflows/soak.yml,
+# which runs on a schedule -- a soak that has to be invoked by hand is a
+# soak that does not run. This target exists to reproduce a scheduled
+# failure locally. ~1.2 s per cycle.
+soak:
+	OSCMIX_SOAK_CYCLES=$(SOAK_CYCLES) $(PYTHON) -m pytest tests/test_soak.py -q
 
 install:
 	./install.sh
