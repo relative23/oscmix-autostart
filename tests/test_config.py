@@ -131,14 +131,24 @@ def test_stereo_route_writes_single_pair_register(session_mod):
 
 
 def test_unlinked_pair_route_uses_pair_balance(session_mod):
+    # The unlink is stated, not assumed: the hard-panned pair below is
+    # only correct against an unlinked output pair.
     route = session_mod.Route(
         name="split", playback=(1, 2), output=(5, 6), stereo=False,
     )
-    assert session_mod.route_messages(route) == [
-        ("/playback/1/stereo", "i", (1,)),
-        ("/mix/5/playback/1", "fi", (0.0, -100)),
-        ("/mix/6/playback/1", "fi", (0.0, 100)),
+    messages = session_mod.route_messages(route)
+    assert [(path, types) for path, types, _a in messages] == [
+        ("/playback/1/stereo", "i"),
+        ("/output/5/stereo", "i"),
+        ("/mix/5/playback/1", "fi"),
+        ("/mix/6/playback/1", "fi"),
     ]
+    assert [args for _p, _t, args in messages[:2]] == [(1,), (0,)]
+    # The mix requests carry the +6 dB that compensates oscmix's halving
+    # on this path; only the pan differs between the two halves.
+    for (_path, _types, args), pan in zip(messages[2:], (-100, 100)):
+        assert abs(args[0] - 6.0206) < 0.001
+        assert args[1] == pan
 
 
 def test_mono_route_messages(session_mod):
@@ -152,3 +162,46 @@ def test_pair_without_volume_sends_no_volume_messages(session_mod):
     route = session_mod.Route(name="m", playback=(1, 2), output=(1, 2))
     paths = [path for path, _, _ in session_mod.route_messages(route)]
     assert not any("volume" in path for path in paths)
+
+
+CONFLICTING_LINK = """\
+[route:phones]
+playback = 1/2
+output = 7/8
+stereo = false
+
+[route:phones-direct]
+playback = 7/8
+output = 7/8
+"""
+
+
+def test_routes_disagreeing_on_the_link_are_rejected(session_mod, tmp_path):
+    # The stereo link belongs to the hardware pair, not to a route. Left
+    # unchecked the last link message wins while both routes still write
+    # their own mix shape, and the mismatched one silently loses an
+    # output -- reproduced on a UCX II before this check existed.
+    path = tmp_path / "routing.conf"
+    path.write_text(CONFLICTING_LINK)
+    with pytest.raises(session_mod.ConfigError) as excinfo:
+        session_mod.load_config(path)
+    message = str(excinfo.value)
+    assert "7/8" in message
+    assert "phones" in message
+    assert "phones-direct" in message
+
+
+def test_routes_agreeing_on_the_link_are_accepted(session_mod, tmp_path):
+    path = tmp_path / "routing.conf"
+    path.write_text(CONFLICTING_LINK.replace(
+        "[route:phones-direct]\nplayback = 7/8\noutput = 7/8\n",
+        "[route:phones-direct]\nplayback = 7/8\noutput = 7/8\nstereo = false\n"))
+    assert len(session_mod.load_config(path).routes) == 2
+
+
+def test_mono_routes_never_conflict(session_mod, tmp_path):
+    # A mono route has no pair to link, so it must not trip the check.
+    path = tmp_path / "routing.conf"
+    path.write_text("[route:a]\nplayback = 3\noutput = 7\n\n"
+                    "[route:b]\nplayback = 4\noutput = 7\n")
+    assert len(session_mod.load_config(path).routes) == 2

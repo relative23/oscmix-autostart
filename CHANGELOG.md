@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`stereo = false` routes silenced half the pair.** The option only
+  emitted the hard-panned mix messages and never sent
+  `/output/<n>/stereo 0`, so it assumed the pair was already unlinked.
+  Against a linked pair -- the device default -- both messages address
+  the same pair register, the second overwrites the first, and one output
+  goes dead. Measured on a UCX II: output 7 fully silent while output 8
+  played. The unlink is now stated rather than assumed, and the link
+  barrier matches on the expected value instead of only on `1`.
+- **`level` meant something different on unlinked routes.** oscmix halves
+  the gain on that path (`setlevel()`: `ll = vol / 2`), so `level = 0.0`
+  landed 6 dB below the linked equivalent -- measured as exactly 6.1 dB
+  before, and identical to the linked routes after. Positive levels
+  saturate at unity, because oscmix clamps the gain it derives.
+- Routes that disagree on whether an output pair is stereo-linked are now
+  a configuration error. The link belongs to the hardware pair, not to a
+  route; previously the last link message won while both routes still
+  wrote their own mix shape, and the mismatched one silently lost an
+  output.
+- `find_stale_backends()` skipped its ownership check when `stat()`
+  failed and then still matched on argv0, so a process whose owner could
+  not be verified could reach the kill list.
+- A test stub installed its signal handler only after announcing its
+  port, which the tests treat as "up"; a SIGTERM landing in between
+  killed it with the default disposition and the SIGTERM->SIGKILL
+  escalation went unexercised.
+
+### Documentation
+
+- The README and the example config state that a route rewrites exactly
+  the registers it declares. `volume` is opt-in and pins the output
+  fader on every start; it is gone from the monitors example so the
+  footgun is not the default thing to copy.
+
 ## 0.1.2 (2026-08-16)
 
 ### Fixed

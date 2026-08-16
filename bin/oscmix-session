@@ -26,6 +26,7 @@ import argparse
 import configparser
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -79,6 +80,12 @@ LINK_SETTLE = float(os.environ.get("OSCMIX_LINK_SETTLE", "1.5"))
 LINK_SYNC_BLIND_DELAY = float(os.environ.get("OSCMIX_LINK_SYNC_DELAY", "20"))
 
 LEVEL_MIN, LEVEL_MAX = -65.0, 6.0
+# An unlinked pair route reaches oscmix's setlevel() branch that halves the
+# gain (ll = vol / 2), so its request is raised by 6.02 dB to make `level`
+# mean the same thing on both paths. oscmix clamps the gain it derives at
+# 2.0 -- exactly this offset -- so an unlinked route cannot be pushed above
+# unity: positive `level` values saturate instead of scaling.
+UNLINKED_GAIN_OFFSET = 20.0 * math.log10(2.0)
 CHANNEL_MIN, CHANNEL_MAX = 1, 64
 
 EXIT_OK = 0
@@ -373,7 +380,36 @@ def load_config(path: Optional[Path]) -> Config:
                 "unknown section [%s] (valid: [device], [osc], [route:<name>])"
                 % section
             )
+    _check_link_agreement(config.routes)
     return config
+
+
+def _check_link_agreement(routes: Sequence[Route]) -> None:
+    """Reject routes that disagree on whether an output pair is linked.
+
+    The stereo link is a property of the hardware pair, not of a route, so
+    two routes feeding the same outputs cannot each have their own. Left
+    unchecked the last link message wins while both routes still write
+    their own mix shape, and the mismatched one silently loses a channel:
+    a linked pair fed by the hard-panned pair of an unlinked route folds
+    both messages onto the same register, and one output goes dead.
+    """
+    seen: "dict" = {}
+    for route in routes:
+        if len(route.output) != 2:
+            continue
+        previous = seen.get(route.output)
+        if previous is None:
+            seen[route.output] = route
+        elif previous.stereo != route.stereo:
+            raise ConfigError(
+                "[route:%s] and [route:%s] both drive output pair %s but "
+                "disagree on 'stereo' (%s vs %s); the link is a property of "
+                "the hardware pair, so it has to be the same for both"
+                % (previous.name, route.name,
+                   "/".join(map(str, route.output)),
+                   str(previous.stereo).lower(), str(route.stereo).lower())
+            )
 
 
 # --------------------------------------------------------------------------
@@ -381,19 +417,25 @@ def load_config(path: Optional[Path]) -> Config:
 # --------------------------------------------------------------------------
 
 def link_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
-    """The channel-pair linking a route needs before its mix is written.
+    """The channel-pair link state a route needs before its mix is written.
 
-    These must reach the device -- and be echoed back to oscmix -- before
+    These must reach the device -- and be reported back to oscmix -- before
     any ``/mix`` message of the same route, see ``LINK_ECHO_TIMEOUT``.
+
+    ``stereo = false`` states the link explicitly rather than assuming it:
+    the hard-panned pair of ``/mix`` messages it produces is only correct
+    against an *unlinked* pair. Applied to a linked one, both messages
+    address the same pair register and the second overwrites the first,
+    which leaves one half of the pair completely silent.
     """
     if len(route.output) != 2:
         return []
     pb_left, _ = route.playback
-    messages: List[Tuple[str, str, Tuple[object, ...]]] = [
-        ("/playback/%d/stereo" % pb_left, "i", (1,))]
-    if route.stereo:
-        messages.append(("/output/%d/stereo" % route.output[0], "i", (1,)))
-    return messages
+    return [
+        ("/playback/%d/stereo" % pb_left, "i", (1,)),
+        ("/output/%d/stereo" % route.output[0], "i",
+         (1 if route.stereo else 0,)),
+    ]
 
 
 def mix_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
@@ -418,11 +460,16 @@ def mix_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
                              (route.level, 0)))
         else:
             # Unlinked outputs: feed each side the matching half of the
-            # (linked) playback pair via the pair balance.
+            # (linked) playback pair via the pair balance. oscmix halves
+            # the gain on this path (setlevel(): ll = vol / 2), so the
+            # request is raised by 6 dB to make `level` mean the same
+            # thing as it does for a linked route -- measured on a UCX II
+            # as an exact 6 dB deficit before this compensation.
+            unlinked = min(route.level, 0.0) + UNLINKED_GAIN_OFFSET
             messages.append(("/mix/%d/playback/%d" % (left, pb_left), "fi",
-                             (route.level, -100)))
+                             (unlinked, -100)))
             messages.append(("/mix/%d/playback/%d" % (right, pb_left), "fi",
-                             (route.level, 100)))
+                             (unlinked, 100)))
         if route.volume is not None:
             for out in (left, right):
                 messages.append(("/output/%d/volume" % out, "f", (route.volume,)))
@@ -440,17 +487,22 @@ def route_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
     return link_messages(route) + mix_messages(route)
 
 
-def await_link_echo(paths: Sequence[str], recv_port: int,
+def await_link_echo(expected: "dict", recv_port: int,
                     timeout: Optional[float] = None) -> Optional[bool]:
-    """Wait until oscmix reports every path in ``paths`` back.
+    """Wait until oscmix reports every register in ``expected`` at its value.
 
-    The report is what actually updates oscmix's internal link state, so
-    this -- not a fixed sleep -- is the correct barrier before writing
-    the mix matrix. Returns True when all paths arrived, False on
-    timeout, and None when the receive port is unavailable (the mixer
-    GUI holds it), in which case the caller falls back to a plain wait.
+    ``expected`` maps an OSC path to the integer the device has to report
+    for it. The report is what actually updates oscmix's internal link
+    state, so this -- not a fixed sleep -- is the correct barrier before
+    writing the mix matrix. The value matters: an unlinked route waits for
+    0 just as a linked one waits for 1, and a stale report of the opposite
+    value must not end the wait.
+
+    Returns True when everything arrived, False on timeout, and None when
+    the receive port is unavailable (the mixer GUI holds it), in which
+    case the caller falls back to a plain wait.
     """
-    if not paths:
+    if not expected:
         return True
     if timeout is None:
         timeout = LINK_ECHO_TIMEOUT
@@ -461,7 +513,7 @@ def await_link_echo(paths: Sequence[str], recv_port: int,
         sock.bind(("127.0.0.1", recv_port))
     except OSError:
         return None
-    pending = set(paths)
+    pending = dict(expected)
     deadline = time.monotonic() + timeout
     try:
         while pending:
@@ -483,11 +535,11 @@ def await_link_echo(paths: Sequence[str], recv_port: int,
                 if path not in pending or not args:
                     continue
                 try:
-                    confirmed = int(args[0]) == 1  # type: ignore[call-overload]
+                    reported = int(args[0])  # type: ignore[call-overload]
                 except (TypeError, ValueError):
                     continue
-                if confirmed:
-                    pending.discard(path)
+                if reported == pending[path]:
+                    del pending[path]
         return True
     finally:
         sock.close()
@@ -504,16 +556,13 @@ def apply_routing(routes: Sequence[Route], port: int,
     try:
         # Only the output links need the barrier: /playback/<n>/stereo goes
         # through setinputstereo(), which updates oscmix's state right away,
-        # while /output/<n>/stereo relies on the device echo.
-        links: List[str] = []
+        # while /output/<n>/stereo relies on the device report.
         for route in routes:
             for path, types, args in link_messages(route):
                 sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
-                if path.startswith("/output/") and path not in links:
-                    links.append(path)
 
         timeout = LINK_ECHO_TIMEOUT
-        echoed = await_link_echo(links, recv_port, timeout)
+        echoed = await_link_echo(output_link_state(routes), recv_port, timeout)
         if echoed is None:
             log.info("link echo unobservable (UDP %d in use); waiting %.1fs",
                      recv_port, LINK_SETTLE)
@@ -543,14 +592,20 @@ def apply_routing(routes: Sequence[Route], port: int,
 # Routing verification (read back the device state oscmix reports)
 # --------------------------------------------------------------------------
 
-def output_link_paths(routes: Sequence[Route]) -> List[str]:
-    """The ``/output/<n>/stereo`` registers a routing depends on."""
-    paths: List[str] = []
+def output_link_state(routes: Sequence[Route]) -> "dict":
+    """The ``/output/<n>/stereo`` values a routing depends on.
+
+    Maps each register to the value the device has to report before the
+    mix matrix may be written. Routes are applied in file order, so a
+    later route targeting the same pair wins -- the same rule the mix
+    writes follow.
+    """
+    state: "dict" = {}
     for route in routes:
-        for path, _types, _args in link_messages(route):
-            if path.startswith("/output/") and path not in paths:
-                paths.append(path)
-    return paths
+        for path, _types, args in link_messages(route):
+            if path.startswith("/output/"):
+                state[path] = int(args[0])  # type: ignore[call-overload]
+    return state
 
 
 def send_mix(config: Config) -> None:
@@ -653,7 +708,8 @@ class VerifyResult:
 
 def verify_routing(registers: "dict", send_port: int, recv_port: int,
                    timeout: float = VERIFY_TIMEOUT,
-                   on_observed: Optional[Callable[[str], None]] = None
+                   on_observed: Optional[Callable[[str, Sequence[object]],
+                                                  None]] = None
                    ) -> Optional[VerifyResult]:
     """Ask oscmix to dump its state and compare it against ``registers``.
 
@@ -664,7 +720,8 @@ def verify_routing(registers: "dict", send_port: int, recv_port: int,
     with a different value -- a later matching report overrides), or
     unobserved (never reported within the window).
 
-    ``on_observed`` is called with each register path the moment it is
+    ``on_observed`` is called with each register path and its reported
+    arguments the moment it is
     first reported. That is how the mix re-apply hooks into this dump
     instead of requesting a second one: two overlapping dumps measurably
     starve each other and confirm fewer registers.
@@ -700,7 +757,7 @@ def verify_routing(registers: "dict", send_port: int, recv_port: int,
                 except (ValueError, struct.error):
                     continue
                 if on_observed is not None:
-                    on_observed(path)
+                    on_observed(path, args)
                 expected = registers.get(path)
                 if expected is None or path in confirmed:
                     continue
@@ -739,12 +796,20 @@ def verify_and_repair(config: Config) -> None:
     checked.
     """
     registers = expected_registers(config.routes)
-    links = set(output_link_paths(config.routes))
-    pending_links = set(links)
-    reapplied = {"done": not links}
+    pending_links = output_link_state(config.routes)
+    reapplied = {"done": not pending_links}
 
-    def on_observed(path: str) -> None:
-        pending_links.discard(path)
+    def on_observed(path: str, args: Sequence[object]) -> None:
+        # Only a report of the *expected* link value means oscmix's state
+        # is right; a stale opposite value must not release the re-apply.
+        if path in pending_links and args:
+            try:
+                reported = int(args[0])  # type: ignore[call-overload]
+            except (TypeError, ValueError):
+                return
+            if reported != pending_links[path]:
+                return
+            del pending_links[path]
         if not pending_links and not reapplied["done"]:
             reapplied["done"] = True
             send_mix(config)
@@ -1077,8 +1142,12 @@ def find_stale_backends(proc_root: Path) -> List[int]:
         if not entry.name.isdigit():
             continue
         try:
-            if entry.stat().st_uid != uid:
-                continue
+            owned = entry.stat().st_uid == uid
+        except OSError:
+            continue  # the process is gone, or its ownership is unreadable
+        if not owned:
+            continue
+        try:
             comm = (entry / "comm").read_text().strip()
         except OSError:
             comm = ""
