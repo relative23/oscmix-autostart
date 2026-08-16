@@ -109,7 +109,7 @@ What 0.2.0 moved, measured rather than claimed (2026-08-16):
 | `mypy --strict` | 12 errors | clean, 15 files |
 | mutation score | not runnable | 0.643 over the whole runtime, floor 0.63 |
 | upstream backend | `master`, unpinned | pinned commit, verified at checkout |
-| hardware evidence | done by hand, once | two committed tools, a recorded dump, no artifact in a release yet |
+| hardware evidence | done by hand, once | two committed tools, a recorded dump, and a passing artifact -- all 3 routes, 119.2 dB each |
 | structural guarantees | comments | 60+ assertions, plus `systemd-analyze verify` and an install smoke test |
 
 Every number above now describes this suite. The mutation score is the
@@ -119,10 +119,11 @@ uncovered starts being judged. 0.728 measured the third of the runtime
 in-process tests reached at the time; 0.643 measures all of it.
 
 The hardware evidence has a tool, a dump fixture, a place in
-`docs/RELEASE-CHECKLIST.md`, and now a first real measurement -- two of
-three routes passing at 119.2 dB per output, the third failing on a
-fader the owner had shut. What it does not have is a release to be
-attached to.
+`docs/RELEASE-CHECKLIST.md`, and now a passing measurement: all three
+routes, 119.2 dB per output, exit 0. Getting there took two runs -- the
+first failed `main-out` on a fader the owner had shut, which is the
+kind of thing only a measurement finds. What it does not have is a
+release to be attached to.
 
 ## 0.2.0 -- maturity
 
@@ -487,23 +488,27 @@ not wall-clock) and
 bump rule).
 
 *Measured (2026-08-16), against pinned revision 2411b12 on a UCX II
-(24216011):* `krk-monitors` (outputs 5/6) and `phones` (7/8) pass, each
-output responding **119.2 dB** to its own side of the tone and nothing
-to the other. `main-out` (1/2) fails.
+(24216011).* **All three routes pass**, each output responding
+**119.2 dB** to its own side of the tone and nothing to the other:
+`main-out` (1/2), `krk-monitors` (5/6), `phones` (7/8). Exit 0, which is
+what the checklist requires.
 
-It fails truthfully: `/output/1/volume` and `/output/2/volume` are at
-**-65.0 dB**, the fader shut on a rear output. That is user state -- the
-route declares no `volume`, so ADR 0003 leaves the fader alone -- and
-the routing itself is applied. But the run also exposed a defect in the
-tool: it blamed "other audio on the bus" for a silence it had the
-information to explain. `LevelReader.output_state()` now reads volume
-and mute for every measured output and the verdict names the cause.
+It took two runs, and the first one earned its keep. `main-out` failed:
+`/output/1/volume` and `/output/2/volume` sat at **-65.0 dB**, the fader
+shut on a rear output. The routing was applied and produced nothing
+audible -- exactly the class of defect this tool exists for, and exactly
+the class that reading OSC messages cannot see. Resolved by declaring
+`volume = 0.0` on that route, which makes the fader part of what the
+route pins (ADR 0003) instead of state the config has an opinion about
+and no control over. Verification went from 3 confirmed registers to 5.
 
-*Still open:* the artifact needs a release to be attached to, and one
-decision that is not the tool's to make -- whether `main-out` should
-carry a `volume` (pinning the fader open), be removed, or stay as a
-route whose output is deliberately off, in which case the checklist's
-"every route `ok: true`" needs a way to say so.
+The first run also exposed a defect in the tool itself: it blamed "other
+audio on the bus" for a silence it had the information to explain.
+`LevelReader.output_state()` now reads volume and mute for every
+measured output, and the verdict names the cause -- fader shut, muted,
+or turned down, with the number.
+
+*Still open:* only a release to attach the artifact to.
 
 ### E. When the upstream pin moves
 

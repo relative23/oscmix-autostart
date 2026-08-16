@@ -45,6 +45,13 @@ port = 7222
 # monitor level by hand. Leave it out to keep the fader under your
 # control.
 #
+# The trade-off, measured rather than guessed: a route without 'volume'
+# is applied correctly and can still produce no sound, because the fader
+# it does not touch may be all the way down. `make verify-hardware`
+# catches that and names the fader; nothing in the routing itself can,
+# because at message level the route is perfect. Pin 'volume' on any
+# output whose level you do not set by hand.
+#
 # PipeWire/PulseAudio send stereo audio to playback 1/2, so most setups
 # only need to route 1/2 to wherever their speakers are connected.
 # --------------------------------------------------------------------------
