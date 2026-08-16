@@ -45,6 +45,7 @@ from .discovery import (
                         wait_for_seq_client,
 )
 from .errors import ConfigError
+from .launcher import main as launch_mixer
 from .log import log
 from .notify import sd_notify
 from .osc import decode_osc, encode_osc, iter_osc_messages
@@ -99,6 +100,7 @@ __all__ = [
                         "find_stale_backends",
                         "generate_pipewire_conf",
                         "iter_osc_messages",
+                        "launch_mixer",
                         "link_messages",
                         "load_config",
                         "log",

@@ -1,4 +1,7 @@
 build/
+.venv/
+.idea/
+.hypothesis/
 __pycache__/
 *.pyc
 .pytest_cache/

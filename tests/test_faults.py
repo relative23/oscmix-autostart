@@ -201,3 +201,177 @@ def test_verification_survives_a_flood_of_unrelated_registers(session_mod,
         device.sock.close()
     assert time.monotonic() - started < 8.0
     assert "/mix/5/playback/1" in device.received
+
+
+# --------------------------------------------------------------------------
+# Faults that tear state rather than packets.
+#
+# Everything above disturbs the transport and leaves the process intact.
+# Every defect this project has actually shipped had the opposite shape:
+# something changed underneath a half-finished transaction. These are the
+# three windows where that can happen.
+# --------------------------------------------------------------------------
+
+
+class DyingDevice(threading.Thread):
+    """A backend that disappears partway through a sequence.
+
+    ``die_after`` names the OSC path whose arrival is the last thing it
+    handles; the socket closes immediately afterwards, the way a killed
+    process stops answering mid-conversation.
+    """
+
+    def __init__(self, session_mod, send_port, recv_port, die_after,
+                 dump=()):
+        super().__init__(daemon=True)
+        self.session_mod = session_mod
+        self.recv_port = recv_port
+        self.die_after = die_after
+        self.dump = list(dump)
+        self.received = []
+        self.died_after = None
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("127.0.0.1", send_port))
+        self.sock.settimeout(0.2)
+        self.stopping = threading.Event()
+
+    def stop(self):
+        self.stopping.set()
+
+    def run(self):
+        while not self.stopping.is_set():
+            try:
+                data, _ = self.sock.recvfrom(65536)
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            for message in self.session_mod.iter_osc_messages(data):
+                try:
+                    path, _tags, _args = self.session_mod.decode_osc(message)
+                except (ValueError, struct.error):
+                    continue
+                self.received.append(path)
+                if path == "/refresh":
+                    for register in self.dump:
+                        try:
+                            self.sock.sendto(register,
+                                             ("127.0.0.1", self.recv_port))
+                        except OSError:
+                            return
+                if path == self.die_after:
+                    self.died_after = path
+                    self.sock.close()
+                    return
+
+
+def test_a_backend_killed_between_the_phases_does_not_crash_the_session(
+        session_mod, routing_mod, monkeypatch):
+    # The one window where the routing is knowingly half-applied: links
+    # written, mix not yet. Losing the backend here must end as a logged
+    # failure, not as an exception out of apply_routing -- the session
+    # still has to reach its exit-code decision.
+    monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.2)
+    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.05)
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    device = DyingDevice(session_mod, send_port, recv_port,
+                         die_after="/output/5/stereo")
+    device.start()
+    try:
+        session_mod.apply_routing([make_route(session_mod)], send_port,
+                                  recv_port)
+    finally:
+        device.stop()
+        device.join(timeout=5)
+    assert device.died_after == "/output/5/stereo"
+    assert "/playback/1/stereo" in device.received
+
+
+def test_a_device_vanishing_mid_dump_still_leaves_the_mix_applied(
+        session_mod, verify_mod, monkeypatch):
+    # Unplugged while /refresh is still streaming: the read-back gets a
+    # truncated dump and no more. It must return a verdict rather than
+    # hang, and the matrix must still be written -- an interrupted
+    # verification is not a reason to leave the routing half-done.
+    monkeypatch.setattr(verify_mod, "VERIFY_TIMEOUT", 0.5)
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    route = make_route(session_mod)
+    partial = full_dump(session_mod, route)[:1]      # links only, then gone
+    device = DyingDevice(session_mod, send_port, recv_port,
+                         die_after="/refresh", dump=partial)
+    device.start()
+    config = session_mod.Config(routes=[route], osc_port=send_port,
+                                osc_recv_port=recv_port)
+    started = time.monotonic()
+    try:
+        session_mod.verify_and_repair(config)
+    finally:
+        device.stop()
+        device.join(timeout=5)
+    assert time.monotonic() - started < 10.0, "the read-back did not give up"
+    assert device.received.count("/refresh") >= 1
+
+
+def test_the_receive_port_taken_between_attempts_falls_back_blind(
+        session_mod, verify_mod, routing_mod, monkeypatch):
+    # The mixer GUI opens *during* verification. The first attempt reads
+    # the dump; the retry finds the port gone. That path must end in the
+    # blind re-apply, not in an exception -- test_verify.py only covers
+    # the port being taken from the start, which returns early and never
+    # reaches the retry.
+    monkeypatch.setattr(verify_mod, "VERIFY_TIMEOUT", 0.3)
+    monkeypatch.setattr(routing_mod, "LINK_SYNC_BLIND_DELAY", 0.05)
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    route = make_route(session_mod)
+    device = LossyDevice(session_mod, send_port, recv_port, dump=[])
+    device.start()
+
+    blocker = {"sock": None}
+    real_verify = verify_mod.verify_routing
+
+    def verify_then_take_the_port(*args, **kwargs):
+        result = real_verify(*args, **kwargs)
+        if blocker["sock"] is None:          # after the first attempt only
+            blocker["sock"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            blocker["sock"].bind(("127.0.0.1", recv_port))
+        return result
+
+    monkeypatch.setattr(verify_mod, "verify_routing", verify_then_take_the_port)
+    config = session_mod.Config(routes=[route], osc_port=send_port,
+                                osc_recv_port=recv_port)
+    try:
+        session_mod.verify_and_repair(config)
+        device.drain()
+    finally:
+        if blocker["sock"] is not None:
+            blocker["sock"].close()
+        device.stop()
+        device.join(timeout=5)
+        device.sock.close()
+    assert device.received.count("/refresh") >= 2, "the retry never ran"
+    assert "/mix/5/playback/1" in device.received
+
+
+@pytest.mark.parametrize("cycle", range(12))
+def test_applying_the_routing_is_repeatable(session_mod, routing_mod,
+                                            monkeypatch, cycle):
+    # A soak in miniature: the same routing applied over and over, each
+    # time against a fresh peer. Anything that leaks a socket, a thread
+    # or a stale barrier state shows up as a failure on a later cycle
+    # rather than the first.
+    monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.1)
+    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.02)
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    route = make_route(session_mod)
+    device = LossyDevice(session_mod, send_port, recv_port)
+    device.start()
+    try:
+        session_mod.apply_routing([route], send_port, recv_port)
+        device.drain(quiet=0.15, limit=3.0)
+    finally:
+        device.stop()
+        device.join(timeout=5)
+        device.sock.close()
+    assert "/mix/5/playback/1" in device.received
+    assert device.received.index("/output/5/stereo") < \
+        device.received.index("/mix/5/playback/1"), "phase order broke"

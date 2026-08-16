@@ -47,8 +47,9 @@ ALLOWED_IMPORTS = {
     "session": {"config", "constants", "discovery", "log", "notify",
                 "process", "routing", "verify"},
     "cli": {"config", "constants", "errors", "log", "pipewire", "session"},
-    "__init__": {"config", "constants", "discovery", "errors", "log",
-                 "notify", "osc", "pipewire", "process", "routing",
+    "launcher": {"constants", "discovery"},
+    "__init__": {"config", "constants", "discovery", "errors", "launcher",
+                 "log", "notify", "osc", "pipewire", "process", "routing",
                  "session", "verify"},
 }
 
@@ -133,10 +134,13 @@ def test_the_import_graph_is_acyclic():
         visit(module, [])
 
 
-def test_the_entry_point_stays_a_shim():
+@pytest.mark.parametrize("name", ["oscmix-session", "oscmix-launch"])
+def test_the_entry_points_stay_shims(name):
     # Logic in bin/ is logic that unit tests cannot reach, because the
-    # file has no .py suffix and is only ever run as a subprocess.
-    tree = parse(PROJECT_ROOT / "bin" / "oscmix-session")
+    # files have no .py suffix and are only ever run as subprocesses.
+    # The launcher was the last exception to this and to everything else
+    # item 1 established; it is a shim now too.
+    tree = parse(PROJECT_ROOT / "bin" / name)
     defined = [node.name for node in tree.body
                if isinstance(node, (ast.FunctionDef, ast.ClassDef))]
     assert defined == ["_package_root"], (

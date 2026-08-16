@@ -92,7 +92,10 @@ def pipewire_mod():
 
 @pytest.fixture(scope="session")
 def launch_mod():
-    return load_executable("oscmix-launch")
+    """The launcher, now a package module rather than a standalone script."""
+    from oscmix_autostart import launcher
+
+    return launcher
 
 
 @pytest.fixture
