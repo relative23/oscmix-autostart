@@ -29,6 +29,20 @@ jobs:
       - run: make lint
       - run: make typecheck
       - run: make deadcode
+      # tests/test_unit_file.py matches strings; only systemd knows the
+      # directive *names*, and an unknown key is silently ignored rather
+      # than rejected. The runner has systemd, so the skip does not fire
+      # here -- if it ever does, that is a broken image, not a pass.
+      - name: Validate the systemd unit
+        run: |
+          status=0
+          ./scripts/verify-unit.sh || status=$?
+          if [ "$status" -eq 77 ]; then
+            echo "systemd-analyze is missing on this runner; the unit was" \
+                 "not validated at all" >&2
+            exit 1
+          fi
+          exit "$status"
 
   test:
     name: Tests (Python ${{ matrix.python-version }})

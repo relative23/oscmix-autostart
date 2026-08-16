@@ -1,7 +1,7 @@
 PYTHON ?= python3
 SCRIPTS = bin/oscmix-session bin/oscmix-launch
 PACKAGE = src/oscmix_autostart
-SHELL_SCRIPTS = install.sh uninstall.sh
+SHELL_SCRIPTS = install.sh uninstall.sh scripts/verify-unit.sh
 # Repeats for the flakiness gate. The suite binds real UDP sockets and
 # runs background threads, so a single green run proves little.
 REPEAT ?= 5

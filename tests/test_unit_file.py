@@ -253,3 +253,49 @@ def test_verification_is_off_the_startup_path_structurally(unit):
         "READY=1 and the routing apply are no longer adjacent in one "
         "block, or READY is signalled first -- Type=notify would then "
         "report the service started before any routing was written")
+
+
+def test_systemd_analyze_accepts_the_unit():
+    """Roadmap item J: a typo in a directive *name* passes every test above.
+
+    Everything else in this file matches strings. systemd ignores keys it
+    does not know, so `NoNewPrivilegs=yes` reads as hardening, disables
+    it, and satisfies `"NoNewPrivileges=yes" in unit` -- no, it does not,
+    but `ProtectSystm=strict` next to a correct NoNewPrivileges would.
+    Only systemd knows the key names.
+
+    Skipped rather than failed where systemd-analyze is absent: this has
+    to stay runnable on a machine without systemd, and CI has one.
+    """
+    import subprocess
+
+    from conftest import repo_file
+
+    script = repo_file("scripts", "verify-unit.sh")
+    result = subprocess.run(["sh", str(script)], capture_output=True,
+                            text=True, timeout=60)
+    if result.returncode == 77:
+        pytest.skip("systemd-analyze is not installed")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_verify_script_fails_on_an_unknown_directive(tmp_path):
+    # The check above only means something if the script can fail.
+    # systemd-analyze reports an unknown key on stderr and still exits 0,
+    # so the gate is the output; this proves the script reads it.
+    import shutil
+    import subprocess
+
+    from conftest import repo_file
+
+    if shutil.which("systemd-analyze") is None:
+        pytest.skip("systemd-analyze is not installed")
+
+    broken = tmp_path / "oscmix.service"
+    broken.write_text(repo_file("systemd", "oscmix.service").read_text()
+                      .replace("NoNewPrivileges=yes", "NoNewPrivilegs=yes"))
+    script = repo_file("scripts", "verify-unit.sh")
+    result = subprocess.run(["sh", str(script), str(broken)],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 1
+    assert "NoNewPrivilegs" in result.stderr
