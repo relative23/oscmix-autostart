@@ -75,30 +75,29 @@ Common findings in the journal:
   what guarantees the right-hand channel of every pair; see below.
 
 The mix matrix is written twice on purpose. oscmix only learns that an
-output pair is stereo-linked when the device reports
-`/output/<n>/stereo` back, and that report arrives with the initial
-register sync -- about 15 s after start on a UCX II, far too late to
-block the readiness signal on. A mix written before that point is
-evaluated against oscmix's startup link state and only reaches the odd
-channel of each pair, so every even output (2, 4, 6, 8) stays silent.
-The first write therefore gets audio going immediately, and the
-background re-apply repairs it once the link state is known. Unlike the
-`/output/*` registers the matrix cannot be verified -- a `/mix` write
-draws no reply and the device dump omits the playback matrix -- so it is
-re-established rather than checked.
+output pair is stereo-linked when the device reports `/output/<n>/stereo`
+back, and it does not sync its register cache on its own -- it learns the
+device's values only from a `/refresh` dump. A mix written before that
+dump is evaluated against oscmix's startup link state and only reaches
+the odd channel of each pair, so every even output (2, 4, 6, 8) stays
+silent.
 
-The wait adapts via a systemd override
+So the first write gets audio going immediately, and the background
+verification pass -- whose dump is what syncs oscmix -- re-applies the
+matrix the moment that dump reports the links. Unlike the `/output/*`
+registers the matrix cannot be verified: a `/mix` write draws no reply
+and the dump omits the playback matrix, so it is re-established rather
+than checked. Both jobs deliberately share one `/refresh`; two
+overlapping dumps starve each other and confirm fewer registers.
+
+Only the blind fallback has a knob, for the case where the mixer GUI
+holds UDP 8222 and the dump cannot be observed at all
 (`systemctl --user edit oscmix.service`):
 
 ```ini
 [Service]
-Environment=OSCMIX_LINK_SYNC_TIMEOUT=45
 Environment=OSCMIX_LINK_SYNC_DELAY=30
 ```
-
-`OSCMIX_LINK_SYNC_TIMEOUT` bounds the wait for the sync report;
-`OSCMIX_LINK_SYNC_DELAY` is the blind fallback used when the mixer GUI
-holds UDP 8222 and the report cannot be observed.
 
 ## 4. Does the backend accept OSC?
 

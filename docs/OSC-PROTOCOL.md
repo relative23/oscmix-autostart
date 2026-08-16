@@ -37,6 +37,38 @@ matrix entry, with both pairs linked:
 This is exactly what a `[route:...]` section with `playback = 1/2` and
 `output = 5/6` generates.
 
+### The link has to be effective *before* the mix write
+
+Sending those three messages back to back is not enough, and the failure
+is silent. oscmix keeps its own copy of the link state and updates it
+only in `newoutputstereo()` -- the handler for the **device reporting**
+`/output/<n>/stereo`. The OSC setter is a plain `setbool` that forwards
+the register to the device and leaves oscmix's copy alone.
+
+If `/mix/5/playback/1` is evaluated while that copy still says
+"unlinked", `setlevel()` takes the unlinked branch: it writes only the
+addressed output and never touches `out+1`. Output 5 receives a mono sum
+of playback 1 and 2, output 6 receives nothing. Applied to every pair,
+that is silence on outputs 2, 4, 6 and 8 while the odd ones still play --
+one working headphone channel, one working monitor.
+
+Two properties make this awkward to wait out, both measured on a UCX II:
+
+- The device reports a register only when it **changes**. Writing
+  `stereo 1` to an already-linked pair produces no report at all.
+- oscmix never synchronizes its cache on its own. It learns the device's
+  values only from a `/refresh` dump, which streams over MIDI for
+  ~15-20 s.
+
+The reliable sequence is therefore: send the links, send the mix so audio
+works, then send `/refresh` and re-send the mix once the dump has reported
+`/output/<n>/stereo`. Note that `/playback/<n>/stereo` needs no such care
+-- `setinputstereo()` updates oscmix's state synchronously.
+
+`/mix` writes cannot be verified at all: they draw no reply, and the dump
+contains `/mix/*/input/*` but not `/mix/*/playback/*`. The matrix can only
+be re-established from a known link state, never read back.
+
 ## Other useful addresses
 
 | Address | Args | Meaning |

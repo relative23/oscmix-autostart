@@ -65,20 +65,42 @@ glue between them:
    The state ends up in the device's hardware mixer: zero latency,
    independent of PipeWire/PulseAudio/JACK.
 
+   This happens in **two phases**, and the order is load-bearing. First
+   the channel-pair links (`/playback/<n>/stereo`, `/output/<n>/stereo`),
+   then the mix matrix. oscmix only updates its own link state when the
+   *device* reports `/output/<n>/stereo` back; the OSC setter forwards
+   the register and leaves that state untouched. A `/mix` write
+   evaluated against a stale link state takes the unlinked branch and
+   never writes the pair's right channel -- every even output goes
+   silent. Between the phases the session waits briefly for the device
+   echo, which only fires when the link actually *changes*; when the
+   pairs were already linked no echo comes, and step 7 is what closes
+   the gap.
+
 6. **Signal readiness.** With the backend up and the routing sent, the
    session reports `READY=1` (`Type=notify`), so for systemd -- and
    anything ordered after the service -- "started" means "backend up,
    routing applied". The no-device exit also notifies before exiting 0
    to avoid a protocol failure.
 
-7. **Verify in the background.** OSC over UDP is fire-and-forget, so a
-   background thread reads the state back: it binds the receive port
-   (8222, where oscmix reports state), sends `/refresh`, and compares
-   the reported registers against the expected ones -- with a 0.5 dB
-   tolerance for the device's level quantization. On mismatch the
-   routing is re-sent once. The thread starts ~12 s after startup
-   because oscmix's initial register sync saturates the MIDI link and
-   makes earlier read-backs unreliable. Verification is advisory: a
+7. **Sync and verify in the background.** OSC over UDP is
+   fire-and-forget, so a background thread reads the state back: it binds
+   the receive port (8222, where oscmix reports state), sends `/refresh`,
+   and compares the reported registers against the expected ones -- with
+   a 0.5 dB tolerance for the device's level quantization. On mismatch
+   the routing is re-sent once.
+
+   That dump does double duty. oscmix does not sync its register cache
+   on its own; the dump is the only thing that teaches it the device's
+   real link state. So the moment the dump has reported every
+   `/output/<n>/stereo`, the mix matrix is written a second time -- now
+   against a state that is known to be correct. Both jobs deliberately
+   share a single `/refresh`: two overlapping dumps starve each other and
+   confirm measurably fewer registers. The matrix itself is never
+   verified, because a `/mix` write draws no reply and the dump omits the
+   playback matrix; it is re-established rather than checked.
+
+   Verification is advisory: a
    failed read-back is logged, never fatal (a restart loop would not
    improve anything), and it is skipped when the port is taken because
    the mixer GUI is running. Every expected register is classified

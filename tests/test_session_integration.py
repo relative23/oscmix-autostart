@@ -140,9 +140,7 @@ def make_env(tmp_path, *, with_client, with_usb, port=None, reply_port=None):
         # the real device's multi-second register sync.
         "OSCMIX_LINK_TIMEOUT": "0.2",
         "OSCMIX_LINK_SETTLE": "0.1",
-        "OSCMIX_LINK_SYNC_TIMEOUT": "0.5",
         "OSCMIX_LINK_SYNC_DELAY": "0.2",
-        "OSCMIX_DUMP_DRAIN": "0.2",
     })
     return env, stub_dir, backend
 
