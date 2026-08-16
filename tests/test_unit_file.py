@@ -84,3 +84,168 @@ def test_the_stop_timeout_outlasts_the_kill_escalation(unit, session_mod):
                         for line in unit.splitlines()
                         if line.startswith("TimeoutStopSec="))
     assert stop_timeout > constants.CHILD_STOP_GRACE
+
+
+def directive(unit, name):
+    """The value of a directive, from the unit rather than from memory."""
+    for line in unit.splitlines():
+        line = line.strip()
+        if line.startswith(name + "="):
+            return line.split("=", 1)[1].strip()
+    raise AssertionError("%s= is not in the unit" % name)
+
+
+def seconds(raw):
+    return float(raw.rstrip("s"))
+
+
+def test_the_service_declares_no_writable_path(unit):
+    # docs/SECURITY-MODEL.md states that the session writes nothing, and
+    # an empty ReadWritePaths is the strongest form a unit can say it in.
+    # 0.3.0 (--dump-config, profiles, cached state) is what will want to
+    # relax this; the security model argues that case in advance, and
+    # this assertion is what keeps the relaxation from being quiet.
+    assert directive(unit, "ReadWritePaths") == ""
+
+
+# --------------------------------------------------------------------------
+# The timing budget has to compose -- roadmap item H.
+#
+# Eight waits in constants.py and two systemd deadlines. The relationship
+# between them used to live in a comment in the unit, where nothing
+# checked it. `--timeout` is a command-line argument, so an edited
+# ExecStart could push the start past TimeoutStartSec and have the unit
+# killed *during* the apply: a torn routing state reached by editing a
+# number, which is item A's failure with none of item A's difficulty.
+# --------------------------------------------------------------------------
+
+def test_the_worst_case_path_to_ready_fits_inside_the_start_deadline(unit):
+    from oscmix_autostart import constants
+
+    budget = constants.startup_budget()
+    start_deadline = seconds(directive(unit, "TimeoutStartSec"))
+    assert budget < start_deadline, (
+        "worst case to READY=1 is %.1fs but TimeoutStartSec is %.0fs -- "
+        "systemd would kill the session mid-apply" % (budget, start_deadline)
+    )
+    # With margin, not merely inside it. The device wait is the dominant
+    # term and it is a wall-clock wait on hardware enumeration, which is
+    # not a quantity to leave a second of slack on.
+    assert start_deadline - budget >= 10.0, (
+        "only %.1fs of margin between the worst case (%.1fs) and "
+        "TimeoutStartSec (%.0fs)"
+        % (start_deadline - budget, budget, start_deadline)
+    )
+
+
+def test_the_units_own_execstart_stays_inside_the_budget(unit):
+    # If ExecStart ever grows a --timeout, it is the number that decides
+    # the budget, not DEFAULT_DEVICE_TIMEOUT. Parse what is actually
+    # there rather than what the default happens to be.
+    from oscmix_autostart import constants
+
+    exec_start = directive(unit, "ExecStart").split()
+    device_timeout = constants.DEFAULT_DEVICE_TIMEOUT
+    if "--timeout" in exec_start:
+        device_timeout = float(exec_start[exec_start.index("--timeout") + 1])
+    budget = constants.startup_budget(device_timeout)
+    assert budget < seconds(directive(unit, "TimeoutStartSec"))
+
+
+def test_the_largest_device_timeout_that_still_fits_is_stated(unit):
+    # The number an operator actually needs when editing ExecStart: how
+    # far --timeout may be raised before the unit starts killing itself
+    # mid-apply. Derived, so it cannot go stale against the constants.
+    from oscmix_autostart import constants
+
+    start_deadline = seconds(directive(unit, "TimeoutStartSec"))
+    overhead = constants.startup_budget(0.0)
+    headroom = start_deadline - overhead - 10.0   # same margin as above
+    assert headroom > constants.DEFAULT_DEVICE_TIMEOUT, (
+        "the default device timeout (%.0fs) already leaves no room to "
+        "raise it" % constants.DEFAULT_DEVICE_TIMEOUT
+    )
+    assert constants.startup_budget(headroom) + 10.0 <= start_deadline
+
+
+def test_the_stop_grace_fits_inside_the_stop_deadline(unit):
+    # The other direction, and the one that was already covered: systemd
+    # must not give up before supervise() has escalated to SIGKILL, or a
+    # clean shutdown is reported as a failure.
+    from oscmix_autostart import constants
+
+    stop_deadline = seconds(directive(unit, "TimeoutStopSec"))
+    assert stop_deadline > constants.CHILD_STOP_GRACE
+    # supervise polls in 0.5 s steps, so the escalation lands up to one
+    # step after the grace period.
+    assert stop_deadline > constants.CHILD_STOP_GRACE + 0.5
+
+
+def test_the_budget_names_every_wait_on_the_path(unit):
+    # A wait added to the startup path and not to startup_budget makes
+    # the assertions above pass while the real path grows. This ties the
+    # sum to its terms, so adding one without the other fails here.
+    from oscmix_autostart import constants
+
+    expected = (constants.DEFAULT_DEVICE_TIMEOUT
+                + constants.STALE_BACKEND_SETTLE
+                + constants.PORT_READY_TIMEOUT
+                + max(constants.LINK_ECHO_TIMEOUT, constants.LINK_SETTLE))
+    assert constants.startup_budget() == expected
+    # The link barrier is one wait or the other, never both: the settle
+    # only runs when the echo could not be observed at all.
+    assert constants.startup_budget() < (
+        constants.DEFAULT_DEVICE_TIMEOUT + constants.STALE_BACKEND_SETTLE
+        + constants.PORT_READY_TIMEOUT + constants.LINK_ECHO_TIMEOUT
+        + constants.LINK_SETTLE)
+
+
+def test_verification_is_off_the_startup_path_structurally(unit):
+    # LINK_SYNC_BLIND_DELAY (20 s) and VERIFY_TIMEOUT (10 s) are excluded
+    # from the budget because verification runs on a daemon thread after
+    # READY=1, not because the arithmetic happens to work out -- with the
+    # current 33 s of margin both would in fact still fit inside
+    # TimeoutStartSec. An arithmetic argument would stop holding the
+    # moment the margin shrank, so assert the structure instead: the
+    # readiness signal is sent after _apply_and_verify returns, and that
+    # function's waiting happens on a thread.
+    import ast
+    import inspect
+
+    from oscmix_autostart import session
+
+    tree = ast.parse(inspect.getsource(session._apply_and_verify))
+    starts_a_thread = any(
+        isinstance(node, ast.Attribute) and node.attr == "Thread"
+        for node in ast.walk(tree))
+    assert starts_a_thread, (
+        "_apply_and_verify no longer defers verification to a thread; "
+        "the blind delay and the verify window are now on the path to "
+        "READY=1 and startup_budget must account for them")
+
+    # ... and READY=1 follows the apply in the same block. Scoped to the
+    # block on purpose: run_session also signals READY on the
+    # device-absent path, which returns before ever reaching the apply,
+    # so a whole-function ordering check would compare two branches that
+    # never run together. (ast.walk is breadth-first, not source order,
+    # which makes any index comparison over it meaningless anyway.)
+    def called(statement):
+        if not isinstance(statement, ast.Expr):
+            return ""
+        if not isinstance(statement.value, ast.Call):
+            return ""
+        func = statement.value.func
+        return getattr(func, "id", getattr(func, "attr", ""))
+
+    ordered = None
+    for node in ast.walk(ast.parse(inspect.getsource(session.run_session))):
+        block = getattr(node, "body", None)
+        if not isinstance(block, list):
+            continue
+        names = [called(statement) for statement in block]
+        if "_apply_and_verify" in names and "sd_notify" in names:
+            ordered = names.index("_apply_and_verify") < names.index("sd_notify")
+    assert ordered is True, (
+        "READY=1 and the routing apply are no longer adjacent in one "
+        "block, or READY is signalled first -- Type=notify would then "
+        "report the service started before any routing was written")

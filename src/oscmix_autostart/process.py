@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .constants import CHILD_STOP_GRACE
+from .constants import CHILD_STOP_GRACE, STALE_BACKEND_SETTLE
 from .discovery import udp_port_listening
 from .log import log
 
@@ -59,7 +59,8 @@ def _cleanup_stale_backend(port: int, proc_root: Path) -> None:
                 port, ", ".join(map(str, pids)))
     for pid in pids:
         _terminate(pid)
-    time.sleep(0.5)
+    # Part of the startup budget; see constants.startup_budget.
+    time.sleep(STALE_BACKEND_SETTLE)
 
 
 def _terminate(pid: int) -> None:

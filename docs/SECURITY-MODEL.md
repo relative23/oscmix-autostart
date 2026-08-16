@@ -42,6 +42,41 @@ UNIX and IP sockets.
 
 The session writes nothing: the routing config is read-only, and its only
 outputs are UDP datagrams to loopback and the systemd notification socket.
+`ReadWritePaths` is therefore empty, which is the strongest form of that
+statement a unit can make.
+
+### "Writes nothing" is a property of today's feature set, not a principle
+
+It is true because nothing the session currently does needs a file. That
+stops being true in 0.3.0: `--dump-config` writes a `routing.conf`,
+profiles need somewhere to keep several of them, and any cached device
+state needs a path. Each of those turns an empty `ReadWritePaths` into a
+directory the service may write.
+
+This is written down here, before that happens, for one reason: the first
+feature that needs a file will otherwise widen the sandbox as an
+implementation detail in the commit that adds it. Widening it is a
+decision, and it has to be argued rather than noticed. When it comes up,
+the questions this section is asking in advance are:
+
+- **Which directory, and does the session need to write it, or only the
+  CLI?** `--dump-config` is a command a user runs, not something the
+  boot-time service does. If only the interactive path writes, the
+  *service* can stay at an empty `ReadWritePaths` and the write happens
+  outside it -- which is the outcome to aim for.
+- **`StateDirectory=` rather than a hand-written path.** It gives a
+  single directory under `~/.local/state` with the right ownership and
+  keeps `ProtectHome=read-only` otherwise intact.
+- **Does the routing config itself become writable?** It should not. A
+  config the service can rewrite is no longer a reviewable source of
+  truth, which is the project's premise; `--dump-config` writing to
+  stdout or to a path the user names keeps that property.
+- **What happens on a partial write?** A truncated `routing.conf` is an
+  unbootable device state. Write to a temporary file and rename.
+
+Until one of those is answered, the claim above stands as written and the
+unit stays as it is. `tests/test_unit_file.py` asserts the empty
+`ReadWritePaths`, so relaxing it cannot happen quietly.
 
 ## Signalling other processes
 

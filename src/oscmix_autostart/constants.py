@@ -58,3 +58,35 @@ CHANNEL_MIN, CHANNEL_MAX = 1, 64
 EXIT_OK = 0
 EXIT_FAILURE = 1
 EXIT_CONFIG = 2
+
+# The pause _cleanup_stale_backend takes after signalling a leftover
+# backend, so the port it held is free before the new one binds.
+STALE_BACKEND_SETTLE = 0.5
+
+
+def startup_budget(device_timeout: float = DEFAULT_DEVICE_TIMEOUT) -> float:
+    """Worst-case seconds from process start to ``READY=1``.
+
+    Eight waits govern this path and two systemd deadlines have to
+    contain it. The relationship used to live in a comment in the unit
+    file, where nothing checked it and `--timeout` -- a command-line
+    argument in `ExecStart` -- could push the start past
+    `TimeoutStartSec` and have the unit killed *mid-apply*. That is a
+    torn routing state reached by editing a number.
+
+    The terms, in the order `run_session` reaches them:
+
+    * ``device_timeout``    -- ``wait_for_seq_client``
+    * ``STALE_BACKEND_SETTLE`` -- ``_cleanup_stale_backend``
+    * ``PORT_READY_TIMEOUT``   -- ``_await_backend_port``
+    * the link barrier      -- ``LINK_ECHO_TIMEOUT`` when the receive
+      port is observable, ``LINK_SETTLE`` when the mixer GUI holds it.
+      Never both, so the worst case is the larger.
+
+    Verification is deliberately *not* in here: it runs on a daemon
+    thread after ``READY=1``, which is the whole point of deferring it.
+    """
+    return (device_timeout
+            + STALE_BACKEND_SETTLE
+            + PORT_READY_TIMEOUT
+            + max(LINK_ECHO_TIMEOUT, LINK_SETTLE))

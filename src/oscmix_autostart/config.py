@@ -23,6 +23,7 @@ from .constants import (
     LEVEL_MIN,
 )
 from .errors import ConfigError
+from .log import log
 
 
 @dataclass(frozen=True)
@@ -198,9 +199,19 @@ def load_config(path: Optional[Path]) -> Config:
         elif section.startswith("route:"):
             config.routes.append(_parse_route(parser, section))
         else:
-            raise ConfigError(
-                "unknown section [%s] (valid: [device], [osc], [route:<name>])"
-                % section
+            # A warning, not an error. See
+            # docs/decisions/0006-routing-conf-compatibility.md: a section
+            # this version does not know is how a *newer* version adds a
+            # feature, and refusing the whole file over it leaves the
+            # device in whatever state the last boot left it, with no
+            # restart (RestartPreventExitStatus=2). An unknown *option*
+            # inside a known section stays an error -- that is what a
+            # typo looks like, and a silently ignored 'levl = -20' is a
+            # wrong device state nobody is told about.
+            log.warning(
+                "ignoring unknown section [%s] -- this config may have been "
+                "written by a newer version of oscmix-autostart "
+                "(known: [device], [osc], [route:<name>])", section
             )
     _check_link_agreement(config.routes)
     return config

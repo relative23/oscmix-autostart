@@ -93,7 +93,6 @@ output = 1/2    ; main out
     ("[route:x]\noutput = 5/6\n", "playback"),
     ("[route:x]\nplayback = 1/2\noutput = 5/6\nstereo = maybe\n", "boolean"),
     ("[route:x]\nplayback = 1/2\noutput = 5/6\nlevle = 0\n", "unknown option"),
-    ("[routes:x]\nplayback = 1/2\noutput = 5/6\n", "unknown section"),
     ("[device]\nusb-id = fireface\n", "usb-id"),
     ("[osc]\nport = 99999\n", "out of range"),
     ("[osc]\nport = auto\n", "port"),
@@ -249,3 +248,132 @@ def test_config_discovery_returns_none_when_there_is_nothing(session_mod,
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     monkeypatch.setattr(config_mod.Path, "is_file", lambda self: False)
     assert session_mod.discover_config_path() is None
+
+
+# --------------------------------------------------------------------------
+# What routing.conf promises across versions -- ADR 0006, roadmap item B.
+#
+# A test per direction, because the promise has two of them and they are
+# not symmetric: a file from the future must still route what this
+# version understands, and a file from the past must keep meaning what
+# it meant.
+# --------------------------------------------------------------------------
+
+FUTURE_CONFIG = """\
+[device]
+name = Fireface UCX II
+
+[osc]
+port = 7222
+
+[route:main]
+playback = 1/2
+output = 1/2
+level = 0.0
+
+[input:1]
+48v = true
+reflevel = +4
+
+[output:5]
+reflevel = +4
+mute = false
+
+[profile:tracking]
+routes = main
+"""
+
+
+def test_a_config_from_a_newer_version_still_applies_what_we_understand(
+        session_mod, tmp_path, caplog):
+    # The forward direction. 0.3.0 adds [input:N], [output:N] and
+    # profiles, and --dump-config makes the file machine-generated, so it
+    # will travel to machines running this version. Refusing it whole
+    # would mean no routing at all and no restart (exit 2 is
+    # RestartPreventExitStatus), leaving the device in whatever state the
+    # last boot left it over a section this version simply does not need.
+    path = write(tmp_path, FUTURE_CONFIG)
+    with caplog.at_level("WARNING"):
+        config = session_mod.load_config(path)
+
+    assert [route.name for route in config.routes] == ["main"]
+    assert config.routes[0].output == (1, 2)
+    assert config.osc_port == 7222
+
+    # ... and it says so, once per unknown section, naming each.
+    warnings = [record.getMessage() for record in caplog.records
+                if record.levelname == "WARNING"]
+    assert len(warnings) == 3
+    for section in ("input:1", "output:5", "profile:tracking"):
+        assert any("[%s]" % section in text for text in warnings), section
+    assert any("newer version" in text for text in warnings)
+
+
+def test_a_typo_in_a_known_section_is_still_an_error(session_mod, tmp_path):
+    # The asymmetry is the whole decision. An unknown *section* is how a
+    # newer version adds a feature; an unknown *option* in a section this
+    # version owns is a typo, and ignoring it would apply a routing that
+    # differs from the file in a way nobody is told about.
+    path = write(tmp_path, "[route:x]\nplayback = 1/2\noutput = 5/6\n"
+                           "levl = -20\n")
+    with pytest.raises(session_mod.ConfigError) as excinfo:
+        session_mod.load_config(path)
+    assert "unknown option" in str(excinfo.value)
+    assert "levl" in str(excinfo.value)
+
+
+def test_a_misspelled_section_name_is_a_warning_not_a_correction(
+        session_mod, tmp_path, caplog):
+    # [routes:x] is a typo for [route:x], and this rule cannot tell the
+    # two apart from a future section name. It costs a route silently
+    # dropped, which is the price of the forward promise -- so the
+    # warning has to be loud enough to find in a journal, and the
+    # startup log states how many routes were actually loaded.
+    path = write(tmp_path, "[routes:x]\nplayback = 1/2\noutput = 5/6\n")
+    with caplog.at_level("WARNING"):
+        config = session_mod.load_config(path)
+    assert config.routes == []
+    assert "[routes:x]" in caplog.text
+
+
+def test_todays_config_keeps_meaning_what_it_means(session_mod, tmp_path):
+    # The backward direction. Every option this version defines has to
+    # keep its meaning; a future parser may add sections and options but
+    # may not redefine these. Pinning the surface here makes a silent
+    # redefinition a failing test rather than a changed device state.
+    path = write(tmp_path, """
+[device]
+name = Fireface UCX II
+usb-id = 2a39:3fd9
+
+[osc]
+port = 7222
+recv-port = 8222
+
+[route:main]
+playback = 1/2
+output = 5/6
+level = -6.0
+volume = -12.0
+stereo = false
+""")
+    config = session_mod.load_config(path)
+    assert config.device_name == "Fireface UCX II"
+    assert config.usb_id == "2a39:3fd9"
+    assert (config.osc_port, config.osc_recv_port) == (7222, 8222)
+    route, = config.routes
+    assert (route.playback, route.output) == ((1, 2), (5, 6))
+    assert (route.level, route.volume, route.stereo) == (-6.0, -12.0, False)
+
+
+def test_the_known_surface_is_stated_rather_than_discovered(session_mod):
+    # ADR 0006 promises these names keep their meaning. A version that
+    # wants to remove one has to change this list, which is the point:
+    # it turns a compatibility break into a visible edit.
+    from oscmix_autostart import config as config_mod
+
+    assert {
+        "device": {"name", "usb-id"},
+        "osc": {"port", "recv-port"},
+        "route": {"playback", "output", "level", "volume", "stereo"},
+    } == config_mod._KNOWN_OPTIONS

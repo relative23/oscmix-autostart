@@ -117,11 +117,25 @@ if [ "$DO_BUILD" = 1 ]; then
             || git -C "$BUILD_DIR" checkout --quiet FETCH_HEAD
     else
         info "cloning $OSCMIX_REPO ($OSCMIX_REF)"
-        mkdir -p "$(dirname "$BUILD_DIR")"
-        # A full clone: --depth 1 --branch only accepts a branch or tag,
-        # and the default ref here is a commit.
-        git clone --quiet "$OSCMIX_REPO" "$BUILD_DIR"
-        git -C "$BUILD_DIR" checkout --quiet "$OSCMIX_REF"
+        mkdir -p "$BUILD_DIR"
+        # `git clone --depth 1 --branch` accepts a branch or a tag but
+        # not a commit, and the pinned default ref is a commit. init +
+        # fetch does take one, so the shallow clone the pin cost us is
+        # back: one commit instead of upstream's full history.
+        #
+        # Servers may refuse to serve an arbitrary SHA
+        # (uploadpack.allowReachableSHA1InWant); GitHub does not, but a
+        # mirror might, so a failed shallow fetch falls back to a full
+        # clone rather than aborting the install.
+        git -C "$BUILD_DIR" init --quiet
+        git -C "$BUILD_DIR" remote add origin "$OSCMIX_REPO"
+        if git -C "$BUILD_DIR" fetch --quiet --depth 1 origin "$OSCMIX_REF"; then
+            git -C "$BUILD_DIR" checkout --quiet FETCH_HEAD
+        else
+            warn "shallow fetch of $OSCMIX_REF failed; falling back to a full clone"
+            git -C "$BUILD_DIR" fetch --quiet origin
+            git -C "$BUILD_DIR" checkout --quiet "$OSCMIX_REF"
+        fi
     fi
 
     # State what was actually built. If the ref was a full SHA, the

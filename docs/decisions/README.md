@@ -16,3 +16,6 @@ silences half the outputs.
 | [0003](0003-declared-registers-only.md) | A route rewrites only the registers it declares |
 | [0004](0004-package-with-stdlib-only-runtime.md) | The runtime is a package, and imports only the standard library |
 | [0005](0005-mutation-testing-scope.md) | Mutation testing runs against the in-process tests only |
+| [0006](0006-routing-conf-compatibility.md) | An unknown section warns, an unknown option fails |
+| [0007](0007-growth-order-not-wall-clock.md) | Performance gates measure growth order, not wall-clock time |
+| [0008](0008-pinned-upstream-revision.md) | The upstream backend is pinned, and the pin moves only after a measurement |

@@ -39,7 +39,12 @@ ALLOWED_IMPORTS = {
     "osc": set(),
     "notify": {"log"},
     "discovery": {"log"},
-    "config": {"constants", "errors"},
+    # log is a leaf: one named logger, configured by the CLI entry point
+    # before load_config runs. config gained it for the unknown-section
+    # warning of ADR 0006 -- a warning has to reach the journal, and
+    # returning it up the call chain would be a second error channel
+    # beside ConfigError for no benefit.
+    "config": {"constants", "errors", "log"},
     "routing": {"config", "constants", "log", "osc"},
     "verify": {"config", "constants", "log", "osc", "routing"},
     "pipewire": {"config", "errors", "log"},
