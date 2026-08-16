@@ -130,3 +130,102 @@ def test_tone_generation_puts_the_signal_on_one_side(harness, tmp_path):
     samples = struct.unpack("<%dh" % (len(frames) // 2), frames)
     assert max(abs(value) for value in samples[0::2]) > 1000
     assert max(abs(value) for value in samples[1::2]) == 0
+
+
+# --------------------------------------------------------------------------
+# Saying *why* an output is silent.
+#
+# The first real run of this tool against a UCX II failed the `main-out`
+# route and blamed other audio on the bus. The actual cause was
+# /output/1/volume sitting at -65 dB -- the fader pulled shut on a rear
+# output the owner does not use. The device reports that, the tool could
+# read it, and the verdict said something else.
+#
+# It matters because the two look identical in the levels and are
+# opposite in what they ask of the reader: one says "stop your music and
+# try again", the other says "this output is off, and deliberately so".
+# --------------------------------------------------------------------------
+
+SHUT = {"volume": -65.0, "mute": 0}
+OPEN = {"volume": 0.0, "mute": 0}
+
+
+def test_a_shut_fader_is_named_instead_of_blaming_the_bus(harness):
+    verdict = harness.check_route(
+        "main-out", (1, 2),
+        left={1: -144.0, 2: -144.0},
+        right={1: -144.0, 2: -144.0},
+        silence={1: -144.0, 2: -144.0},
+        state={1: SHUT, 2: SHUT})
+    assert not verdict["ok"]
+    assert all("fader is shut" in problem for problem in verdict["problems"])
+    assert all("stop other audio" not in problem
+               for problem in verdict["problems"])
+    # ... and it says whose value that is: a route without 'volume'
+    # leaves the fader to the user (ADR 0003).
+    assert all("yours" in problem for problem in verdict["problems"])
+
+
+def test_a_muted_output_is_named(harness):
+    verdict = harness.check_route(
+        "monitors", (5, 6),
+        left={5: -144.0, 6: -144.0},
+        right={5: -144.0, 6: -144.0},
+        silence={5: -144.0, 6: -144.0},
+        state={5: {"volume": 0.0, "mute": 1}, 6: {"volume": 0.0, "mute": 1}})
+    assert not verdict["ok"]
+    assert any("mute is set" in problem for problem in verdict["problems"])
+
+
+def test_competing_audio_is_still_blamed_when_the_faders_are_open(harness):
+    # The regression guard for the fix: adding the explanation must not
+    # swallow the case it was bolted onto.
+    verdict = harness.check_route(
+        "monitors", (5, 6),
+        left={5: -40.0, 6: -43.0},
+        right={5: -44.0, 6: -40.0},
+        silence={5: -44.0, 6: -44.0},
+        state={5: OPEN, 6: OPEN})
+    assert not verdict["ok"]
+    assert all("stop other audio" in problem for problem in verdict["problems"])
+
+
+def test_an_unknown_output_state_changes_nothing(harness):
+    # The state read is best-effort: it sends /refresh and takes what
+    # arrives. A verdict must not depend on it having arrived.
+    verdict = harness.check_route(
+        "monitors", (5, 6),
+        left={5: -40.0, 6: -43.0},
+        right={5: -44.0, 6: -40.0},
+        silence={5: -44.0, 6: -44.0},
+        state={})
+    assert not verdict["ok"]
+    assert all("stop other audio" in problem for problem in verdict["problems"])
+
+
+def test_a_healthy_route_records_its_open_faders(harness):
+    # The evidence artifact carries the state either way: "this passed,
+    # and here is the fader it passed at" is a stronger record than a
+    # bare ok.
+    verdict = harness.check_route(
+        "monitors", (5, 6),
+        left={5: -20.0, 6: -144.0},
+        right={5: -144.0, 6: -20.0},
+        silence=QUIET,
+        state={5: OPEN, 6: OPEN})
+    assert verdict["ok"]
+    assert verdict["output_state"] == {"output_5": OPEN, "output_6": OPEN}
+
+
+def test_a_quiet_but_not_shut_fader_is_reported_with_its_value(harness):
+    # Between "shut" and "fine" there is "someone turned it down". Worth
+    # naming with the number rather than guessing at a threshold.
+    verdict = harness.check_route(
+        "monitors", (5, 6),
+        left={5: -144.0, 6: -144.0},
+        right={5: -144.0, 6: -144.0},
+        silence={5: -144.0, 6: -144.0},
+        state={5: {"volume": -40.0, "mute": 0},
+               6: {"volume": -40.0, "mute": 0}})
+    assert not verdict["ok"]
+    assert any("-40.0 dB" in problem for problem in verdict["problems"])

@@ -35,16 +35,18 @@ import tempfile
 import time
 import wave
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from oscmix_autostart import (
     decode_osc,
     discover_config_path,
+    encode_osc,
     iter_osc_messages,
     load_config,
 )
+from oscmix_autostart.constants import LEVEL_MIN
 
 EXIT_SKIP = 77
 # How much louder an output must be when its own side carries the tone
@@ -129,6 +131,39 @@ class LevelReader:
         return result
 
 
+    def output_state(self, send_port: int, outputs: Sequence[int],
+                     seconds: float = 6.0) -> Dict[int, Dict[str, object]]:
+        """The fader and mute of each output, straight from the device.
+
+        A verdict that says "no audio here" without saying why is half a
+        measurement. The first real run of this tool reported outputs 1/2
+        as failing and blamed other audio on the bus; the actual cause
+        was ``/output/1/volume`` sitting at -65 dB, which is the fader
+        pulled shut. The tool could see that and did not say it.
+        """
+        wanted = {"/output/%d/%s" % (channel, field): (channel, field)
+                  for channel in outputs for field in ("volume", "mute")}
+        state: Dict[int, Dict[str, object]] = {c: {} for c in outputs}
+        self.sock.sendto(encode_osc("/refresh"), ("127.0.0.1", send_port))
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if all(len(fields) == 2 for fields in state.values()):
+                break
+            try:
+                datagram, _ = self.sock.recvfrom(65536)
+            except (socket.timeout, OSError):
+                continue
+            for message in iter_osc_messages(datagram):
+                try:
+                    path, _tags, args = decode_osc(message)
+                except (ValueError, struct.error):
+                    continue
+                if path in wanted and args:
+                    channel, field = wanted[path]
+                    state[channel][field] = args[0]
+        return state
+
+
 def backend_revision() -> Optional[str]:
     """The upstream oscmix commit this measurement was taken against.
 
@@ -169,8 +204,30 @@ def measure(reader: LevelReader, wav: Path, sink: Optional[str]) -> Dict[int, fl
     return peaks
 
 
+def explain_silence(channel: int, state: Dict[int, Dict[str, object]]) -> str:
+    """Why an output carries nothing, when the device can say.
+
+    Only two causes are visible from here, and both are ordinary user
+    state rather than faults -- which is exactly why they have to be
+    named: an operator reading "output 1 is not carrying that channel"
+    should not go looking for a routing bug when the fader is shut.
+    """
+    fields = state.get(channel) or {}
+    volume = fields.get("volume")
+    if isinstance(volume, float) and volume <= LEVEL_MIN + 0.5:
+        return (" -- /output/%d/volume is %.1f dB, the fader is shut; this "
+                "route declares no 'volume', so that value is yours"
+                % (channel, volume))
+    if fields.get("mute"):
+        return " -- /output/%d/mute is set" % channel
+    if isinstance(volume, float) and volume < -20.0:
+        return " -- /output/%d/volume is %.1f dB" % (channel, volume)
+    return ""
+
+
 def check_route(name: str, outputs: Tuple[int, ...], left: Dict[int, float],
-                right: Dict[int, float], silence: Dict[int, float]) -> dict:
+                right: Dict[int, float], silence: Dict[int, float],
+                state: Optional[Dict[int, Dict[str, object]]] = None) -> dict:
     """Turn the measurements into a verdict for one stereo route.
 
     Each output is compared against itself across the two runs: it must
@@ -180,9 +237,12 @@ def check_route(name: str, outputs: Tuple[int, ...], left: Dict[int, float],
     both tones.
     """
     low, high = outputs
+    state = state or {}
     finding = {
         "route": name,
         "outputs": list(outputs),
+        "output_state": {"output_%d" % c: dict(state.get(c) or {})
+                         for c in outputs},
         "peaks_db": {
             "output_%d" % low: {"left_tone": left.get(low),
                                 "right_tone": right.get(low),
@@ -197,14 +257,16 @@ def check_route(name: str, outputs: Tuple[int, ...], left: Dict[int, float],
                                                  ("right", high, right, left)):
         driven = driven_run.get(channel)
         if driven is None:
-            problems.append("output %d never reported a level" % channel)
+            problems.append("output %d never reported a level%s"
+                            % (channel, explain_silence(channel, state)))
             continue
         floor = silence.get(channel)
         if floor is not None and driven - floor < MIN_ABOVE_BACKGROUND_DB:
+            reason = explain_silence(channel, state)
             problems.append(
-                "output %d: tone only %.1f dB above what was already playing "
-                "-- stop other audio and retry"
-                % (channel, driven - floor))
+                "output %d: tone only %.1f dB above what was already "
+                "playing%s" % (channel, driven - floor,
+                               reason or " -- stop other audio and retry"))
             continue
         quiet = other_run.get(channel)
         response = 999.0 if quiet is None else driven - quiet
@@ -212,8 +274,8 @@ def check_route(name: str, outputs: Tuple[int, ...], left: Dict[int, float],
         if response < MIN_RESPONSE_DB:
             problems.append(
                 "output %d responds to the %s tone by only %.1f dB -- it is "
-                "not carrying that channel alone"
-                % (channel, side, response))
+                "not carrying that channel alone%s"
+                % (channel, side, response, explain_silence(channel, state)))
     finding["problems"] = problems
     finding["ok"] = not problems
     return finding
@@ -254,6 +316,10 @@ def main() -> int:
             left = measure(reader, left_wav, args.sink)
             right = measure(reader, right_wav, args.sink)
             reports = reader.reports
+            measured_outputs = sorted({c for route in pairs
+                                       for c in route.output})
+            output_state = reader.output_state(config.osc_port,
+                                               measured_outputs)
         finally:
             reader.close()
 
@@ -269,7 +335,7 @@ def main() -> int:
         if route.playback != (1, 2):
             continue
         findings.append(check_route(route.name, route.output, left,
-                                    right, silence))
+                                    right, silence, output_state))
 
     evidence = {
         "measured": time.strftime("%Y-%m-%dT%H:%M:%S"),
