@@ -4,6 +4,7 @@
 set -euo pipefail
 
 BIN_DIR="$HOME/.local/bin"
+LIB_DIR="$HOME/.local/lib/oscmix-autostart"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/oscmix"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -24,6 +25,7 @@ systemctl --user stop oscmix.service 2>/dev/null || true
 systemctl --user disable --quiet oscmix.service 2>/dev/null || true
 
 info "removing installed files"
+rm -rf "$LIB_DIR"
 rm -f "$UNIT_DIR/oscmix.service" \
       "$BIN_DIR/oscmix-session" \
       "$BIN_DIR/oscmix-launch" \

@@ -32,8 +32,8 @@ def test_prompt_reporting_hint(session_mod):
     assert prompt("/output/5/stereo") is True
 
 
-def test_register_matches_with_float_tolerance(session_mod):
-    match = session_mod._register_matches
+def test_register_matches_with_float_tolerance(verify_mod):
+    match = verify_mod._register_matches
     assert match("fi", (0.0, 0), (0.4, 0)) is True       # quantization
     assert match("fi", (0.0, 0), (0.6, 0)) is False      # real deviation
     assert match("fi", (0.0, 0), (0.0, 5)) is False      # int mismatch

@@ -8,8 +8,9 @@ testpaths = ["tests"]
 filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
 
 [tool.ruff]
-# The executables in bin/ have no .py suffix.
-include = ["tests/**/*.py", "bin/oscmix-session", "bin/oscmix-launch"]
+# The runtime package plus the extension-less executables in bin/.
+include = ["lib/**/*.py", "tests/**/*.py", "bin/oscmix-session",
+           "bin/oscmix-launch"]
 # 3.9 is the oldest interpreter the CI matrix covers; keeping it means no
 # PEP 604 unions (`X | None`) and no PEP 585 builtins in evaluated
 # annotations, which is why the modernization rules stay off below.
@@ -41,7 +42,12 @@ ignore = [
 
 [tool.coverage.run]
 branch = true
-source = ["bin"]
+source = ["lib/oscmix_autostart", "bin"]
+# The integration tests run oscmix-session as a real subprocess. Without
+# this the branches they exercise look untested, which understates the
+# suite and hides which of them genuinely are.
+parallel = true
+concurrency = ["thread"]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -51,6 +57,8 @@ exclude_lines = [
 ]
 # A ratchet, not a target: it sits just under what the suite covers today
 # so coverage cannot silently erode. Raise it when it earns the raise.
-# The launcher scores low because its tests exercise it as a subprocess,
-# which this measurement does not follow into.
-fail_under = 60
+#
+# It jumped from 60 to 84 when subprocess measurement was switched on --
+# the integration tests always drove the entry point, session and CLI, the
+# numbers just never showed it. Nothing about the tests changed.
+fail_under = 84

@@ -1,5 +1,6 @@
 PYTHON ?= python3
 SCRIPTS = bin/oscmix-session bin/oscmix-launch
+PACKAGE = lib/oscmix_autostart
 SHELL_SCRIPTS = install.sh uninstall.sh
 # Repeats for the flakiness gate. The suite binds real UDP sockets and
 # runs background threads, so a single green run proves little.
@@ -20,14 +21,22 @@ lint:
 	$(PYTHON) -m ruff check .
 	shellcheck $(SHELL_SCRIPTS)
 
+# --strict on the package: it is the whole runtime, and nothing in it has
+# an excuse for an untyped boundary. The bin/ shims stay on the relaxed
+# setting because they exist to bootstrap sys.path before any import.
 typecheck:
+	$(PYTHON) -m mypy --strict $(PACKAGE)
 	$(PYTHON) -m mypy --ignore-missing-imports --scripts-are-modules $(SCRIPTS)
 
 deadcode:
-	$(PYTHON) -m vulture $(SCRIPTS) tests/ --min-confidence 80
+	$(PYTHON) -m vulture $(PACKAGE) $(SCRIPTS) tests/ --min-confidence 80
 
+# parallel mode plus a combine step: the integration tests measure the
+# session subprocess too, and each process writes its own data file.
 coverage:
+	$(PYTHON) -m coverage erase
 	$(PYTHON) -m coverage run -m pytest -q
+	$(PYTHON) -m coverage combine
 	$(PYTHON) -m coverage report
 
 # Runs the suite repeatedly: races in the UDP/threading fakes only show up

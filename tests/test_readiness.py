@@ -71,15 +71,17 @@ def test_find_stale_backends_skips_unreadable_entries(session_mod, tmp_path):
     (proc / "200").mkdir(parents=True)
     (proc / "200" / "comm").write_text("oscmix\n")
     (proc / "200" / "cmdline").write_bytes(b"oscmix\x00")
-    real_stat = session_mod.Path.stat
+    from oscmix_autostart import process
+
+    real_stat = process.Path.stat
 
     def failing_stat(self, *args, **kwargs):
         if self.name == "200":
             raise PermissionError("ownership unreadable")
         return real_stat(self, *args, **kwargs)
 
-    session_mod.Path.stat = failing_stat
+    process.Path.stat = failing_stat
     try:
         assert session_mod.find_stale_backends(proc) == []
     finally:
-        session_mod.Path.stat = real_stat
+        process.Path.stat = real_stat

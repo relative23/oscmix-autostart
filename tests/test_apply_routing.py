@@ -206,20 +206,20 @@ def test_route_messages_is_the_two_phases_in_order(session_mod):
         session_mod.link_messages(route) + session_mod.mix_messages(route))
 
 
-def test_routing_is_applied_even_when_the_echo_never_arrives(session_mod,
+def test_routing_is_applied_even_when_the_echo_never_arrives(routing_mod, session_mod,
                                                              monkeypatch):
     # A device that stays silent must not cost more than the timeout, and
     # the mix has to be sent regardless -- degraded beats no audio.
-    monkeypatch.setattr(session_mod, "LINK_ECHO_TIMEOUT", 0.2)
+    monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.2)
     device = run_apply(session_mod, [make_route(session_mod)], echo=False)
     assert [p for p, _ in device.mix_writes] == ["/mix/5/playback/1"]
 
 
-def test_falls_back_to_a_fixed_wait_when_the_port_is_taken(session_mod,
+def test_falls_back_to_a_fixed_wait_when_the_port_is_taken(routing_mod, session_mod,
                                                            monkeypatch):
     # The mixer GUI holds the receive port; the echo is then unobservable
     # and apply_routing waits blind instead of skipping the barrier.
-    monkeypatch.setattr(session_mod, "LINK_SETTLE", 0.05)
+    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.05)
     send_port, recv_port = free_udp_port(), free_udp_port()
     blocker = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     blocker.bind(("127.0.0.1", recv_port))
@@ -427,11 +427,11 @@ def test_reapply_repeats_no_link_message(session_mod):
     assert [p for p in device.order if p.endswith("/stereo")] == []
 
 
-def test_mix_is_reapplied_even_when_the_dump_omits_the_links(session_mod,
+def test_mix_is_reapplied_even_when_the_dump_omits_the_links(verify_mod, session_mod,
                                                              monkeypatch):
     # Degraded beats silent: without the link report the state is unknown,
     # but leaving the matrix as written at startup is the worse option.
-    monkeypatch.setattr(session_mod, "VERIFY_TIMEOUT", 0.3)
+    monkeypatch.setattr(verify_mod, "VERIFY_TIMEOUT", 0.3)
     routes = [make_route(session_mod)]
     dump = [session_mod.encode_osc(path, types, *args)
             for path, types, args in session_mod.route_messages(routes[0])
@@ -440,11 +440,11 @@ def test_mix_is_reapplied_even_when_the_dump_omits_the_links(session_mod,
     assert device.order.count("/mix/5/playback/1") >= 1
 
 
-def test_blind_reapply_when_the_receive_port_is_taken(session_mod,
+def test_blind_reapply_when_the_receive_port_is_taken(routing_mod, session_mod,
                                                       monkeypatch):
     # The mixer GUI holds the port: nothing can be observed, so /refresh
     # still goes out to sync oscmix and the matrix follows after a wait.
-    monkeypatch.setattr(session_mod, "LINK_SYNC_BLIND_DELAY", 0.05)
+    monkeypatch.setattr(routing_mod, "LINK_SYNC_BLIND_DELAY", 0.05)
     routes = [make_route(session_mod, volume=0.0)]
     device = run_verify_and_repair(session_mod, routes, [], blocked=True)
     assert device.order == ["/refresh", "/mix/5/playback/1",

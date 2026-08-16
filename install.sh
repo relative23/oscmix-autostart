@@ -14,6 +14,7 @@ USB_PRODUCT="3fd9"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$PROJECT_DIR/build/oscmix"
 BIN_DIR="$HOME/.local/bin"
+LIB_DIR="$HOME/.local/lib/oscmix-autostart"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/oscmix"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -141,6 +142,17 @@ fi
 # --------------------------------------------------------------------------
 # Install oscmix-autostart components
 # --------------------------------------------------------------------------
+
+# The runtime package sits next to the entry point, which locates it as
+# <bin>/../lib/oscmix-autostart. Stale modules from an earlier version
+# would be importable and silently win, so the directory is replaced
+# wholesale rather than merged into.
+info "installing the runtime package to $LIB_DIR"
+rm -rf "$LIB_DIR/oscmix_autostart"
+mkdir -p "$LIB_DIR/oscmix_autostart"
+for module in "$PROJECT_DIR/lib/oscmix_autostart/"*.py; do
+    install -m 644 "$module" "$LIB_DIR/oscmix_autostart/$(basename "$module")"
+done
 
 info "installing scripts to $BIN_DIR"
 install_file 755 "$PROJECT_DIR/bin/oscmix-session" "$BIN_DIR/oscmix-session"

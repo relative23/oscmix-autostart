@@ -1,8 +1,12 @@
 """Shared test fixtures.
 
-The executables in bin/ have no .py extension, so they are imported via
-SourceFileLoader. Their ``if __name__ == "__main__"`` guards keep import
-side-effect free.
+Unit tests import the ``oscmix_autostart`` package directly; the thin
+executables in bin/ are covered end to end by the integration tests,
+which run them as real subprocesses.
+
+``bin/oscmix-launch`` is still a standalone script with no .py extension,
+so it is loaded via SourceFileLoader. Its ``if __name__ == "__main__"``
+guard keeps the import side-effect free.
 """
 
 import importlib.machinery
@@ -14,6 +18,7 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "lib"))
 
 
 def free_udp_port():
@@ -38,7 +43,37 @@ def load_executable(name):
 
 @pytest.fixture(scope="session")
 def session_mod():
-    return load_executable("oscmix-session")
+    """The runtime package: its public surface, as ``__all__`` defines it."""
+    import oscmix_autostart
+
+    return oscmix_autostart
+
+
+@pytest.fixture(scope="session")
+def routing_mod():
+    """Reach into routing for its own knobs.
+
+    Constants are imported by value, so patching them has to target the
+    module that reads them -- patching the package re-export would set an
+    attribute nobody consults.
+    """
+    from oscmix_autostart import routing
+
+    return routing
+
+
+@pytest.fixture(scope="session")
+def verify_mod():
+    from oscmix_autostart import verify
+
+    return verify
+
+
+@pytest.fixture(scope="session")
+def pipewire_mod():
+    from oscmix_autostart import pipewire
+
+    return pipewire
 
 
 @pytest.fixture(scope="session")

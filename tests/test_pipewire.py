@@ -31,11 +31,11 @@ def test_positions_follow_the_sink_layout_when_known(session_mod):
         session_mod.pipewire_positions((21,), aux)
 
 
-def test_parse_positions_from_spa_json_string(session_mod):
-    assert session_mod._parse_positions("[ AUX0, AUX1 ]") == ["AUX0", "AUX1"]
-    assert session_mod._parse_positions(["FL", "FR"]) == ["FL", "FR"]
-    assert session_mod._parse_positions("") is None
-    assert session_mod._parse_positions(None) is None
+def test_parse_positions_from_spa_json_string(pipewire_mod):
+    assert pipewire_mod._parse_positions("[ AUX0, AUX1 ]") == ["AUX0", "AUX1"]
+    assert pipewire_mod._parse_positions(["FL", "FR"]) == ["FL", "FR"]
+    assert pipewire_mod._parse_positions("") is None
+    assert pipewire_mod._parse_positions(None) is None
 
 
 def test_generated_conf_contains_sink_per_pair_route(session_mod):

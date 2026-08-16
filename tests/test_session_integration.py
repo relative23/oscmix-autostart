@@ -148,7 +148,22 @@ def make_env(tmp_path, *, with_client, with_usb, port=None, reply_port=None):
         "OSCMIX_LINK_SETTLE": "0.1",
         "OSCMIX_LINK_SYNC_DELAY": "0.2",
     })
+    _enable_subprocess_coverage(env)
     return env, stub_dir, backend
+
+
+def _enable_subprocess_coverage(env):
+    """Measure the session process these tests drive.
+
+    Only active under `coverage run`, so a plain pytest run spawns
+    subprocesses with an untouched environment.
+    """
+    if not os.environ.get("COVERAGE_RUN"):
+        return
+    env["COVERAGE_PROCESS_START"] = str(PROJECT_ROOT / "pyproject.toml")
+    hook_dir = str(Path(__file__).resolve().parent / "subprocess_coverage")
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = hook_dir + (os.pathsep + existing if existing else "")
 
 
 def run_session(args, env):
