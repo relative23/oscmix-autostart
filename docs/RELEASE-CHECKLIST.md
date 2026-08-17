@@ -61,7 +61,16 @@ Needs a Fireface attached, a running backend and a quiet bus. This is
 the only check that measures audio rather than messages, and it is the
 one that found all three defects in 0.1.3.
 
-- [ ] `make verify-hardware` -- exit 0.
+- [ ] `make verify-hardware` -- exit 0. **Name the sink explicitly**:
+      `python3 scripts/verify-hardware.py --sink <stereo-sink> --evidence
+      hardware-evidence.json`. The default sink is whatever PipeWire last
+      decided, and a USB replug can leave it as the interface's raw
+      20-channel `Direct` sink -- a stereo tone has nothing to land on
+      there, and the 0.2.0 release run got three convincing FAILs that
+      way with nothing wrong at all. The tool now *skips* (77) rather
+      than failing in that case, and records the sink in the artifact.
+- [ ] The artifact's `sink_channels` reads `["FL", "FR"]`. If it does
+      not, the measurement is not one.
 - [ ] `hardware-evidence.json` is attached to the release.
 - [ ] Its `routes` cover every route in the config that was measured,
       and every one has `ok: true`.

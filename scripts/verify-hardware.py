@@ -179,6 +179,65 @@ def backend_revision() -> Optional[str]:
     return result.stdout.strip() or None
 
 
+def sink_layout(sink: Optional[str]) -> Optional[Tuple[str, List[str]]]:
+    """The name and channel layout of the sink the tone will go to.
+
+    Returns None when PipeWire cannot be asked, which is not an error --
+    the measurement simply proceeds without the check.
+
+    This exists because the tool once produced three identical, entirely
+    convincing FAILs that had nothing to do with the routing: a USB
+    replug had left the *default* sink as the interface's raw 20-channel
+    Direct sink (`AUX0..AUX19`). A stereo WAV played into that has no
+    FL/FR to land on, so the tone arrived weak and on the wrong
+    channels, and every route "failed". The same command with an
+    explicit stereo sink passed.
+
+    A release gate that reports a broken routing when it is really an
+    unusable measurement is as bad as one that misses a real fault, so
+    that case is now a *skip* with the reason, not a failure.
+    """
+    try:
+        dump = subprocess.run(["pw-dump"], capture_output=True, text=True,
+                              check=False, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    try:
+        objects = json.loads(dump.stdout)
+    except ValueError:
+        return None
+
+    sinks = {}
+    default = None
+    for obj in objects:
+        props = ((obj.get("info") or {}).get("props")) or {}
+        if props.get("media.class") == "Audio/Sink":
+            name = props.get("node.name")
+            position = props.get("audio.position") or []
+            if isinstance(position, str):
+                position = position.strip("[] ").replace(",", " ").split()
+            if name:
+                sinks[name] = [str(x) for x in position]
+        # The metadata object carries the default sink under
+        # 'default.audio.sink', as {"name": "..."}.
+        for entry in obj.get("metadata") or []:
+            if entry.get("key") == "default.audio.sink":
+                value = entry.get("value")
+                if isinstance(value, dict):
+                    default = value.get("name")
+
+    name = sink or default
+    if name is None or name not in sinks:
+        return None
+    return name, sinks[name]
+
+
+def is_stereo(positions: Sequence[str]) -> bool:
+    """Whether a tone written as stereo will land where it is meant to."""
+    upper = [p.upper() for p in positions]
+    return len(upper) == 2 and upper[0].startswith("FL") and upper[1].startswith("FR")
+
+
 def play(wav: Path, sink: Optional[str]) -> None:
     command = ["pw-play"]
     if sink:
@@ -299,6 +358,16 @@ def main() -> int:
         print("skip: no stereo routes configured", file=sys.stderr)
         return EXIT_SKIP
 
+    layout = sink_layout(args.sink)
+    if layout is not None and not is_stereo(layout[1]):
+        print("skip: %s is a %d-channel sink (%s), not stereo -- a stereo "
+              "tone has nothing to land on there and every route would "
+              "'fail'. Name a stereo sink with --sink."
+              % (layout[0], len(layout[1]),
+                 " ".join(layout[1][:4]) + (" ..." if len(layout[1]) > 4 else "")),
+              file=sys.stderr)
+        return EXIT_SKIP
+
     try:
         reader = LevelReader(config.osc_recv_port)
     except OSError:
@@ -340,6 +409,11 @@ def main() -> int:
     evidence = {
         "measured": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "device": config.device_name,
+        # Without this the measurement is not reproducible: the same
+        # command on the same machine passes or fails depending on which
+        # sink the tone went to, and that used to be recorded nowhere.
+        "sink": layout[0] if layout else (args.sink or "(default, unresolved)"),
+        "sink_channels": layout[1] if layout else None,
         "oscmix_revision": backend_revision(),
         "min_response_db": MIN_RESPONSE_DB,
         "min_above_background_db": MIN_ABOVE_BACKGROUND_DB,

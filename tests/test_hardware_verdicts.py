@@ -229,3 +229,45 @@ def test_a_quiet_but_not_shut_fader_is_reported_with_its_value(harness):
                6: {"volume": -40.0, "mute": 0}})
     assert not verdict["ok"]
     assert any("-40.0 dB" in problem for problem in verdict["problems"])
+
+
+# --------------------------------------------------------------------------
+# Where the tone was played is part of the measurement.
+#
+# Found during the 0.2.0 release run: `make verify-hardware` produced
+# three identical, entirely convincing FAILs -- every route "not carrying
+# that channel alone". Nothing was wrong with the routing. A USB replug
+# had left the *default* PipeWire sink as the interface's raw 20-channel
+# Direct sink (AUX0..AUX19); a stereo WAV has no FL/FR to land on there,
+# so the tone arrived weak and on the wrong channels. The same command
+# with `--sink oscmix.main-out` passed at 98.3 dB.
+#
+# Two defects, not one:
+#   - the tool could not tell an unusable measurement from a broken
+#     routing, and reported the more alarming of the two;
+#   - the artifact did not record which sink the tone went to, so the
+#     same command on the same machine was not reproducible.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize(("positions", "stereo"), [
+    (["FL", "FR"], True),
+    (["fl", "fr"], True),
+    (["FL", "FR", "LFE"], False),
+    (["FR", "FL"], False),                       # order matters for a WAV
+    (["AUX0", "AUX1"], False),
+    ([f"AUX{n}" for n in range(20)], False),     # the sink that caused this
+    ([], False),
+    (["MONO"], False),
+])
+def test_only_a_real_stereo_sink_counts_as_stereo(harness, positions, stereo):
+    assert harness.is_stereo(positions) is stereo
+
+
+def test_the_verdict_records_the_sink_that_was_measured(harness):
+    # A measurement whose most important variable is unrecorded is not
+    # evidence. The release checklist attaches this artifact to a tag.
+    import inspect
+
+    source = inspect.getsource(harness.main)
+    assert '"sink"' in source, "the evidence no longer records the sink"
+    assert '"sink_channels"' in source
