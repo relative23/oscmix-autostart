@@ -890,11 +890,21 @@ someone else's project without anyone checking it against the device.
 
 So, as work items rather than complaints:
 
-- **Offer the cache-synchronisation patch.** `setbool` not updating
-  oscmix's own view is the single root cause of `LINK_ECHO_TIMEOUT`,
-  `LINK_SETTLE` and `LINK_SYNC_BLIND_DELAY`. Upstream accepting a patch
-  that syncs link state on write would delete that entire class of
-  timing constant from this codebase.
+- ~~Offer the cache-synchronisation patch.~~ **Offered as
+  [michaelforney/oscmix#31](https://github.com/michaelforney/oscmix/pull/31)**
+  on 2026-08-17, 28 lines, nothing changed on the wire. `setbool` not
+  updating oscmix's own view is the single root cause of
+  `LINK_ECHO_TIMEOUT`, `LINK_SETTLE` and `LINK_SYNC_BLIND_DELAY`, and
+  the patch makes the output side consistent with `setinputstereo()`,
+  which already updates on write. Measured at the point that reads the
+  flag (`patches/README.md`): unpatched `setlevel` sees `stereo=0` on a
+  pair that was just linked, patched it sees `1`.
+
+  *If it is accepted, the order is fixed by
+  [ADR 0008](decisions/0008-pinned-upstream-revision.md): bump the pin,
+  measure on hardware, **then** delete the three constants. Not before —
+  that would remove the workaround for a fix this project has not yet
+  shipped against.*
 - ~~File the `unexpected enum value -1` issue.~~ **Filed as
   [michaelforney/oscmix#30](https://github.com/michaelforney/oscmix/issues/30)**
   on 2026-08-17. Traced to

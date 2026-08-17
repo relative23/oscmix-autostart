@@ -12,7 +12,9 @@ Each patch is against the pinned revision
 
 ## 0001 -- update our view of output stereo on write
 
-**Status:** written, built, and measured. Not yet offered.
+**Status:** offered as [michaelforney/oscmix#31][pr31] on 2026-08-17.
+
+[pr31]: https://github.com/michaelforney/oscmix/pull/31
 
 ### What it changes
 
