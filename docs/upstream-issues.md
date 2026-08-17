@@ -1,7 +1,7 @@
 # Upstream issues
 
-Drafts for [michaelforney/oscmix][oscmix], and the record of one that was
-**not** filed because it did not reproduce.
+One issue filed with [michaelforney/oscmix][oscmix], and the record of a
+second that was **not** filed because it did not reproduce.
 
 The roadmap treats upstream limits as work items rather than weather. It
 also means those items are held to the same standard as everything else
@@ -14,9 +14,12 @@ All observations below are against the pinned revision
 
 ---
 
-## 1. Ready to file: `unexpected enum value -1` from `/controlroom/mainout`
+## 1. Filed: `unexpected enum value -1` from `/controlroom/mainout`
 
-**Status:** drafted, not filed. Reproducible on every start.
+**Status:** filed as [michaelforney/oscmix#30][issue30] on 2026-08-17.
+Reproducible on every start.
+
+[issue30]: https://github.com/michaelforney/oscmix/issues/30
 
 ### Title
 

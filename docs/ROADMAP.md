@@ -895,7 +895,9 @@ So, as work items rather than complaints:
   `LINK_SETTLE` and `LINK_SYNC_BLIND_DELAY`. Upstream accepting a patch
   that syncs link state on write would delete that entire class of
   timing constant from this codebase.
-- **File the `unexpected enum value -1` issue.** Traced to
+- ~~File the `unexpected enum value -1` issue.~~ **Filed as
+  [michaelforney/oscmix#30](https://github.com/michaelforney/oscmix/issues/30)**
+  on 2026-08-17. Traced to
   `/controlroom/mainout`, which this device reports as `-1` -- outside
   the ten names `CTLROOM_MAINOUT` declares, so `oscsendenum()` takes its
   fallback branch and sends `,i` instead of `,is`. 42 occurrences in 24 h
