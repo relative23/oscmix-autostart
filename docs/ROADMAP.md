@@ -927,10 +927,13 @@ So, as work items rather than complaints:
   than a fix, and the cache-synchronisation patch above is the one that
   earns its keep.
 
-## Structural work before the surface grows (0.3.0)
+## Structural work before the surface grows (0.3.0) -- **done**
 
-Three refactors that are cheap now and expensive after the feature work.
-They belong to the same window and largely to the same session.
+Three refactors that were cheap before the feature work and expensive
+after. They landed in the same window, in the order their dependencies
+forced: the register model first (the other two read it), the reconciler
+second, the seam third, and the write path moved onto the plan last with
+a hardware measurement on each side.
 
 ### A backend seam -- **done**
 
@@ -967,7 +970,7 @@ That ties the upstream work to the code: when
 the pin moves, flipping the first flag is the change, and ADR 0008 fixes
 the order -- bump, measure, *then* delete the constants.
 
-### The register model as data
+### The register model as data -- **done**
 
 The channel-state work multiplies the register surface by roughly ten.
 Which channels have `48v` (1-2), `hi-z` (3-4), `reflevel` (3-8), which
@@ -983,6 +986,24 @@ are UCX II facts, not Fireface facts. A model without a device dimension
 casts this one interface into the data structure and puts the untested 802
 permanently out of reach -- in the very refactor that could have brought
 it closer.
+
+*Done:* `src/oscmix_autostart/registers.py`. Every channel range was read
+out of `tests/data/refresh-dump.json` rather than typed from the manual,
+and `tests/test_registers.py` holds each claim against that recording and
+against the cold-plug timeline. The 802 is listed and declares nothing --
+"may work" as a property of the data instead of a sentence in a README.
+
+Two ranges would have been wrong if guessed, which is the argument for
+deriving them: **the meters run to 22 while every settable register stops
+at 20**, so a single channel count per device is already wrong; and
+`/mix/<out>/input/<in>` appeared only on odd channels, which is *link
+state* (linked pairs fold onto the odd channel) and deliberately not
+modelled.
+
+*First consumer:* `config.py` validates channels against the device
+instead of against `CHANNEL_MIN..CHANNEL_MAX` (1..64, which describes no
+interface). `output = 40/41` on a UCX II used to parse, apply, and do
+nothing.
 
 ### Desired state, observed state, plan -- **done**
 
@@ -1038,14 +1059,37 @@ cycles.
 
 ## 0.3.0 -- the whole signal path, declared
 
-The feature depth, on top of a base that can carry it. A finding that
-shapes it: **`/mix/<out>/input/<in>` appears in the device dump;
+The feature depth, on top of a base that can carry it. **The base is
+built** -- register model, reconciler and seam are done, and the write
+path runs through the plan. What is left here is the surface itself.
+
+Two findings shape it, and both are now recordings rather than
+recollections (`tests/data/refresh-dump.json`,
+`tests/data/cold-plug-timeline.json`), checked by
+`tests/test_registers.py`:
+
+**`/mix/<out>/input/<in>` appears in the device dump;
 `/mix/<out>/playback/<pb>` does not.** Almost all of the new surface is
 therefore verifiable, unlike the playback matrix this project started
-with. Confirmed present in a dump: input `48v` (ch 1-2), `hi-z` (3-4),
-`reflevel` (3-8), `gain`, `mute`, `phase`, `stereo`; output `mute`, `pan`,
-`reflevel`, `phase`, `volume`, `stereo`. Confirmed absent and therefore
-write-only: `/input/*/name`, `/output/*/name`, `/output/*/loopback`.
+with. Confirmed present: input `48v` (ch 1-2), `hi-z` (3-4), `reflevel`
+(3-8), `gain`, `mute`, `phase`, `stereo`; output `mute`, `reflevel`,
+`phase`, `volume`, `stereo`. Confirmed absent and therefore write-only:
+`/input/*/name`, `/output/*/name`, `/output/*/loopback`.
+
+**A cold plug delivers an incomplete dump, and this is the one that
+lands on 0.3.0.** After a real USB replug, 1234 of 1932 non-meter
+registers arrived within seconds and nothing followed for the next
+272 s. Only the stereo flags came back for *every* channel -- which is
+why 0.2.0 works and why nothing noticed. `/output/N/mute` came back for
+channels 1, 2, 3, 8, 9 and 10 and not for 4-7 or 11-20: ragged, so a
+truncated stream rather than a rule.
+
+That is exactly the surface `[output:N]` proposes to verify. A
+verification class derived from a *warm* dump would call those registers
+verifiable and then report them unconfirmed on every cold boot. The
+model records only what is known to arrive whole and refuses to answer
+for the rest; the feature work has to respect that rather than discover
+it in the field.
 
 - **Hardware input routing** -- `input = 1/2` as a route source.
   Zero-latency direct monitoring, the reason TotalMix exists on a
@@ -1061,9 +1105,18 @@ write-only: `/input/*/name`, `/output/*/name`, `/output/*/loopback`.
 - **The pin/remember model** -- today's implicit rule made selectable per
   option. `48v` wants pinning; a monitor fader wants remembering.
 
-**Prerequisite:** item **B**. `--dump-config` makes the file
-machine-generated and profiles make it plural; both are unshippable until
-the compatibility rule for `routing.conf` is decided.
+**Prerequisite, and it is met.** `--dump-config` makes the file
+machine-generated and profiles make it plural, so neither was shippable
+until `routing.conf` had a compatibility rule. It has one:
+[ADR 0006](decisions/0006-routing-conf-compatibility.md) -- an unknown
+section warns and the rest of the file is applied, an unknown option in
+a known section stays an error, no schema version.
+
+What that leaves for the feature work: every new section
+(`[input:N]`, `[output:N]`, `[profile:...]`) is *by construction* safe
+to read on an older install, and every new option inside an existing
+section is not. That asymmetry is a constraint on where new settings may
+go, not just a parser detail.
 
 ### What a new register family costs
 
@@ -1071,18 +1124,27 @@ Every item above multiplies the surface, so the bar for adding one is
 fixed in advance rather than argued per feature. A register family is done
 when:
 
-1. it has a row in the register model -- path template, type tags, value
-   domain, valid channels **per device**, verification class;
+1. it has a row in the register model -- path template, type tags,
+   valid channels **per device**, verification class, and whether a cold
+   plug reports it for every channel. `registers.py` exists now, so this
+   is filling in a row rather than inventing a structure; the row is
+   checked against the recordings, so a claim the device does not
+   support is a failing test rather than a surprise on a user's desk;
 2. a contract test states what its config section writes, as written paths
    ⊆ declared paths -- the rule the `volume` bug produced;
 3. the round trip covers it: `--dump-config` → apply → dump is a fixed
    point;
 4. if it is audible, a case in `verify-hardware` and a line in the
-   release's evidence artifact;
+   release's evidence artifact -- which now measures *every* route from
+   the sink that feeds it, and names any it could not measure rather
+   than omitting them (`complete` in the artifact);
 5. if a decision had to be made, an ADR.
 
 None of that is new machinery invented for 0.3.0. It is the 0.2.0
-apparatus, applied by default instead of on request.
+apparatus, applied by default instead of on request -- and after the
+structural work above, points 1 and 3 are cheap: a row in a table, and a
+round trip through `desired`/`observed`/`plan` rather than a fifth path
+over the same data.
 
 ### Verification classes, declared per register
 
@@ -1100,9 +1162,21 @@ which one it is:
   checked.
 
 Naming the class is what keeps verification from over-claiming as the
-surface grows. Today that distinction lives in `register_promptly_reported`
-and in prose, which is fine for six registers and not for sixty. It should
-be derived from the recorded dump of item **L**, not typed out twice.
+surface grows. It used to live in `register_promptly_reported` and in
+prose, which was fine for six registers and not for sixty.
+
+*It is data now:* `registers.verify_class` answers it per register, and
+`reconcile.plan` reads that answer instead of branching -- so
+"re-established" is a row in a table rather than a special case in the
+routing code. The classes were checked against the recording, not
+asserted: everything declared verifiable is in the dump, everything
+declared write-only is absent, and the playback matrix is the only
+re-established family.
+
+The fourth dimension the recordings added is *when*, not *whether*: a
+register can be verifiable in a warm dump and absent after a cold plug.
+`registers.cold_plug_complete` answers that separately, and it answers
+False for anything nobody measured whole.
 
 ### Dangerous registers get their own rule
 
