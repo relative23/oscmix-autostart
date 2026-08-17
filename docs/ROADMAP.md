@@ -104,7 +104,7 @@ What 0.2.0 moved, measured rather than claimed (2026-08-16):
 |---|---|---|
 | runtime layout | 1386 lines, one file | 15 modules, 2119 lines, two shims of 52 and 42 lines |
 | longest function | 106 lines | 66 (`verify_and_repair`), under the 70 ceiling |
-| tests | 118 | 385 cases from 274 test functions |
+| tests | 118 | 392 cases from 281 test functions |
 | coverage | 65% (subprocess unmeasured) | 94% measured, gate at 94 |
 | `mypy --strict` | 12 errors | clean, 15 files |
 | mutation score | not runnable | 0.643 over the whole runtime, floor 0.63 |
