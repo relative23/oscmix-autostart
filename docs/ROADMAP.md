@@ -324,7 +324,7 @@ verification and re-apply share one `/refresh`, why `volume` is opt-in.
 Each of those took a measurement session to derive; none of them should
 have to be rediscovered.
 
-## Still open in 0.2.0
+## What 0.2.0 closed
 
 Twelve items, in the order I would close them. **A** and **C** are
 leftovers from the nine above; **B** and **D** to **F** are gaps the
@@ -340,12 +340,20 @@ artifact, and a coverage gate seven points below what the suite earned.
 -- that is the reason it existed, and worth more than a tick -- followed
 by a *Closed:* line naming what proves it.
 
-What is left is not an item. It is the release: `hardware-evidence.json`
-exists and passes, and the checklist requires it to be *attached to a
-tag* that does not exist yet. Nothing in this section is work; the
-heading stays until 0.2.0 ships, because a "Still open" section that
-empties itself before the release is how a claim outruns its evidence
--- which is the failure mode this entire release was about.
+Nothing in this section is work any more. The heading read *Still open*
+until the tag existed, because a "Still open" section that empties
+itself before the release is how a claim outruns its evidence -- which
+is the failure mode this entire release was about. `v0.2.0` is tagged
+and `hardware-evidence.json` is attached to it, so the section can say
+what it did.
+
+The release run itself found one more, which is the argument for having
+a checklist at all: `make verify-hardware` reported three convincing
+FAILs that were an unplayable tone, not a broken routing. A USB replug
+had left the default PipeWire sink as the interface's raw 20-channel
+`Direct` sink. The tool now skips rather than failing in that case, and
+records the sink in the artifact -- a measurement whose decisive
+variable is unrecorded is not evidence.
 
 Three things were found while closing these. The first was settled by
 going and measuring the condition that was missing; the other two are

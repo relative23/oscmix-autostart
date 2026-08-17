@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased -- 0.2.0
+## 0.2.0 (2026-08-17)
 
 A maturity release: no new device features. Everything here makes the
 existing behaviour provably correct and cheap to change, because 0.3.0
