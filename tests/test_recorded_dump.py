@@ -155,11 +155,15 @@ def test_the_measured_dump_disagrees_with_the_prose_and_says_so(
     thousand messages over MIDI for many seconds". **Measured against the
     pinned revision, it arrives at 0.0 s and the whole dump takes 1.9 s.**
 
-    Nothing was changed on the strength of that, and this test does not
-    ask for it to be. The condition not measured is a cold *device*: this
-    was an already-enumerated UCX II with only the backend restarted, and
-    LINK_SYNC_BLIND_DELAY=20 exists for the hotplug case. What this test
-    does is hold the disagreement in place -- with the number attached --
+    That was first measured with only the backend restarted, which left
+    a cold *device* as the untested condition and
+    LINK_SYNC_BLIND_DELAY=20 with an excuse. It no longer has one: see
+    tests/data/cold-plug-timeline.json, captured across a real USB
+    replug on both OSC ports. /playback/*/stereo arrives at 0.0 s there
+    too -- before the session has sent a single message -- and the link
+    registers come back 0.01 s after the /refresh that asks for them.
+
+    This test holds the disagreement in place with the number attached,
     so the next person meets a measurement rather than a memory.
 
     It is also why the discrepancy went unseen: the verify loop exits as
@@ -179,3 +183,115 @@ def test_the_measured_dump_disagrees_with_the_prose_and_says_so(
     # Changing this is a behaviour change on a path that has not been
     # measured after a real hotplug -- so it is a decision, not a tidy-up.
     assert session_mod.register_promptly_reported("/playback/1/stereo") is False
+
+
+# --------------------------------------------------------------------------
+# The cold-plug timeline: what the device actually does after a replug.
+#
+# tests/data/cold-plug-timeline.json was captured with tcpdump on *both*
+# OSC ports during a real USB replug, so a request (7222) can be told
+# apart from a device push (8222). An earlier capture read only 8222 and
+# could not make that distinction, which left a burst of 624 registers
+# unattributable.
+#
+# This is the evidence LINK_SYNC_BLIND_DELAY rests on, and it is the
+# condition the prose in this repository has always described without
+# ever having measured it.
+# --------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def cold():
+    return json.loads(repo_file("tests", "data", "cold-plug-timeline.json")
+                      .read_text())
+
+
+def test_the_cold_plug_timeline_names_its_revision(cold):
+    assert len(cold["oscmix_revision"]) == 40
+    assert "replug" in cold["condition"]
+    assert cold["observed_seconds"] > 120, (
+        "too short to say anything about what does *not* happen later")
+
+
+def test_the_link_registers_arrive_long_before_the_blind_delay_expires(cold):
+    """The number the blind re-apply waits out, measured.
+
+    When the mixer GUI holds the receive port the session cannot observe
+    the dump, so it waits LINK_SYNC_BLIND_DELAY and then rewrites the
+    mix. That wait is only honest if it outlasts the device -- and only
+    useful if it does not outlast it by an order of magnitude.
+    """
+    from oscmix_autostart import constants
+
+    reports = cold["first_report_seconds"]
+    links = {p: t for p, t in reports.items()
+             if p.startswith("/output/") and p.endswith("/stereo")}
+    assert links, "no /output/*/stereo in the timeline at all"
+    slowest = max(links.values())
+    assert slowest < constants.LINK_SYNC_BLIND_DELAY, (
+        "the blind delay (%.0fs) is shorter than the device needs (%.2fs)"
+        % (constants.LINK_SYNC_BLIND_DELAY, slowest))
+    # Recorded so the margin is visible rather than implied: measured
+    # 2.26 s against a 20 s wait.
+    assert slowest < 5.0
+
+
+def test_the_dump_answers_almost_immediately(cold):
+    # The /refresh request and the reply that matters, from the same
+    # capture: 2.25 s and 2.26 s.
+    refresh = [t for t, paths in cold["requests_sent"] if "/refresh" in paths]
+    assert len(refresh) == 1, "expected exactly one /refresh: %s" % refresh
+    links = [t for p, t in cold["first_report_seconds"].items()
+             if p.startswith("/output/") and p.endswith("/stereo")]
+    assert min(links) - refresh[0] < 1.0, (
+        "the link registers took %.2fs to come back"
+        % (min(links) - refresh[0]))
+
+
+def test_playback_stereo_arrives_first_not_last(cold):
+    """Directly contradicts register_promptly_reported's docstring.
+
+    It says the /playback/* section "sits near the end of a dump that
+    streams several thousand messages over MIDI for many seconds".
+    Measured on a cold replug: 0.0 s, before anything else, and before
+    the session had even sent its first message.
+    """
+    reports = cold["first_report_seconds"]
+    playback = {p: t for p, t in reports.items()
+                if p.startswith("/playback/") and p.endswith("/stereo")}
+    assert playback
+    assert max(playback.values()) < 1.0
+    first_request = min(t for t, _paths in cold["requests_sent"])
+    assert min(playback.values()) < first_request, (
+        "the device reported the playback links before anything asked")
+
+
+def test_the_cold_dump_is_incomplete_and_that_matters_for_0_3_0(cold, dump):
+    """The finding that outlives this measurement.
+
+    A cold plug delivers a fraction of the register set within seconds
+    and the rest may not arrive for minutes -- 1234 of 1932 non-meter
+    registers here, with 276 s of observation and no second burst.
+
+    Everything *this* release verifies is in the fast part, which is why
+    nothing has ever noticed. 0.3.0's `[output:N]` sections are not:
+    /output/5/reflevel, /output/5/mute and /output/5/phase were never
+    reported at all. A verification class derived from the warm dump
+    would call them verifiable and then report them unconfirmed on every
+    cold boot.
+    """
+    warm = {p for p in dump["registers"]
+            if "/level" not in p and "/meter" not in p}
+    cold_seen = set(cold["first_report_seconds"])
+    assert len(cold_seen) < len(warm), "the cold dump was complete after all"
+    missing = warm - cold_seen
+    assert len(missing) > 100, "only %d missing" % len(missing)
+
+    # What this release depends on is present regardless.
+    for path in ("/output/1/stereo", "/output/5/stereo", "/output/7/stereo",
+                 "/output/1/volume", "/output/2/volume"):
+        assert path in cold_seen, "%s missing from a cold plug" % path
+
+    # What 0.3.0 plans to verify is not.
+    assert {"/output/5/reflevel", "/output/5/mute"} & missing, (
+        "the 0.3.0 channel-state registers came back this time; re-check "
+        "whether the warning in this test still applies")
