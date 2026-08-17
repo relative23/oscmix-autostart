@@ -932,7 +932,7 @@ So, as work items rather than complaints:
 Three refactors that are cheap now and expensive after the feature work.
 They belong to the same window and largely to the same session.
 
-### A backend seam
+### A backend seam -- **done**
 
 The OSC calls should sit behind a narrow interface, so the dependency on
 oscmix's behaviour is visible and replaceable rather than spread through
@@ -948,6 +948,24 @@ where upstream does not dump, and kills the cache race at the root. The
 cost is owning register decoding for devices that cannot be tested here,
 which is why it is not worth doing today -- and exactly why the seam and
 the register model go in while the surface is still small.
+
+*Done:* `src/oscmix_autostart/backend.py`. Six places used to open their
+own socket and know the address; a test asserts none remain outside the
+seam, because the seventh is what makes the option above expensive again.
+
+The part worth more than the tidying is `Traits`. The dependency on
+oscmix's *behaviour* used to be invisible -- spread through the control
+flow as timing constants with nothing naming what they worked around. It
+is now three declared, checked properties:
+`reports_link_state_on_write` (False, and the sole reason
+`LINK_ECHO_TIMEOUT`, `LINK_SETTLE` and `LINK_SYNC_BLIND_DELAY` exist),
+`dumps_playback_matrix` (False, asserted against the recorded dump), and
+`reports_unchanged_registers` (False).
+
+That ties the upstream work to the code: when
+[oscmix#31](https://github.com/michaelforney/oscmix/pull/31) lands and
+the pin moves, flipping the first flag is the change, and ADR 0008 fixes
+the order -- bump, measure, *then* delete the constants.
 
 ### The register model as data
 

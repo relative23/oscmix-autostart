@@ -5,11 +5,10 @@ See docs/OSC-PROTOCOL.md for why."""
 
 from __future__ import annotations
 
-import socket
-import struct
 import time
 from typing import Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
+from .backend import loopback
 from .config import Config, Route
 from .constants import (
     DEFAULT_OSC_RECV_PORT,
@@ -19,7 +18,6 @@ from .constants import (
     UNLINKED_GAIN_OFFSET,
 )
 from .log import log
-from .osc import decode_osc, encode_osc, iter_osc_messages
 
 # Asked before every write and between every phase of the background
 # verifier. See docs/decisions/0009-verifier-stop-contract.md: the
@@ -188,12 +186,8 @@ def await_link_echo(expected: Mapping[str, int], recv_port: int,
         return True
     if timeout is None:
         timeout = LINK_ECHO_TIMEOUT
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # No SO_REUSEADDR on purpose: a bind that succeeds alongside the
-        # mixer GUI would split oscmix's datagrams between both readers.
-        sock.bind(("127.0.0.1", recv_port))
-    except OSError:
+    listener = loopback(0, recv_port).listen()
+    if listener is None:
         return None
     pending = dict(expected)
     deadline = time.monotonic() + timeout
@@ -202,18 +196,9 @@ def await_link_echo(expected: Mapping[str, int], recv_port: int,
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return False
-            sock.settimeout(remaining)
-            try:
-                datagram, _ = sock.recvfrom(65536)
-            except socket.timeout:
-                return False
-            except OSError:
-                return False
-            for message in iter_osc_messages(datagram):
-                try:
-                    path, _tags, args = decode_osc(message)
-                except (ValueError, struct.error):
-                    continue
+            heard = False
+            for path, _tags, args in listener.messages(remaining):
+                heard = True
                 if path not in pending or not args:
                     continue
                 try:
@@ -222,9 +207,13 @@ def await_link_echo(expected: Mapping[str, int], recv_port: int,
                     continue
                 if reported == pending[path]:
                     del pending[path]
+            if not heard and pending:
+                # The listener yields nothing on a socket timeout, which
+                # is the only way this loop ends without the registers.
+                return False
         return True
     finally:
-        sock.close()
+        listener.close()
 
 
 def apply_routing(routes: Sequence[Route], port: int,
@@ -235,39 +224,35 @@ def apply_routing(routes: Sequence[Route], port: int,
     one burst is what silences every even output (see LINK_ECHO_TIMEOUT).
     """
     plan = routing_plan(routes)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        # Only the output links need the barrier: /playback/<n>/stereo goes
-        # through setinputstereo(), which updates oscmix's state right away,
-        # while /output/<n>/stereo relies on the device report.
-        for path, types, args in plan.links:
-            sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
+    device = loopback(port, recv_port)
+    # Only the output links need the barrier: /playback/<n>/stereo goes
+    # through setinputstereo(), which updates oscmix's state right away,
+    # while /output/<n>/stereo relies on the device report -- see
+    # backend.Traits.reports_link_state_on_write.
+    device.send(plan.links)
 
-        timeout = LINK_ECHO_TIMEOUT
-        echoed = await_link_echo(output_link_state(routes), recv_port, timeout)
-        if echoed is None:
-            log.info("link echo unobservable (UDP %d in use); waiting %.1fs",
-                     recv_port, LINK_SETTLE)
-            time.sleep(LINK_SETTLE)
-        elif not echoed:
-            # Normal when the pairs were already linked: no change, no echo.
-            log.info("no link change reported within %.1fs; mix matrix will "
-                     "be re-applied after the register sync", timeout)
-        else:
-            log.info("channel pairs linked and confirmed by the device")
+    timeout = LINK_ECHO_TIMEOUT
+    echoed = await_link_echo(output_link_state(routes), recv_port, timeout)
+    if echoed is None:
+        log.info("link echo unobservable (UDP %d in use); waiting %.1fs",
+                 recv_port, LINK_SETTLE)
+        time.sleep(LINK_SETTLE)
+    elif not echoed:
+        # Normal when the pairs were already linked: no change, no echo.
+        log.info("no link change reported within %.1fs; mix matrix will "
+                 "be re-applied after the register sync", timeout)
+    else:
+        log.info("channel pairs linked and confirmed by the device")
 
-        for path, types, args in plan.mix:
-            sock.sendto(encode_osc(path, types, *args), ("127.0.0.1", port))
-        for route in routes:
-            log.info(
-                "route %r: playback %s -> output %s at %+.1f dB",
-                route.name,
-                "/".join(map(str, route.playback)),
-                "/".join(map(str, route.output)),
-                route.level,
-            )
-    finally:
-        sock.close()
+    device.send(plan.mix)
+    for route in routes:
+        log.info(
+            "route %r: playback %s -> output %s at %+.1f dB",
+            route.name,
+            "/".join(map(str, route.playback)),
+            "/".join(map(str, route.output)),
+            route.level,
+        )
 
 
 def output_link_state(routes: Sequence[Route]) -> Dict[str, int]:
@@ -288,14 +273,8 @@ def output_link_state(routes: Sequence[Route]) -> Dict[str, int]:
 
 def send_mix(config: Config) -> None:
     """Write the mix matrix (and output volumes) of every route."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        for route in config.routes:
-            for path, types, args in mix_messages(route):
-                sock.sendto(encode_osc(path, types, *args),
-                            ("127.0.0.1", config.osc_port))
-    finally:
-        sock.close()
+    loopback(config.osc_port, config.osc_recv_port).send(
+        message for route in config.routes for message in mix_messages(route))
     log.info("mix matrix re-applied against the synchronized link state")
 
 
@@ -315,11 +294,7 @@ def blind_reapply_mix(config: Config,
     """
     if should_stop():
         return
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sock.sendto(encode_osc("/refresh"), ("127.0.0.1", config.osc_port))
-    finally:
-        sock.close()
+    loopback(config.osc_port, config.osc_recv_port).request_dump()
     log.info("register sync unobservable (UDP %d in use); re-applying mix "
              "after %.0fs", config.osc_recv_port, LINK_SYNC_BLIND_DELAY)
     if wait_unless_stopped(LINK_SYNC_BLIND_DELAY, should_stop):

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import socket
-import struct
 import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
+from .backend import loopback
 from .config import Config, Route
 from .constants import VERIFY_SETTLE, VERIFY_TIMEOUT
 from .log import log
-from .osc import decode_osc, encode_osc, iter_osc_messages
 from .reconcile import desired
 from .routing import (
     StopCheck,
@@ -101,32 +99,27 @@ class VerifyResult:
     unobserved: List[str]
 
 
-def _absorb_dump(datagram: bytes, registers: Registers,
-                 confirmed: Set[str], mismatched: Set[str],
-                 on_observed: Optional[Callable[[str, Sequence[object]],
-                                                None]]) -> None:
-    """Classify every register in one datagram of the device dump.
+def _absorb(report: Tuple[str, str, Sequence[object]], registers: Registers,
+            confirmed: Set[str], mismatched: Set[str],
+            on_observed: Optional[Callable[[str, Sequence[object]],
+                                           None]]) -> None:
+    """Classify one reported register against what was expected.
 
-    A datagram may be a bundle, so this is per datagram rather than per
-    message. Malformed messages are skipped rather than raised on: this
-    reads off a socket, and one bad message must not end a dump that is
-    otherwise confirming registers.
+    Decoding and the "skip a malformed message rather than end the dump"
+    rule moved into the backend seam, which is where reading off a
+    socket belongs. What is left here is the judgement.
     """
-    for message in iter_osc_messages(datagram):
-        try:
-            path, _tags, args = decode_osc(message)
-        except (ValueError, struct.error):
-            continue
-        if on_observed is not None:
-            on_observed(path, args)
-        expected = registers.get(path)
-        if expected is None or path in confirmed:
-            continue
-        if _register_matches(expected[0], expected[1], args):
-            confirmed.add(path)
-            mismatched.discard(path)
-        else:
-            mismatched.add(path)
+    path, _tags, args = report
+    if on_observed is not None:
+        on_observed(path, args)
+    expected = registers.get(path)
+    if expected is None or path in confirmed:
+        return
+    if _register_matches(expected[0], expected[1], args):
+        confirmed.add(path)
+        mismatched.discard(path)
+    else:
+        mismatched.add(path)
 
 
 def verify_routing(registers: Registers, send_port: int, recv_port: int,
@@ -153,14 +146,12 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
     confirmed: Set[str] = set()
     mismatched: Set[str] = set()
     prompt = {path for path in registers if register_promptly_reported(path)}
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    device = loopback(send_port, recv_port)
+    listener = device.listen()
+    if listener is None:
+        return None
     try:
-        try:
-            sock.bind(("127.0.0.1", recv_port))
-        except OSError:
-            return None
-        sock.settimeout(0.25)
-        sock.sendto(encode_osc("/refresh"), ("127.0.0.1", send_port))
+        device.request_dump()
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             # A stop request ends the window at the top of the loop, so
@@ -178,18 +169,14 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
                     break  # every register observed and matching
                 if prompt and prompt <= confirmed:
                     break  # the reliably-reported set fully matches
-            try:
-                datagram, _ = sock.recvfrom(65536)
-            except socket.timeout:
-                continue
-            _absorb_dump(datagram, registers, confirmed, mismatched,
-                         on_observed)
+            for report in listener.messages(0.25):
+                _absorb(report, registers, confirmed, mismatched, on_observed)
         unobserved = [path for path in registers
                       if path not in confirmed and path not in mismatched]
         return VerifyResult(sorted(confirmed), sorted(mismatched),
                             sorted(unobserved))
     finally:
-        sock.close()
+        listener.close()
 
 
 def _link_sync_observer(config: Config, pending_links: Dict[str, int],
