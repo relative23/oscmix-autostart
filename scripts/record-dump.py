@@ -208,11 +208,12 @@ def main() -> int:
             "/refresh) and passively (restart, listen 45 s, send nothing):",
             "2006 registers, all within ~2 s, no 15 s tail.",
             "",
-            "The condition NOT measured is a cold *device* -- this was an",
-            "already-enumerated UCX II with only the backend restarted.",
-            "The 15-20 s figure and LINK_SYNC_BLIND_DELAY=20 may still be",
-            "right for a fresh hotplug. Nothing was changed on the",
-            "strength of this; see the roadmap.",
+            "The cold device -- the condition this recording could not",
+            "cover, since only the backend was restarted -- is measured",
+            "separately in tests/data/cold-plug-timeline.json, captured",
+            "across a real USB replug on both OSC ports. It agrees: the",
+            "dump is over in ~4 s. LINK_SYNC_BLIND_DELAY is 5 s on that",
+            "evidence, see ADR 0010.",
         ],
         # [type tags, seconds after the /refresh]. One line per register:
         # a fixture nobody can read is a fixture nobody reviews.

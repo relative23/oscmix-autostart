@@ -157,7 +157,8 @@ def test_the_measured_dump_disagrees_with_the_prose_and_says_so(
 
     That was first measured with only the backend restarted, which left
     a cold *device* as the untested condition and
-    LINK_SYNC_BLIND_DELAY=20 with an excuse. It no longer has one: see
+    LINK_SYNC_BLIND_DELAY=20 with an excuse. It lost the excuse and then
+    the value: 5 s since ADR 0010. See
     tests/data/cold-plug-timeline.json, captured across a real USB
     replug on both OSC ports. /playback/*/stereo arrives at 0.0 s there
     too -- before the session has sent a single message -- and the link
@@ -295,3 +296,44 @@ def test_the_cold_dump_is_incomplete_and_that_matters_for_0_3_0(cold, dump):
     assert {"/output/5/reflevel", "/output/5/mute"} & missing, (
         "the 0.3.0 channel-state registers came back this time; re-check "
         "whether the warning in this test still applies")
+
+
+def test_the_blind_delay_is_derived_from_the_timeline_not_from_folklore(cold):
+    """The constant and its evidence, tied together.
+
+    LINK_SYNC_BLIND_DELAY was 20 s, from the same unrecorded observation
+    that produced the "15-20 s dump" figure. It is 5 s now, and this is
+    what makes that a measurement rather than a different guess: the
+    margin over the recorded worst case is asserted here, so shrinking
+    the constant without a new recording fails, and so does a pin bump
+    that makes the device slower without anyone re-recording.
+    """
+    from oscmix_autostart import constants
+
+    slowest_link = max(t for p, t in cold["first_report_seconds"].items()
+                       if p.startswith("/output/") and p.endswith("/stereo"))
+    margin = constants.LINK_SYNC_BLIND_DELAY / slowest_link
+    assert margin >= 2.0, (
+        "the blind delay is %.1fs against a measured %.2fs -- only %.1fx. "
+        "Either re-record tests/data/cold-plug-timeline.json or raise the "
+        "constant" % (constants.LINK_SYNC_BLIND_DELAY, slowest_link, margin))
+    # And an upper bound, which is the half nobody usually writes: a wait
+    # an order of magnitude past the evidence is not caution, it is an
+    # unmeasured number wearing caution's clothes. That is what 20 s was.
+    assert margin <= 10.0, (
+        "the blind delay is %.1fx the measured need (%.2fs); if the device "
+        "really is that slow, record it -- if it is not, shorten the wait"
+        % (margin, slowest_link))
+
+
+def test_the_blind_delay_still_fits_the_shutdown_budget(cold):
+    # It runs on the verifier thread, which the session joins for
+    # VERIFIER_STOP_GRACE before exiting (ADR 0009). The wait itself is
+    # interruptible, so the delay never gates shutdown -- but if it were
+    # ever made a plain sleep again, this is the number that would
+    # matter.
+    from oscmix_autostart import constants
+
+    assert constants.LINK_SYNC_BLIND_DELAY < 10.0, (
+        "a blind delay longer than TimeoutStopSec is only survivable "
+        "because wait_unless_stopped exists; see ADR 0009")

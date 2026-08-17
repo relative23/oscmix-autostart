@@ -347,21 +347,34 @@ heading stays until 0.2.0 ships, because a "Still open" section that
 empties itself before the release is how a claim outruns its evidence
 -- which is the failure mode this entire release was about.
 
-Two things were found while closing these and are recorded rather than
-acted on, because acting would have meant changing behaviour on a
-condition nobody measured:
+Three things were found while closing these. The first was settled by
+going and measuring the condition that was missing; the other two are
+recorded rather than acted on.
 
-- **The dump is 1.9 s, not 15-20 s.** Measured against the pinned
-  revision on a UCX II, twice (cold backend + immediate `/refresh`, and
-  passively for 45 s after a restart): 2002 registers, all inside 2 s.
-  `/playback/*/stereo` arrives at **0.0 s**, not "near the end of a dump
-  that streams for many seconds" as `register_promptly_reported` says.
-  The condition *not* measured is a cold **device** -- this was an
-  already-enumerated interface with only the backend restarted -- and
-  `LINK_SYNC_BLIND_DELAY = 20` exists for the hotplug case. So the
-  constant stands and the measurement is in
-  `tests/data/refresh-dump.json` with its conditions attached. Settling
-  it needs one measurement after a real replug.
+- **The dump is 1.9 s, not 15-20 s** -- and on a genuine cold plug the
+  link registers come back **0.01 s after the `/refresh`** that asks for
+  them, with the whole dump over in ~4 s and nothing following for the
+  next 272 s. Measured three times: warm backend, cold backend, and a
+  real USB replug captured on **both** OSC ports so a request can be told
+  apart from a device push (`tests/data/cold-plug-timeline.json`).
+  `/playback/*/stereo` arrives at **0.0 s** -- before the session has
+  sent a single message -- not "near the end of a dump that streams for
+  many seconds" as `register_promptly_reported` still says.
+
+  `LINK_SYNC_BLIND_DELAY` is **5 s** on that evidence (was 20).
+  [ADR 0010](decisions/0010-timing-constants-need-a-recording.md) states
+  the general rule this exposed: a device wait names the recording it
+  came from, and a test asserts the margin -- **at most 10x**, not just
+  at least 2x, because a wait an order of magnitude past its evidence is
+  an unmeasured number wearing caution's clothes.
+- **The cold dump is incomplete, and 0.3.0 should know.** 1234 of 1932
+  non-meter registers arrive; the missing 676 are almost all
+  `/output/*`. Everything this release verifies is in the fast part,
+  which is why nothing noticed -- but `/output/5/reflevel`,
+  `/output/5/mute` and `/output/5/phase` were never reported at all, and
+  those are what `[output:N]` plans to verify. A verification class
+  derived from the *warm* dump would call them verifiable and then report
+  them unconfirmed on every cold boot.
 - **The discrepancy went unseen because the verify loop hides it.** It
   exits as soon as the *prompt* set matches, so `/playback/*` was never
   looked at -- the classification made itself true.
@@ -597,7 +610,8 @@ and asserts *last* link < *first* mix rather than one link < one mix.
 
 *Today:* eight waits (`DEFAULT_DEVICE_TIMEOUT` 30 s, `PORT_READY_TIMEOUT`
 10 s, `LINK_ECHO_TIMEOUT` and `LINK_SETTLE` 1.5 s, `VERIFY_SETTLE`,
-`VERIFY_TIMEOUT` 10 s, `LINK_SYNC_BLIND_DELAY` 20 s, `CHILD_STOP_GRACE`
+`VERIFY_TIMEOUT` 10 s, `LINK_SYNC_BLIND_DELAY` 20 s (5 s since ADR
+0010), `CHILD_STOP_GRACE`
 5 s) and two systemd deadlines (`TimeoutStartSec=75`, `TimeoutStopSec=10`).
 The relationship between them lives in a comment in the unit file. The
 defaults fit -- device wait plus port wait plus barrier is ~41.5 s of the
@@ -646,7 +660,7 @@ case then has something to assert against.
 *Closed:* [ADR 0009](decisions/0009-verifier-stop-contract.md), and the
 code to match. The verifier asks `should_stop()` between every phase and
 before each of the three writes, and every wait wakes early
-(`wait_unless_stopped` replaced the sleeps -- the blind delay is 20 s
+(`wait_unless_stopped` replaced the sleeps -- the blind delay was 20 s
 against a `TimeoutStopSec` of 10, and it is the path a *user* hits,
 because it is taken when the mixer GUI holds the port). `run_session`
 joins the verifier for `VERIFIER_STOP_GRACE` (2 s) before exiting; 2 + 5
@@ -1078,9 +1092,13 @@ All measured, all things the design has to live with:
   **measured at 1.9 s** for 2002 registers on a UCX II whose backend was
   restarted (`tests/data/refresh-dump.json`), against the ~15-20 s this
   document asserted from an earlier, unrecorded observation. The
-  unmeasured case is a cold device after a replug, which is what
-  `LINK_SYNC_BLIND_DELAY = 20` is sized for, so the constant stands until
-  somebody measures a real hotplug.
+  The cold device after a replug has since been measured too
+  (`tests/data/cold-plug-timeline.json`, both OSC ports): the link
+  registers come back **0.01 s after the `/refresh`**, the dump is over
+  in ~4 s, and nothing follows for the next 272 s.
+  `LINK_SYNC_BLIND_DELAY` is **5 s** on that evidence -- see ADR 0010,
+  which also fixes the shape of the mistake: a constant whose
+  justification is a sentence rather than a file in `tests/data/`.
 - **The device reports a register only when it changes.** Writing a value
   it already holds produces no report, so "wait for the echo" cannot be
   the only synchronisation mechanism.

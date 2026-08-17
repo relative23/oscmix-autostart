@@ -61,9 +61,12 @@ Two properties make this awkward to wait out, both measured on a UCX II:
   "~15-20 s" from an unrecorded observation; the recorded one
   (`tests/data/refresh-dump.json`, pinned revision, backend restarted on
   an already-enumerated UCX II) is **1.9 s for 2002 registers**. Nothing
-  has been changed on the strength of that -- a cold device after a
-  replug is the condition nobody has measured, and it is the one
-  `LINK_SYNC_BLIND_DELAY = 20` exists for.
+  The cold device after a replug -- the condition that was still
+  unmeasured when this paragraph was written -- has since been recorded
+  too (`tests/data/cold-plug-timeline.json`): the link registers come
+  back **0.01 s after the `/refresh`** that asks for them, and the dump
+  is over in ~4 s. `LINK_SYNC_BLIND_DELAY` is 5 s on the strength of
+  that, see ADR 0010.
 
 The reliable sequence is therefore: send the links, send the mix so audio
 works, then send `/refresh` and re-send the mix once the dump has reported

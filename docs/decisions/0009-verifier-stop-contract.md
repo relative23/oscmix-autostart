@@ -22,7 +22,8 @@ point lands nowhere while the log claims a re-apply.
 `_apply_and_verify` starts `verify_and_repair` on a daemon thread. It
 read `stop_requested` and `child.poll()` **exactly once, before
 starting.** What follows can run for two verification windows
-(`VERIFY_TIMEOUT` 10 s each) plus `LINK_SYNC_BLIND_DELAY` (20 s), and it
+(`VERIFY_TIMEOUT` 10 s each) plus `LINK_SYNC_BLIND_DELAY` (20 s at the
+time, 5 s since ADR 0010), and it
 issues writes at three points:
 
 - `send_mix` from the dump observer, the moment every
@@ -46,9 +47,12 @@ three shipped defects were all invisible at message level.
 
 The blind delay is the case that mattered most in practice. It is taken
 when the receive port is held -- which means the mixer GUI is open, the
-*normal* desktop situation -- and at 20 s it is twice `TimeoutStopSec`.
-A `time.sleep` there guaranteed the session was still parked in it when
-systemd gave up.
+*normal* desktop situation -- and at 20 s it was twice
+`TimeoutStopSec`. A `time.sleep` there guaranteed the session was still
+parked in it when systemd gave up. ADR 0010 has since cut the delay to
+5 s on a measurement, which would fit inside the stop deadline anyway --
+but the contract does not rest on that, because two `VERIFY_TIMEOUT`
+windows still do not.
 
 ## The numbers have to compose
 

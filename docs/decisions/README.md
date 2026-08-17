@@ -20,3 +20,4 @@ silences half the outputs.
 | [0007](0007-growth-order-not-wall-clock.md) | Performance gates measure growth order, not wall-clock time |
 | [0008](0008-pinned-upstream-revision.md) | The upstream backend is pinned, and the pin moves only after a measurement |
 | [0009](0009-verifier-stop-contract.md) | The background verifier stops between phases, and the session waits for it |
+| [0010](0010-timing-constants-need-a-recording.md) | A timing constant needs a recording, not a recollection |

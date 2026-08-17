@@ -41,10 +41,13 @@ def never_stop() -> bool:
 def wait_unless_stopped(seconds: float, should_stop: StopCheck) -> bool:
     """Sleep, waking early on a stop request. True if a stop was asked for.
 
-    A plain ``time.sleep`` here is what makes ``LINK_SYNC_BLIND_DELAY``
-    (20 s) outlast ``TimeoutStopSec`` (10 s): the session would exit with
-    the verifier still parked in it, and the daemon thread would be cut
-    wherever it happened to be -- possibly between two mix writes.
+    A plain ``time.sleep`` is what let ``LINK_SYNC_BLIND_DELAY`` outlast
+    ``TimeoutStopSec``: the session would exit with the verifier still
+    parked in it, and the daemon thread would be cut wherever it happened
+    to be -- possibly between two mix writes. The delay is 5 s now
+    (ADR 0010) and would fit either way, but the property this function
+    provides must not depend on that: ``VERIFY_TIMEOUT`` is 10 s and the
+    verifier can run two of them.
     """
     deadline = time.monotonic() + seconds
     while True:

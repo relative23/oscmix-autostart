@@ -201,7 +201,7 @@ def test_the_budget_names_every_wait_on_the_path(unit):
 
 
 def test_verification_is_off_the_startup_path_structurally(unit):
-    # LINK_SYNC_BLIND_DELAY (20 s) and VERIFY_TIMEOUT (10 s) are excluded
+    # LINK_SYNC_BLIND_DELAY (5 s) and VERIFY_TIMEOUT (10 s) are excluded
     # from the budget because verification runs on a daemon thread after
     # READY=1, not because the arithmetic happens to work out -- with the
     # current 33 s of margin both would in fact still fit inside

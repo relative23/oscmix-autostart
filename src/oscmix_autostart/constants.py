@@ -43,8 +43,31 @@ VERIFY_SETTLE = 0.5
 # guaranteed correct.
 LINK_ECHO_TIMEOUT = float(os.environ.get("OSCMIX_LINK_TIMEOUT", "1.5"))
 LINK_SETTLE = float(os.environ.get("OSCMIX_LINK_SETTLE", "1.5"))
-# Used when the receive port is taken and the sync cannot be observed.
-LINK_SYNC_BLIND_DELAY = float(os.environ.get("OSCMIX_LINK_SYNC_DELAY", "20"))
+# Used when the receive port is taken and the sync cannot be observed --
+# which is the *normal* desktop case, because oscmix-gtk holds that port
+# whenever the mixer window is open. The session cannot see the dump, so
+# it waits this long and then rewrites the mix from what it hopes is a
+# synchronised link state.
+#
+# 20 -> 5 (2026-08-17), on a measurement rather than a guess. The 20 s
+# came from the same unrecorded observation as the "15-20 s dump" figure.
+# tests/data/cold-plug-timeline.json is that observation done properly:
+# a real USB replug, captured on both OSC ports so a request can be told
+# apart from a device push. The registers this wait exists for --
+# /output/<n>/stereo -- came back 0.01 s after the /refresh that asked
+# for them, 2.26 s after the backend started, and the whole dump was over
+# by ~4 s with nothing further in the remaining 272 s.
+#
+# 5 s is still more than twice the measurement. It is not tuned to the
+# number; it is the smallest round value that keeps a comfortable margin,
+# because the cost of being too short (a mix rewritten against a stale
+# link state) is worse than the cost of being too long (a few seconds
+# before the routing is re-established).
+#
+# Raise it with OSCMIX_LINK_SYNC_DELAY if a slower device needs it, and
+# say so -- that would mean this measurement does not generalise beyond
+# a UCX II, which is worth knowing.
+LINK_SYNC_BLIND_DELAY = float(os.environ.get("OSCMIX_LINK_SYNC_DELAY", "5"))
 
 LEVEL_MIN, LEVEL_MAX = -65.0, 6.0
 # An unlinked pair route reaches oscmix's setlevel() branch that halves the
