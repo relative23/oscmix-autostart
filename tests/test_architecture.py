@@ -44,7 +44,9 @@ ALLOWED_IMPORTS = {
     # warning of ADR 0006 -- a warning has to reach the journal, and
     # returning it up the call chain would be a second error channel
     # beside ConfigError for no benefit.
-    "config": {"constants", "errors", "log"},
+    # registers is a leaf like constants: pure data about devices,
+    # importing nothing from the package.
+    "config": {"constants", "errors", "log", "registers"},
     "routing": {"config", "constants", "log", "osc"},
     "verify": {"config", "constants", "log", "osc", "routing"},
     "pipewire": {"config", "errors", "log"},
@@ -53,6 +55,7 @@ ALLOWED_IMPORTS = {
                 "process", "routing", "verify"},
     "cli": {"config", "constants", "errors", "log", "pipewire", "session"},
     "launcher": {"constants", "discovery"},
+    "registers": set(),
     "__init__": {"config", "constants", "discovery", "errors", "launcher",
                  "log", "notify", "osc", "pipewire", "process", "routing",
                  "session", "verify"},

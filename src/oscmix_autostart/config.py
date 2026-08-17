@@ -24,6 +24,7 @@ from .constants import (
 )
 from .errors import ConfigError
 from .log import log
+from .registers import device_for_name
 
 
 @dataclass(frozen=True)
@@ -213,8 +214,52 @@ def load_config(path: Optional[Path]) -> Config:
                 "written by a newer version of oscmix-autostart "
                 "(known: [device], [osc], [route:<name>])", section
             )
+    _check_device_channels(config)
     _check_link_agreement(config.routes)
     return config
+
+
+def _check_device_channels(config: Config) -> None:
+    """Reject channels the configured device does not have.
+
+    ``CHANNEL_MIN..CHANNEL_MAX`` is 1..64 and says nothing about any
+    particular interface, so ``output = 40/41`` parsed cleanly on a
+    20-channel UCX II, was applied, and did nothing -- the exact shape of
+    failure this project exists to prevent, since at message level the
+    routing is perfect.
+
+    Deliberately a separate pass rather than a check inside
+    ``_parse_channels``: ``[device]`` may appear after the routes in the
+    file, so the device is only known once every section has been read.
+    It also keeps syntax ("is this a channel number") apart from
+    capability ("does this device have it").
+
+    An unmodelled device is *no opinion*, not an error. The 802 has never
+    been tested here, and a model that rejected its channels would be
+    guessing at hardware nobody can check.
+    """
+    device = device_for_name(config.device_name)
+    if device is None:
+        return
+    for route in config.routes:
+        for option, channels, capability in (
+                ("playback", route.playback, "playback"),
+                ("output", route.output, "output")):
+            valid = device.channels_for(capability)
+            if not valid:
+                # Modelled, but this capability was never recorded --
+                # the 802 is listed so the device dimension is real, and
+                # declares nothing because guessing is how a model
+                # becomes a lie. Being in the table is not an opinion.
+                continue
+            for channel in channels:
+                if channel not in valid:
+                    raise ConfigError(
+                        "[route:%s] %s: channel %d does not exist on a %s "
+                        "(it has %s %d..%d)"
+                        % (route.name, option, channel, device.name,
+                           capability, min(valid), max(valid))
+                    )
 
 
 def _check_link_agreement(routes: Sequence[Route]) -> None:

@@ -377,3 +377,60 @@ def test_the_known_surface_is_stated_rather_than_discovered(session_mod):
         "osc": {"port", "recv-port"},
         "route": {"playback", "output", "level", "volume", "stereo"},
     } == config_mod._KNOWN_OPTIONS
+
+
+# --------------------------------------------------------------------------
+# Channels the device actually has -- the register model as a consumer.
+#
+# CHANNEL_MIN..CHANNEL_MAX is 1..64 and says nothing about any particular
+# interface, so `output = 40/41` parsed cleanly on a 20-channel UCX II,
+# was applied, and did nothing. At message level the routing was perfect,
+# which is the shape of failure this project exists to prevent.
+# --------------------------------------------------------------------------
+
+def test_a_channel_the_device_does_not_have_is_rejected(session_mod, tmp_path):
+    path = write(tmp_path, "[device]\nname = Fireface UCX II\n\n"
+                           "[route:x]\nplayback = 1/2\noutput = 40/41\n")
+    with pytest.raises(session_mod.ConfigError) as excinfo:
+        session_mod.load_config(path)
+    message = str(excinfo.value)
+    assert "40" in message
+    assert "Fireface UCX II" in message
+    assert "1..20" in message, "the error should say what the device has"
+
+
+def test_the_device_may_appear_after_the_routes(session_mod, tmp_path):
+    # configparser hands sections back in file order, so the check has to
+    # be a separate pass -- a route parsed before [device] cannot know
+    # which device it is for.
+    path = write(tmp_path, "[route:x]\nplayback = 1/2\noutput = 40/41\n\n"
+                           "[device]\nname = Fireface UCX II\n")
+    with pytest.raises(session_mod.ConfigError, match="40"):
+        session_mod.load_config(path)
+
+
+def test_an_unmodelled_device_keeps_working_exactly_as_before(session_mod,
+                                                              tmp_path):
+    # No opinion, not an error. A model that rejected channels on
+    # hardware nobody here can test would be guessing.
+    path = write(tmp_path, "[device]\nname = Fireface UFX III\n\n"
+                           "[route:x]\nplayback = 1/2\noutput = 40/41\n")
+    config = session_mod.load_config(path)
+    assert config.routes[0].output == (40, 41)
+
+
+def test_a_modelled_but_untested_device_is_also_no_opinion(session_mod,
+                                                           tmp_path):
+    # The 802 is in the table so the device dimension is real from the
+    # first line, and declares no channels because guessing them is how
+    # a model becomes a lie. Being listed must not become a constraint.
+    path = write(tmp_path, "[device]\nname = Fireface 802\n\n"
+                           "[route:x]\nplayback = 1/2\noutput = 30/31\n")
+    config = session_mod.load_config(path)
+    assert config.routes[0].output == (30, 31)
+
+
+def test_the_channels_a_valid_config_uses_are_still_accepted(session_mod):
+    # The shipped example and the syntax range both still pass.
+    config = session_mod.load_config(repo_file("config", "routing.conf.example"))
+    assert config.routes[0].output == (1, 2)
