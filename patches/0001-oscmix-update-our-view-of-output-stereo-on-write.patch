@@ -1,0 +1,76 @@
+From 42acb7dc0027612533ee588c9240afcb4854ccc9 Mon Sep 17 00:00:00 2001
+From: simon <relativesharp@gmail.com>
+Date: Mon, 17 Aug 2026 19:07:14 +0200
+Subject: [PATCH] oscmix: update our view of output stereo on write
+
+setlevel() reads out->stereo to decide whether a /mix write addresses
+one channel or the pair. With .set=setbool that flag only changed when
+the device echoed the register back over MIDI, so a /mix arriving in
+between was evaluated against the stale value, took the unlinked branch
+and never wrote mix[1] -- the pair's right channel was left untouched.
+
+setinputstereo() already updates inputs[] on write for the same reason;
+this makes the output side consistent with it. Nothing changes on the
+wire: the register is still forwarded by setval() exactly as before,
+only oscmix's own view is corrected at the point of the write.
+
+Observed on a Fireface UCX II by logging out->stereo inside setlevel()
+and writing /output/5/stereo=1 immediately followed by
+/mix/5/playback/1:
+
+  before:  setlevel out=5 stereo=0
+  after:   setlevel out=5 stereo=1
+---
+ oscmix.c | 29 ++++++++++++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/oscmix.c b/oscmix.c
+index eaa29b9..929b4a6 100644
+--- a/oscmix.c
++++ b/oscmix.c
+@@ -395,6 +395,33 @@ newinputstereo(struct context *ctx, int val)
+ 	oscsend(ctx->addr, ",i", val != 0);
+ }
+ 
++static void
++setoutputstereo(struct context *ctx, struct oscmsg *msg)
++{
++	struct output *out;
++	bool val;
++
++	if (!ctx->exact)
++		return;
++	val = oscgetint(msg);
++	if (oscend(msg) != 0)
++		return;
++	/*
++	 * Update our own view of the pair before forwarding the register.
++	 * setlevel() reads out->stereo to decide whether a /mix write
++	 * addresses one channel or the pair, and with plain setbool() that
++	 * flag only changed once the device echoed the register back -- so
++	 * a /mix arriving in between was evaluated against the stale value
++	 * and never wrote the pair's right channel.
++	 *
++	 * setinputstereo() already does this for inputs.
++	 */
++	out = &outputs[ctx->param.out & ~1];
++	out[0].stereo = val;
++	out[1].stereo = val;
++	setval(ctx, val);
++}
++
+ static void
+ newoutputstereo(struct context *ctx, int val)
+ {
+@@ -1205,7 +1232,7 @@ static const struct node roottree[] = {
+ 		{"pan", OUTPUT_PAN, .set=setint, .new=newint, .min=-100, .max=100},
+ 		{"mute", OUTPUT_MUTE, .set=setbool, .new=newbool},
+ 		{"fx", OUTPUT_FXRETURN, .set=setfixed, .new=newfixed, .scale=0.1, .min=-65.0, .max=0.0},
+-		{"stereo", OUTPUT_STEREO, .set=setbool, .new=newoutputstereo},
++		{"stereo", OUTPUT_STEREO, .set=setoutputstereo, .new=newoutputstereo},
+ 		{"record", OUTPUT_RECORD, .set=setbool, .new=newbool},
+ 		{"name", NAME, .set=setname},
+ 		{"playchan", OUTPUT_PLAYCHAN, .set=setint, .new=newint},
+-- 
+2.53.0
+
