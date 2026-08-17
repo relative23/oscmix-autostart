@@ -48,7 +48,7 @@ ALLOWED_IMPORTS = {
     # importing nothing from the package.
     "config": {"constants", "errors", "log", "registers"},
     "routing": {"config", "constants", "log", "osc"},
-    "verify": {"config", "constants", "log", "osc", "routing"},
+    "verify": {"config", "constants", "log", "osc", "reconcile", "routing"},
     "pipewire": {"config", "errors", "log"},
     "process": {"constants", "discovery", "log"},
     "session": {"config", "constants", "discovery", "log", "notify",
@@ -56,6 +56,10 @@ ALLOWED_IMPORTS = {
     "cli": {"config", "constants", "errors", "log", "pipewire", "session"},
     "launcher": {"constants", "discovery"},
     "registers": set(),
+    # Pure: config + the message shapes + the register table. No
+    # socket, no clock -- which is what lets it be tested against
+    # recordings instead of hardware.
+    "reconcile": {"config", "registers", "routing"},
     "__init__": {"config", "constants", "discovery", "errors", "launcher",
                  "log", "notify", "osc", "pipewire", "process", "routing",
                  "session", "verify"},

@@ -12,13 +12,13 @@ from .config import Config, Route
 from .constants import VERIFY_SETTLE, VERIFY_TIMEOUT
 from .log import log
 from .osc import decode_osc, encode_osc, iter_osc_messages
+from .reconcile import desired
 from .routing import (
     StopCheck,
     apply_routing,
     blind_reapply_mix,
     never_stop,
     output_link_state,
-    route_messages,
     send_mix,
     wait_unless_stopped,
 )
@@ -29,12 +29,19 @@ Registers = Dict[str, Tuple[str, Tuple[object, ...]]]
 
 
 def expected_registers(routes: Sequence[Route]) -> Registers:
-    """The register state the routes should produce, keyed by OSC path."""
-    registers: Registers = {}
-    for route in routes:
-        for path, types, args in route_messages(route):
-            registers[path] = (types, tuple(args))
-    return registers
+    """The register state the routes should produce, keyed by OSC path.
+
+    This is ``reconcile.desired`` projected to the shape the read-back
+    has always used. Delegating rather than keeping a second walk of the
+    same routes is the first thing the reconciler is load-bearing for --
+    on the *reading* side, which is where a mistake is a wrong verdict
+    rather than a wrong device state.
+
+    ``tests/test_reconcile.py`` asserts the two agree for every config
+    shape in its table, so this cannot drift back apart quietly.
+    """
+    return {entry.path: (entry.tags, entry.args)
+            for entry in desired(Config(routes=list(routes)))}
 
 
 def _register_matches(want_types: str, want_args: Sequence[object],
