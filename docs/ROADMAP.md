@@ -62,7 +62,7 @@ GUI expose it at all?
 | Output strip: volume, pan, mute, phase, reflevel, stereo | all six reported | today: volume, stereo. 0.3.0: the rest |
 | EQ (3 band) and low cut, in and out | `eq/band1..3{freq,gain,q}`, `type` on bands 1 and 3 only, `lowcut/{freq,slope}` | 0.4.0 |
 | Dynamics, auto level | `dynamics/{attack,release,comp*,exp*,gain}`, `autolevel/{headroom,maxgain,risetime}` | 0.4.0 |
-| Room EQ (outputs) | `roomeq/band1..4{freq,gain,q}`, `band5gain`, `delay` | 0.4.0, and see the constraint below |
+| Room EQ (outputs) | `roomeq/band1..4{freq,gain,q}`, `band5gain`, `delay` | 0.4.0 |
 | Reverb and echo FX | `/reverb/*` (14), `/echo/*` (7) | 0.4.0 |
 | Control room: main out, dim, mono, recall volume | `/controlroom/*` (6) | 0.4.0 |
 | Crossfeed | `/output/<n>/crossfeed` | 0.4.0 |
@@ -860,12 +860,18 @@ path taken by everybody who already has this installed.
 
 ## Upstream is part of the quality goal, not the weather
 
-Four of the six constraints below are upstream limits: the playback
-matrix cannot be read back, the register cache does not self-synchronise,
-a dump is slow enough to have to be waited out, the Room EQ registers are
-implausible. The ceiling on "provably correct" is therefore set by code
-this project does not own. Treating that as given would cap the whole
-effort.
+Three of the constraints below are upstream limits: the playback matrix
+cannot be read back, the register cache does not self-synchronise, and a
+dump has to be waited out at all. The ceiling on "provably correct" is
+therefore set by code this project does not own. Treating that as given
+would cap the whole effort.
+
+It used to say *four*, and counted the implausible Room EQ registers.
+That one was withdrawn: measured against the pinned revision, every one
+of the 220 EQ gain registers reads 0.0 dB and no Q is anywhere near 80.
+See [docs/upstream-issues.md](upstream-issues.md), which records why it
+was not filed -- it had reached the point of being reported as a bug in
+someone else's project without anyone checking it against the device.
 
 So, as work items rather than complaints:
 
@@ -874,8 +880,16 @@ So, as work items rather than complaints:
   `LINK_SETTLE` and `LINK_SYNC_BLIND_DELAY`. Upstream accepting a patch
   that syncs link state on write would delete that entire class of
   timing constant from this codebase.
-- **File the Room EQ and `unexpected enum value -1` issues** before
-  0.4.0 builds on those registers.
+- **File the `unexpected enum value -1` issue.** Traced to
+  `/controlroom/mainout`, which this device reports as `-1` -- outside
+  the ten names `CTLROOM_MAINOUT` declares, so `oscsendenum()` takes its
+  fallback branch and sends `,i` instead of `,is`. 42 occurrences in 24 h
+  of ordinary use. The half that is a bug regardless of what `-1` means:
+  the diagnostic does not print the address, so it says only `unexpected
+  enum value -1` and cannot be acted on. Drafted in
+  [docs/upstream-issues.md](upstream-issues.md).
+- ~~File the Room EQ issue.~~ **Withdrawn, does not reproduce.** See the
+  same document.
 - **Ask for a targeted register query.** `/refresh` dumps 2002 registers
   when what this project needs is a handful of `/output/<n>/stereo`.
   That is a feature request, not a benchmark -- see the reframing of
@@ -1102,12 +1116,13 @@ All measured, all things the design has to live with:
 - **The device reports a register only when it changes.** Writing a value
   it already holds produces no report, so "wait for the echo" cannot be
   the only synchronisation mechanism.
-- **Room EQ registers report implausible values** (+30 dB and +40 dB at
-  50 Hz, Q=80, on every output). This looks like a register offset in
-  upstream's decoding rather than real device state. Worth an upstream
-  issue before 0.4.0 builds on them.
-- **`unexpected enum value -1`** on every start, from oscmix reading an
-  enum it cannot map. Harmless noise; also upstream.
+- **`unexpected enum value -1`** on every start (42 times in 24 h),
+  from `/controlroom/mainout`: the device reports `-1`, which is outside
+  the ten values `CTLROOM_MAINOUT` names, most likely meaning the
+  Control Room main output is unassigned. Harmless noise here, but the
+  message names no register, which is why it took a full state dump to
+  attribute. Upstream; drafted in
+  [docs/upstream-issues.md](upstream-issues.md).
 - **Only the UCX II is tested.** The 802 path is untested and always has
   been.
 
