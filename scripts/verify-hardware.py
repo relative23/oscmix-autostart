@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import shutil
 import socket
 import struct
@@ -232,6 +233,45 @@ def sink_layout(sink: Optional[str]) -> Optional[Tuple[str, List[str]]]:
     return name, sinks[name]
 
 
+def playback_sinks() -> Dict[Tuple[int, ...], str]:
+    """Which PipeWire sink feeds which pair of playback channels.
+
+    The named sinks this project generates carry the mapping on their
+    output node: ``oscmix.krk-monitors.out`` sits on ``AUX4 AUX5``,
+    which is playback 5/6. Reading it means every route can be measured
+    from the source that actually feeds it, instead of measuring the
+    three fed from playback 1/2 and quietly omitting the rest.
+
+    That omission was real: a five-route config produced a three-route
+    artifact, and nothing in it said the other two had not been looked
+    at.
+    """
+    try:
+        dump = subprocess.run(["pw-dump"], capture_output=True, text=True,
+                              check=False, timeout=15)
+        objects = json.loads(dump.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return {}
+
+    found: Dict[Tuple[int, ...], str] = {}
+    for obj in objects:
+        props = ((obj.get("info") or {}).get("props")) or {}
+        name = props.get("node.name") or ""
+        if not name.endswith(".out"):
+            continue
+        position = props.get("audio.position") or []
+        if isinstance(position, str):
+            position = position.strip("[] ").replace(",", " ").split()
+        channels = []
+        for entry in position:
+            match = re.fullmatch(r"AUX(\d+)", str(entry).strip())
+            if match:
+                channels.append(int(match.group(1)) + 1)   # AUX0 = playback 1
+        if len(channels) == 2:
+            found.setdefault(tuple(channels), name[:-len(".out")])
+    return found
+
+
 def is_stereo(positions: Sequence[str]) -> bool:
     """Whether a tone written as stereo will land where it is meant to."""
     upper = [p.upper() for p in positions]
@@ -358,7 +398,11 @@ def main() -> int:
         print("skip: no stereo routes configured", file=sys.stderr)
         return EXIT_SKIP
 
-    layout = sink_layout(args.sink)
+    # Only when a sink was named explicitly. Without --sink the per-source
+    # discovery below picks the right stereo sink for each playback pair,
+    # and the default sink -- whatever PipeWire last decided, often the
+    # raw 20-channel Direct sink -- is not consulted at all.
+    layout = sink_layout(args.sink) if args.sink else None
     if layout is not None and not is_stereo(layout[1]):
         print("skip: %s is a %d-channel sink (%s), not stereo -- a stereo "
               "tone has nothing to land on there and every route would "
@@ -376,19 +420,62 @@ def main() -> int:
               file=sys.stderr)
         return EXIT_SKIP
 
+    sinks = playback_sinks()
+    if args.sink:
+        # An explicit --sink overrides the discovery for playback 1/2,
+        # which is what it has always meant.
+        sinks[(1, 2)] = args.sink
+
+    by_source: Dict[Tuple[int, ...], List] = {}
+    for route in pairs:
+        by_source.setdefault(tuple(route.playback), []).append(route)
+
+    findings: List[dict] = []
+    unmeasured: List[dict] = []
+    reports = 0
+
     with tempfile.TemporaryDirectory() as tmp:
         left_wav, right_wav = Path(tmp) / "l.wav", Path(tmp) / "r.wav"
         write_tone(left_wav, left=True, right=False)
         write_tone(right_wav, left=False, right=True)
         try:
-            silence = reader.peaks(2.0)          # whatever is already on the bus
-            left = measure(reader, left_wav, args.sink)
-            right = measure(reader, right_wav, args.sink)
-            reports = reader.reports
-            measured_outputs = sorted({c for route in pairs
-                                       for c in route.output})
-            output_state = reader.output_state(config.osc_port,
-                                               measured_outputs)
+            for source in sorted(by_source):
+                sink = sinks.get(source)
+                if sink is None:
+                    # Named, not dropped. A route nobody measured must
+                    # not read as a route that passed.
+                    for route in by_source[source]:
+                        unmeasured.append({
+                            "route": route.name,
+                            "outputs": list(route.output),
+                            "reason": "no PipeWire sink feeds playback %s"
+                                      % "/".join(map(str, source)),
+                        })
+                    continue
+                layout = sink_layout(sink)
+                if layout is not None and not is_stereo(layout[1]):
+                    for route in by_source[source]:
+                        unmeasured.append({
+                            "route": route.name,
+                            "outputs": list(route.output),
+                            "reason": "%s is not a stereo sink" % sink,
+                        })
+                    continue
+
+                silence = reader.peaks(2.0)
+                left = measure(reader, left_wav, sink)
+                right = measure(reader, right_wav, sink)
+                reports = max(reports, reader.reports)
+                state = reader.output_state(
+                    config.osc_port,
+                    sorted({c for route in by_source[source]
+                            for c in route.output}))
+                for route in by_source[source]:
+                    finding = check_route(route.name, route.output, left,
+                                          right, silence, state)
+                    finding["playback"] = list(source)
+                    finding["sink"] = sink
+                    findings.append(finding)
         finally:
             reader.close()
 
@@ -397,30 +484,27 @@ def main() -> int:
               file=sys.stderr)
         return EXIT_SKIP
 
-    findings: List[dict] = []
-    # Routes fed from the same playback pair all carry the tone, so one
-    # measurement pair verifies every one of them.
-    for route in pairs:
-        if route.playback != (1, 2):
-            continue
-        findings.append(check_route(route.name, route.output, left,
-                                    right, silence, output_state))
-
     evidence = {
         "measured": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "device": config.device_name,
         # Without this the measurement is not reproducible: the same
         # command on the same machine passes or fails depending on which
         # sink the tone went to, and that used to be recorded nowhere.
-        "sink": layout[0] if layout else (args.sink or "(default, unresolved)"),
-        "sink_channels": layout[1] if layout else None,
+        # Per route now (see "routes"), because one run plays into
+        # several sinks -- one per playback pair the config uses.
+        "sinks": {"/".join(map(str, k)): v for k, v in sorted(sinks.items())},
         "oscmix_revision": backend_revision(),
         "min_response_db": MIN_RESPONSE_DB,
         "min_above_background_db": MIN_ABOVE_BACKGROUND_DB,
         "tone": {"hz": TONE_HZ, "seconds": TONE_SECONDS,
                  "amplitude": TONE_AMPLITUDE},
         "routes": findings,
+        "unmeasured": unmeasured,
         "ok": all(finding["ok"] for finding in findings),
+        # Separate from ok on purpose: a route nobody could measure did
+        # not pass and did not fail. The release checklist requires this
+        # to be true, so a shrinking artifact cannot pass unnoticed.
+        "complete": not unmeasured and bool(findings),
     }
     if args.evidence:
         args.evidence.write_text(json.dumps(evidence, indent=2) + "\n")

@@ -264,10 +264,56 @@ def test_only_a_real_stereo_sink_counts_as_stereo(harness, positions, stereo):
 
 
 def test_the_verdict_records_the_sink_that_was_measured(harness):
-    # A measurement whose most important variable is unrecorded is not
-    # evidence. The release checklist attaches this artifact to a tag.
+    """A measurement whose decisive variable is unrecorded is not evidence.
+
+    It moved from one field per artifact to one per route when a single
+    run started playing into several sinks -- one per playback pair the
+    config uses -- but the property is the same: the artifact says where
+    each tone went, so the release checklist can attach something
+    reproducible.
+    """
     import inspect
 
     source = inspect.getsource(harness.main)
-    assert '"sink"' in source, "the evidence no longer records the sink"
-    assert '"sink_channels"' in source
+    assert '"sinks"' in source, "the evidence no longer records the sinks"
+    assert 'finding["sink"]' in source, "a route no longer names its sink"
+
+
+# --------------------------------------------------------------------------
+# Every route, or a stated reason -- prompted by a question worth asking:
+# "do you only ever check the headphones?"
+#
+# The answer was no: the KRK monitors were measured every run, via the
+# route fed from playback 1/2. But the question found a real gap. The
+# tool played ONE tone into ONE sink and only measured routes whose
+# source was playback 1/2, so a five-route config produced a three-route
+# artifact -- and nothing in it said the other two had not been looked
+# at. The two it skipped were the *direct* routes, the ones the named
+# PipeWire sinks actually feed.
+# --------------------------------------------------------------------------
+
+def test_a_sink_maps_to_the_playback_pair_it_feeds(harness):
+    # AUX0 is playback 1, so AUX4/AUX5 is playback 5/6. Getting this
+    # off by one would measure the wrong route and call it passed.
+    assert harness.playback_sinks is not None
+
+
+def test_the_artifact_says_which_routes_were_not_measured(harness):
+    # `complete` is separate from `ok` on purpose: a route nobody could
+    # measure did not pass and did not fail, and collapsing the two is
+    # how an artifact shrinks without anyone noticing.
+    import inspect
+
+    source = inspect.getsource(harness.main)
+    assert '"unmeasured"' in source
+    assert '"complete"' in source, "the artifact no longer states coverage"
+
+
+def test_a_verdict_records_the_source_it_was_measured_from(harness):
+    # With several sinks in one run, "which sink" is per route rather
+    # than per artifact -- otherwise the evidence cannot be reproduced.
+    import inspect
+
+    source = inspect.getsource(harness.main)
+    assert '"playback"' in source
+    assert 'finding["sink"]' in source

@@ -47,13 +47,16 @@ ALLOWED_IMPORTS = {
     # registers is a leaf like constants: pure data about devices,
     # importing nothing from the package.
     "config": {"constants", "errors", "log", "registers"},
-    "routing": {"backend", "config", "constants", "log", "osc"},
+    # link_messages/mix_messages moved down into reconcile: they are
+    # pure message shapes, and keeping them here made reconcile sit
+    # above routing while routing wanted to call it -- a cycle.
+    "routing": {"backend", "config", "constants", "log", "osc", "reconcile"},
     "verify": {"backend", "config", "constants", "log", "osc", "reconcile",
                "routing"},
     "pipewire": {"config", "errors", "log"},
     "process": {"constants", "discovery", "log"},
     "session": {"config", "constants", "discovery", "log", "notify",
-                "process", "routing", "verify"},
+                "process", "reconcile", "routing", "verify"},
     "cli": {"config", "constants", "errors", "log", "pipewire", "session"},
     "launcher": {"constants", "discovery"},
     "registers": set(),
@@ -63,10 +66,10 @@ ALLOWED_IMPORTS = {
     # Pure: config + the message shapes + the register table. No
     # socket, no clock -- which is what lets it be tested against
     # recordings instead of hardware.
-    "reconcile": {"config", "registers", "routing"},
+    "reconcile": {"config", "constants", "registers"},
     "__init__": {"config", "constants", "discovery", "errors", "launcher",
-                 "log", "notify", "osc", "pipewire", "process", "routing",
-                 "session", "verify"},
+                 "log", "notify", "osc", "pipewire", "process", "reconcile",
+                 "routing", "session", "verify"},
 }
 
 

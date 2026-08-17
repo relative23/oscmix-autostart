@@ -27,7 +27,8 @@ from .discovery import resolve_binary, udp_port_listening, usb_device_present, w
 from .log import log
 from .notify import sd_notify
 from .process import _cleanup_stale_backend, supervise
-from .routing import apply_routing, routing_plan, wait_unless_stopped
+from .reconcile import desired, plan
+from .routing import apply_routing, wait_unless_stopped
 from .verify import verify_and_repair
 
 
@@ -38,9 +39,13 @@ def _print_dry_run(client: int, config: Config) -> None:
     *is* the sent sequence. It used to walk route by route and print
     link, mix, link, mix -- an order the apply never uses, and the only
     thing CI inspected to guard this project's most expensive bug.
+
+    Both sides moved to ``reconcile.plan`` together, for the same
+    reason: the guarantee is that they read one source, not that they
+    read a particular one.
     """
     print("would run: alsaseqio %d:1 oscmix" % client)
-    for path, types, values in routing_plan(config.routes).messages():
+    for path, types, values in plan(desired(config)).messages():
         print("would send: %s ,%s %s"
               % (path, types, " ".join(map(str, values))))
 

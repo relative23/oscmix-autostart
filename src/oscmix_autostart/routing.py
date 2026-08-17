@@ -15,9 +15,14 @@ from .constants import (
     LINK_ECHO_TIMEOUT,
     LINK_SETTLE,
     LINK_SYNC_BLIND_DELAY,
-    UNLINKED_GAIN_OFFSET,
 )
 from .log import log
+from .reconcile import (
+    desired,
+    link_messages,
+    mix_messages,
+    plan,
+)
 
 # Asked before every write and between every phase of the background
 # verifier. See docs/decisions/0009-verifier-stop-contract.md: the
@@ -55,72 +60,6 @@ def wait_unless_stopped(seconds: float, should_stop: StopCheck) -> bool:
         if remaining <= 0:
             return False
         time.sleep(min(0.1, remaining))
-
-
-def link_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
-    """The channel-pair link state a route needs before its mix is written.
-
-    These must reach the device -- and be reported back to oscmix -- before
-    any ``/mix`` message of the same route, see ``LINK_ECHO_TIMEOUT``.
-
-    ``stereo = false`` states the link explicitly rather than assuming it:
-    the hard-panned pair of ``/mix`` messages it produces is only correct
-    against an *unlinked* pair. Applied to a linked one, both messages
-    address the same pair register and the second overwrites the first,
-    which leaves one half of the pair completely silent.
-    """
-    if len(route.output) != 2:
-        return []
-    pb_left, _ = route.playback
-    return [
-        ("/playback/%d/stereo" % pb_left, "i", (1,)),
-        ("/output/%d/stereo" % route.output[0], "i",
-         (1 if route.stereo else 0,)),
-    ]
-
-
-def mix_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
-    """The mix-matrix and volume writes of a route.
-
-    oscmix folds stereo-linked channels onto the odd (left) channel of a
-    pair: a ``/mix`` message addressed to either half of a linked pair
-    writes the *same* pair register, and the pan argument acts as the
-    pair's balance. Per-channel messages panned hard left/right (the
-    TotalMix pattern for unlinked channels) therefore self-overwrite --
-    the last message wins and the whole mix ends up panned hard right.
-    A pair route instead links the playback and output pairs and writes
-    the single pair register with pan 0 (= plain stereo pass-through at
-    ``level`` dB).
-    """
-    messages: List[Tuple[str, str, Tuple[object, ...]]] = []
-    if len(route.output) == 2:
-        left, right = route.output
-        pb_left, _ = route.playback
-        if route.stereo:
-            messages.append(("/mix/%d/playback/%d" % (left, pb_left), "fi",
-                             (route.level, 0)))
-        else:
-            # Unlinked outputs: feed each side the matching half of the
-            # (linked) playback pair via the pair balance. oscmix halves
-            # the gain on this path (setlevel(): ll = vol / 2), so the
-            # request is raised by 6 dB to make `level` mean the same
-            # thing as it does for a linked route -- measured on a UCX II
-            # as an exact 6 dB deficit before this compensation.
-            unlinked = min(route.level, 0.0) + UNLINKED_GAIN_OFFSET
-            messages.append(("/mix/%d/playback/%d" % (left, pb_left), "fi",
-                             (unlinked, -100)))
-            messages.append(("/mix/%d/playback/%d" % (right, pb_left), "fi",
-                             (unlinked, 100)))
-        if route.volume is not None:
-            for out in (left, right):
-                messages.append(("/output/%d/volume" % out, "f", (route.volume,)))
-    else:
-        (out,) = route.output
-        (pb,) = route.playback
-        messages.append(("/mix/%d/playback/%d" % (out, pb), "fi", (route.level, 0)))
-        if route.volume is not None:
-            messages.append(("/output/%d/volume" % out, "f", (route.volume,)))
-    return messages
 
 
 def route_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
@@ -222,14 +161,20 @@ def apply_routing(routes: Sequence[Route], port: int,
 
     Both phases are separated by the link barrier above. Sending them in
     one burst is what silences every even output (see LINK_ECHO_TIMEOUT).
+
+    The *what* is a ``reconcile.Plan`` now: the registers the config
+    asks for, deduplicated and split at the barrier. What is left here
+    is the *when* -- send, wait out the barrier, send -- which is this
+    function's whole job and the only part that needs a socket and a
+    clock.
     """
-    plan = routing_plan(routes)
+    wanted = plan(desired(Config(routes=list(routes))))
     device = loopback(port, recv_port)
     # Only the output links need the barrier: /playback/<n>/stereo goes
     # through setinputstereo(), which updates oscmix's state right away,
     # while /output/<n>/stereo relies on the device report -- see
     # backend.Traits.reports_link_state_on_write.
-    device.send(plan.links)
+    device.send(w.message() for w in wanted.links())
 
     timeout = LINK_ECHO_TIMEOUT
     echoed = await_link_echo(output_link_state(routes), recv_port, timeout)
@@ -244,7 +189,7 @@ def apply_routing(routes: Sequence[Route], port: int,
     else:
         log.info("channel pairs linked and confirmed by the device")
 
-    device.send(plan.mix)
+    device.send(w.message() for w in wanted.mix())
     for route in routes:
         log.info(
             "route %r: playback %s -> output %s at %+.1f dB",

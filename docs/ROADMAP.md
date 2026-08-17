@@ -984,7 +984,7 @@ casts this one interface into the data structure and puts the untested 802
 permanently out of reach -- in the very refactor that could have brought
 it closer.
 
-### Desired state, observed state, plan -- **landed, not switched over**
+### Desired state, observed state, plan -- **done**
 
 What this project *is*, is a reconciler: desired state from the config,
 observed state from the dump, the difference applied. What the code does
@@ -1007,10 +1007,10 @@ clock, asserted. `desired(config)`, `observed(reports)`,
 `plan(desired, observed)`, with the verification class read from the
 register model rather than branched on in the routing code.
 
-*Deliberately not switched over.* The write path is where all three
-shipped defects lived and where a mistake is inaudible until somebody is
-listening, so landing the abstraction and moving the audible path onto
-it are two changes. What is proven first:
+*Switched over, with a measurement on each side.* The write path is
+where all three shipped defects lived and where a mistake is inaudible
+until somebody is listening, so it was landed first and moved second.
+What was proven before the move:
 `plan(desired(config))` against an empty observation is the datagram
 sequence `routing_plan()` produces today, ordering included, **minus
 repeats** -- a register two routes share goes out once instead of twice.
@@ -1018,10 +1018,23 @@ That difference is a change on the wire, so a second test asserts every
 dropped repeat carried the value already in the plan. Both hold across
 seven config shapes.
 
-*Load-bearing already, on the reading side:* `expected_registers`
-delegates to `desired()`, so verification and the plan cannot drift
-apart. That is the half where a mistake is a wrong verdict rather than a
-wrong device state.
+*Load-bearing on the reading side too:* `expected_registers` delegates
+to `desired()`, so verification and the plan cannot drift apart.
+
+*Measured on the move itself,* against the shipped five-route config:
+
+| | before | after |
+|---|---|---|
+| datagrams | 17 | **13** |
+| diff | — | deletions only, no line added or reordered |
+| main-out 1/2 | 98.3 dB | **98.3 dB** |
+| krk-monitors 5/6 | 98.3 dB | **98.3 dB** |
+| phones 7/8 | 98.3 dB | **98.3 dB** |
+
+The four datagrams that went away were `/playback/1/stereo` twice and
+`/output/5|7/stereo` once each -- repeats, machine-checked against the
+before-sequence. Identical to 0.1 dB on every output, plus 50 soak
+cycles.
 
 ## 0.3.0 -- the whole signal path, declared
 

@@ -51,12 +51,11 @@ from .notify import sd_notify
 from .osc import decode_osc, encode_osc, iter_osc_messages
 from .pipewire import generate_pipewire_conf, pipewire_positions, pw_sink_info
 from .process import find_stale_backends, supervise
+from .reconcile import link_messages, mix_messages
 from .routing import (
                         apply_routing,
                         await_link_echo,
                         blind_reapply_mix,
-                        link_messages,
-                        mix_messages,
                         output_link_state,
                         route_messages,
                         routing_plan,

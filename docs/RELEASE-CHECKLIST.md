@@ -72,8 +72,13 @@ one that found all three defects in 0.1.3.
 - [ ] The artifact's `sink_channels` reads `["FL", "FR"]`. If it does
       not, the measurement is not one.
 - [ ] `hardware-evidence.json` is attached to the release.
-- [ ] Its `routes` cover every route in the config that was measured,
-      and every one has `ok: true`.
+- [ ] `complete` is **true** and `unmeasured` is empty. A five-route
+      config used to produce a three-route artifact -- the tool played
+      one tone into one sink and silently skipped every route not fed
+      from playback 1/2, which was both *direct* routes. `ok` alone
+      cannot catch that: a route nobody measured did not fail.
+- [ ] Every entry in `routes` has `ok: true`, and each names the
+      `playback` pair and `sink` it was measured through.
 - [ ] Its three regression cases from 0.1.3 are among them: even
       outputs not silent, unlinked pair not half-dead, unlinked route
       not 6 dB low.
