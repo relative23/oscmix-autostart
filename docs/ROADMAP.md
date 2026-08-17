@@ -533,7 +533,14 @@ audio on the bus" for a silence it had the information to explain.
 measured output, and the verdict names the cause -- fader shut, muted,
 or turned down, with the number.
 
-*Still open:* only a release to attach the artifact to.
+*Shipped:* `hardware-evidence.json` is attached to `v0.2.0` -- all three
+routes, 98.3 dB response per output, measured into `oscmix.main-out`
+against pinned revision `2411b12`. The release run needed two attempts,
+and the first one earned its keep twice over: it failed on a shut fader
+(user state, now named by the verdict) and then, on the re-measurement,
+on an unplayable tone into a 20-channel sink (now a skip, and the sink
+is recorded in the artifact). Neither was a routing fault, and neither
+would have been visible at message level.
 
 ### E. When the upstream pin moves
 
