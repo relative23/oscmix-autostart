@@ -29,14 +29,36 @@ from .registers import device_for_name
 
 @dataclass(frozen=True)
 class Route:
-    """One playback -> hardware output route (mono or a stereo pair)."""
+    """One source -> hardware output route (mono or a stereo pair).
+
+    The source is either a software ``playback`` pair or a hardware
+    ``input`` pair, never both. Input sources are what makes
+    zero-latency direct monitoring expressible -- the reason TotalMix
+    exists on a tracking session -- and unlike the playback matrix, the
+    registers they write are **reported back by the device**, so a
+    monitoring path can be verified rather than only re-established.
+    """
 
     name: str
-    playback: Tuple[int, ...]
+    #: Required. Every route has a destination; only the *source* is a
+    #: choice, which is why `playback` gained a default and this did not.
     output: Tuple[int, ...]
+    playback: Tuple[int, ...] = ()
     level: float = 0.0
     volume: Optional[float] = None
     stereo: bool = True
+    #: Hardware input channels, as an alternative to ``playback``.
+    input: Tuple[int, ...] = ()
+
+    @property
+    def source(self) -> Tuple[str, Tuple[int, ...]]:
+        """``("input", channels)`` or ``("playback", channels)``.
+
+        One accessor rather than a branch at every call site: the OSC
+        path segment and the register family differ only in this word,
+        and spreading that choice is how the two drift apart.
+        """
+        return ("input", self.input) if self.input else ("playback", self.playback)
 
 
 @dataclass
@@ -113,7 +135,7 @@ def _parse_bool(raw: str, section: str, option: str) -> bool:
 _KNOWN_OPTIONS = {
     "device": {"name", "usb-id"},
     "osc": {"port", "recv-port"},
-    "route": {"playback", "output", "level", "volume", "stereo"},
+    "route": {"playback", "input", "output", "level", "volume", "stereo"},
 }
 
 
@@ -130,16 +152,34 @@ def _check_options(section: str, kind: str, options: Sequence[str]) -> None:
 def _parse_route(parser: configparser.ConfigParser, section: str) -> Route:
     name = section.split(":", 1)[1].strip() or section
     _check_options(section, "route", parser.options(section))
-    for required in ("playback", "output"):
-        if not parser.has_option(section, required):
-            raise ConfigError("[%s]: missing required option %r" % (section, required))
-    playback = _parse_channels(parser.get(section, "playback"), section, "playback")
-    output = _parse_channels(parser.get(section, "output"), section, "output")
-    if len(playback) != len(output):
+    if not parser.has_option(section, "output"):
+        raise ConfigError("[%s]: missing required option 'output'" % section)
+
+    # Exactly one source. Both would be two routes wearing one name, and
+    # neither leaves nothing to route -- either is a config the author
+    # did not mean, so neither is guessed at.
+    has_playback = parser.has_option(section, "playback")
+    has_input = parser.has_option(section, "input")
+    if has_playback and has_input:
         raise ConfigError(
-            "[%s]: playback (%s) and output (%s) must both be mono or both be a pair"
-            % (section, parser.get(section, "playback"), parser.get(section, "output"))
+            "[%s]: 'playback' and 'input' are alternatives -- a route has "
+            "one source. Split it into two routes." % section)
+    if not has_playback and not has_input:
+        raise ConfigError(
+            "[%s]: missing a source -- give it 'playback' (software) or "
+            "'input' (a hardware input, for direct monitoring)" % section)
+
+    kind = "input" if has_input else "playback"
+    source = _parse_channels(parser.get(section, kind), section, kind)
+    output = _parse_channels(parser.get(section, "output"), section, "output")
+    if len(source) != len(output):
+        raise ConfigError(
+            "[%s]: %s (%s) and output (%s) must both be mono or both be a pair"
+            % (section, kind, parser.get(section, kind),
+               parser.get(section, "output"))
         )
+    playback = source if kind == "playback" else ()
+    inputs = source if kind == "input" else ()
     level = 0.0
     if parser.has_option(section, "level"):
         level = _parse_db(parser.get(section, "level"), section, "level")
@@ -149,7 +189,7 @@ def _parse_route(parser: configparser.ConfigParser, section: str) -> Route:
     stereo = True
     if parser.has_option(section, "stereo"):
         stereo = _parse_bool(parser.get(section, "stereo"), section, "stereo")
-    return Route(name=name, playback=playback, output=output,
+    return Route(name=name, playback=playback, input=inputs, output=output,
                  level=level, volume=volume, stereo=stereo)
 
 
@@ -242,8 +282,9 @@ def _check_device_channels(config: Config) -> None:
     if device is None:
         return
     for route in config.routes:
+        kind, source = route.source
         for option, channels, capability in (
-                ("playback", route.playback, "playback"),
+                (kind, source, kind),
                 ("output", route.output, "output")):
             valid = device.channels_for(capability)
             if not valid:

@@ -367,15 +367,30 @@ stereo = false
 
 
 def test_the_known_surface_is_stated_rather_than_discovered(session_mod):
-    # ADR 0006 promises these names keep their meaning. A version that
-    # wants to remove one has to change this list, which is the point:
-    # it turns a compatibility break into a visible edit.
+    """ADR 0006 promises these names keep their meaning.
+
+    Changing the list is the point: it turns a compatibility decision
+    into a visible edit rather than a diff nobody reads.
+
+    `input` was added here in 0.3.0, and the consequence belongs where
+    the edit happens. Under ADR 0006 an unknown *option in a known
+    section* is an error, so a config with an input route is **rejected
+    whole** by a 0.2.0 install -- playback routes included, exit 2, no
+    restart.
+
+    That is the intended reading, not an oversight. A route the older
+    version cannot express is a monitoring path; dropping it with a
+    warning would leave a tracking session with no monitoring and one
+    line in the journal. Failing loudly is the lesser harm. The
+    alternative -- putting input routes in a new *section*, which would
+    only warn -- was rejected for exactly that reason.
+    """
     from oscmix_autostart import config as config_mod
 
     assert {
         "device": {"name", "usb-id"},
         "osc": {"port", "recv-port"},
-        "route": {"playback", "output", "level", "volume", "stereo"},
+        "route": {"playback", "input", "output", "level", "volume", "stereo"},
     } == config_mod._KNOWN_OPTIONS
 
 

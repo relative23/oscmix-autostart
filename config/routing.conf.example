@@ -32,7 +32,9 @@ port = 7222
 # Routes: [route:<any-name>] sections, applied in file order.
 #
 #   playback  software playback channel(s):  a pair "1/2" or a single "3"
-#   output    hardware output channel(s), same shape as playback
+#   input     hardware input channel(s) instead of playback -- direct
+#             monitoring, latency-free, straight from the converter
+#   output    hardware output channel(s), same shape as the source
 #   level     mix gain in dB   (0 = unity, -65 = mute; default 0)
 #   volume    optional: pins the hardware output fader, in dB
 #   stereo    stereo-link the output pair (default true for pairs)
@@ -52,6 +54,20 @@ port = 7222
 # because at message level the route is perfect. Pin 'volume' on any
 # output whose level you do not set by hand.
 #
+# A route has exactly one source: 'playback' or 'input', never both.
+#
+# 'input' routes a hardware input straight to an output inside the
+# device -- the monitoring path a tracking session needs, with no
+# round trip through the computer and no latency. It is also the one
+# thing here the device reports back: unlike the playback matrix,
+# '/mix/<out>/input/<in>' appears in the state dump, so an input route
+# is verified after every start rather than only re-applied.
+#
+# NOTE: a config using 'input' is rejected whole by oscmix-autostart
+# 0.2.0 and earlier -- an unknown option in a known section is an error
+# there, on purpose. A monitoring route that vanished with a warning
+# would be worse than one that refuses to start.
+#
 # PipeWire/PulseAudio send stereo audio to playback 1/2, so most setups
 # only need to route 1/2 to wherever their speakers are connected.
 # --------------------------------------------------------------------------
@@ -69,3 +85,11 @@ level = 0.0
 # playback = 1/2
 # output = 5/6
 # level = 0.0
+
+# Example: direct monitoring while tracking. Inputs 1/2 (the mic pres on
+# a UCX II) straight to the headphones, with no computer in the path.
+# 'level' is the monitoring level; the performer's mix, not yours.
+# [route:direct-monitor]
+# input = 1/2
+# output = 7/8
+# level = -6.0

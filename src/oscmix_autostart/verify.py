@@ -10,7 +10,7 @@ from .backend import loopback
 from .config import Config, Route
 from .constants import VERIFY_SETTLE, VERIFY_TIMEOUT
 from .log import log
-from .reconcile import desired
+from .reconcile import desired, matches
 from .routing import (
     StopCheck,
     apply_routing,
@@ -46,23 +46,12 @@ def _register_matches(want_types: str, want_args: Sequence[object],
                       got_args: Sequence[object]) -> bool:
     """Compare a reported register against the expected value.
 
-    Floats get a 0.5 dB tolerance (the device quantizes levels); extra
-    trailing arguments in the report are ignored so a richer upstream
-    dump format cannot break verification.
+    Delegates to ``reconcile.matches`` so the read-back and the plan
+    cannot disagree about what "equal" means -- which they would have,
+    the moment one of them learned that a muted gain reads back as -inf
+    and the other did not.
     """
-    if len(got_args) < len(want_args):
-        return False
-    for tag, want, got in zip(want_types, want_args, got_args):
-        try:
-            if tag == "f":
-                if abs(float(want) - float(got)) > 0.5:  # type: ignore[arg-type]
-                    return False
-            elif int(want) != int(got):  # type: ignore[call-overload]
-                return False
-        except (TypeError, ValueError):
-            return False
-    return True
-
+    return matches(want_types, tuple(want_args), tuple(got_args))
 
 def register_promptly_reported(path: str) -> bool:
     """Whether a register is expected early in a /refresh dump.

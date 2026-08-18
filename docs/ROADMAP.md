@@ -1091,9 +1091,34 @@ model records only what is known to arrive whole and refuses to answer
 for the rest; the feature work has to respect that rather than discover
 it in the field.
 
-- **Hardware input routing** -- `input = 1/2` as a route source.
-  Zero-latency direct monitoring, the reason TotalMix exists on a
-  tracking session. Not expressible at all today.
+- **Hardware input routing -- done.** `input = 1/2` as a route source,
+  exclusive with `playback`. Zero-latency direct monitoring, the reason
+  TotalMix exists on a tracking session.
+
+  It went first because `/mix/<out>/input/<in>` **is** reported by the
+  dump: a monitoring path is the first thing this project routes that it
+  can *verify* rather than only re-establish.
+
+  Two things it turned up before shipping:
+
+  - **A muted gain reads back as `-inf`, not as the dB written.**
+    Upstream stores anything `<= -65` as zero and reports zero as
+    negative infinity (`setmix`/`newmix`). `routing.conf` documents
+    `level = -65` as mute, so a muted monitoring route would have been
+    reported mismatched on every start and the whole routing re-sent --
+    invisible until now only because the playback matrix, the only mix
+    family before this, is never reported. The read-back and the plan
+    now share one comparison that knows the floor.
+  - **Adding `input` to `[route:...]` makes a 0.3.0 config fail whole on
+    0.2.0**, playback routes included (ADR 0006: unknown option in a
+    known section is an error). Intended: a monitoring route dropped
+    with a warning leaves a tracking session silent. A new *section*
+    would only have warned, which is why it was not used.
+
+  *Still unmeasured:* the 6 dB compensation on the unlinked-pair path was
+  measured for a playback source. oscmix runs both through one
+  `setlevel()`, so the same halving is expected for an input -- expected,
+  not measured; it needs a signal on a hardware input.
 - **Channel state** -- `[input:N]` and `[output:N]` sections: phantom
   power that survives a reboot, gain, reference level, mute, pan, phase.
   Validated against the channels that actually have each option.

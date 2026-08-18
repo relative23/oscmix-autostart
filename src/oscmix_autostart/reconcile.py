@@ -49,7 +49,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .config import Config, Route
-from .constants import UNLINKED_GAIN_OFFSET
+from .constants import LEVEL_MIN, UNLINKED_GAIN_OFFSET
 from .registers import REESTABLISHED, VERIFIABLE, Device, verify_class
 
 Args = Tuple[object, ...]
@@ -70,9 +70,9 @@ def link_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
     """
     if len(route.output) != 2:
         return []
-    pb_left, _ = route.playback
+    kind, source = route.source
     return [
-        ("/playback/%d/stereo" % pb_left, "i", (1,)),
+        ("/%s/%d/stereo" % (kind, source[0]), "i", (1,)),
         ("/output/%d/stereo" % route.output[0], "i",
          (1 if route.stereo else 0,)),
     ]
@@ -92,31 +92,39 @@ def mix_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
     ``level`` dB).
     """
     messages: List[Tuple[str, str, Tuple[object, ...]]] = []
+    kind, source = route.source
     if len(route.output) == 2:
         left, right = route.output
-        pb_left, _ = route.playback
+        pb_left = source[0]
         if route.stereo:
-            messages.append(("/mix/%d/playback/%d" % (left, pb_left), "fi",
+            messages.append(("/mix/%d/%s/%d" % (left, kind, pb_left), "fi",
                              (route.level, 0)))
         else:
             # Unlinked outputs: feed each side the matching half of the
-            # (linked) playback pair via the pair balance. oscmix halves
+            # (linked) source pair via the pair balance. oscmix halves
             # the gain on this path (setlevel(): ll = vol / 2), so the
             # request is raised by 6 dB to make `level` mean the same
             # thing as it does for a linked route -- measured on a UCX II
             # as an exact 6 dB deficit before this compensation.
+            #
+            # That measurement was taken on a *playback* source. oscmix
+            # runs both kinds through the same setlevel(), so the same
+            # halving is expected for an input source -- but expected is
+            # not measured, and it needs a signal on a hardware input to
+            # check. Flagged in the roadmap rather than assumed silently.
             unlinked = min(route.level, 0.0) + UNLINKED_GAIN_OFFSET
-            messages.append(("/mix/%d/playback/%d" % (left, pb_left), "fi",
+            messages.append(("/mix/%d/%s/%d" % (left, kind, pb_left), "fi",
                              (unlinked, -100)))
-            messages.append(("/mix/%d/playback/%d" % (right, pb_left), "fi",
+            messages.append(("/mix/%d/%s/%d" % (right, kind, pb_left), "fi",
                              (unlinked, 100)))
         if route.volume is not None:
             for out in (left, right):
                 messages.append(("/output/%d/volume" % out, "f", (route.volume,)))
     else:
         (out,) = route.output
-        (pb,) = route.playback
-        messages.append(("/mix/%d/playback/%d" % (out, pb), "fi", (route.level, 0)))
+        (pb,) = source
+        messages.append(("/mix/%d/%s/%d" % (out, kind, pb), "fi",
+                         (route.level, 0)))
         if route.volume is not None:
             messages.append(("/output/%d/volume" % out, "f", (route.volume,)))
     return messages
@@ -269,7 +277,7 @@ def plan(entries: Sequence[Entry],
             writes.append(Write(entry.path, entry.tags, entry.args,
                                 entry.phase, MISSING))
             continue
-        if _matches(entry.tags, entry.args, observations[entry.path], tolerance):
+        if matches(entry.tags, entry.args, observations[entry.path], tolerance):
             confirmed.append(entry.path)
         else:
             writes.append(Write(entry.path, entry.tags, entry.args,
@@ -279,17 +287,45 @@ def plan(entries: Sequence[Entry],
     return Plan(tuple(writes), tuple(confirmed), tuple(unverifiable))
 
 
-def _matches(tags: str, want: Args, got: Args, tolerance: float) -> bool:
+def _both_muted(wanted: float, reported: float) -> bool:
+    """Whether both values mean "no signal", written differently.
+
+    Kept separate so the rule is one place and the citation above is
+    not repeated: at or below ``LEVEL_MIN`` upstream stores zero, and
+    zero is reported as -inf.
+    """
+    return wanted <= LEVEL_MIN and reported == float("-inf")
+
+
+def matches(tags: str, want: Args, got: Args,
+            tolerance: float = 0.5) -> bool:
     """Whether a reported value satisfies a desired one.
 
     Extra trailing arguments in the report are ignored, so a richer
     upstream dump format cannot break the comparison.
+
+    **A gain at or below the mute floor reads back as -inf.** Upstream
+    stores it as zero and reports zero as negative infinity::
+
+        level.vol = vol <= -65.f ? 0 : powf(10.f, vol / 20.f);   # setmix
+        ...vol > 0 ? 20.f * log10f(level.vol) : -INFINITY        # newmix
+
+    So a route written at ``level = -65`` -- which routing.conf
+    documents as mute -- comes back as ``-inf``, and a plain difference
+    is infinite. That was invisible while the only mix registers were
+    the playback ones, which the dump never reports; input routes are
+    verifiable, so a muted monitoring path would have been reported
+    mismatched on every start and re-sent every time.
+
+    The two are the same value expressed twice, so they compare equal.
     """
     if len(got) < len(want):
         return False
     for tag, wanted, reported in zip(tags, want, got):
         try:
             if tag == "f":
+                if _both_muted(float(wanted), float(reported)):  # type: ignore[arg-type]
+                    continue
                 if abs(float(wanted) - float(reported)) > tolerance:  # type: ignore[arg-type]
                     return False
             elif int(wanted) != int(reported):  # type: ignore[call-overload]
