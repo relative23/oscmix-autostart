@@ -353,3 +353,160 @@ def unreachable(config: Config, device: Optional[Device]) -> Tuple[str, ...]:
 def routes_of(config: Config) -> Tuple[Route, ...]:
     """The routes a plan came from, for callers that still need them."""
     return tuple(config.routes)
+
+
+# --------------------------------------------------------------------------
+# observed() rendered as config -- `--dump-config`.
+#
+# The inverse of `mix_messages`, and only as complete as the device is
+# willing to report. `/mix/<out>/input/<in>` comes back; the playback
+# matrix does not (ADR 0002), so a dump reproduces monitoring paths and
+# cannot reproduce software routing. Saying that loudly is the whole
+# difference between a useful tool and one that silently loses half a
+# config.
+# --------------------------------------------------------------------------
+
+def _linked(seen: Mapping[str, Args], family: str, channel: int) -> bool:
+    """Whether a pair is stereo-linked, as the device reported it."""
+    args = seen.get("/%s/%d/stereo" % (family, channel - (channel - 1) % 2))
+    return bool(args and args[0])
+
+
+def _mix_entries(seen: Mapping[str, Args]) -> Dict[Tuple[int, int], Args]:
+    """Every reported input-matrix cell that is not muted."""
+    entries: Dict[Tuple[int, int], Args] = {}
+    for path, args in seen.items():
+        parts = path.split("/")
+        if len(parts) != 5 or parts[1] != "mix" or parts[3] != "input":
+            continue
+        if not args or not isinstance(args[0], float):
+            continue
+        if args[0] == float("-inf") or args[0] <= LEVEL_MIN:
+            continue
+        try:
+            entries[(int(parts[2]), int(parts[4]))] = args
+        except ValueError:
+            continue
+    return entries
+
+
+def routes_from_observed(seen: Mapping[str, Args]) -> Tuple[Route, ...]:
+    """Reconstruct the routes a device's reported state implies.
+
+    Deterministic in name and order, because the round trip has to be a
+    fixed point: dumping, applying and dumping again must produce the
+    same file, and a name derived from anything but the channels would
+    not survive that.
+
+    Only what the dump carries. See ``unrecoverable`` for the rest.
+    """
+    entries = _mix_entries(seen)
+    routes = []
+    claimed = set()
+    for (out, src) in sorted(entries):
+        if (out, src) in claimed:
+            continue
+        cell = entries[(out, src)]
+        # Args is a tuple of `object`; the filter in _mix_entries already
+        # established that the first is a float, and the pan is written
+        # as an int by everything that produces these registers.
+        level = float(cell[0])          # type: ignore[arg-type]
+        pan = int(cell[1]) if len(cell) > 1 else 0   # type: ignore[call-overload]
+        out_linked = _linked(seen, "output", out)
+
+        if out_linked and out % 2 == 1:
+            # A linked pair folds onto its odd channel, and the register
+            # is the pair's. pan 0 is a plain stereo pass-through.
+            routes.append(Route(name="in%d-%d-out%d-%d" % (src, src + 1, out, out + 1),
+                                input=(src, src + 1), output=(out, out + 1),
+                                level=round(level, 1)))
+            claimed.add((out, src))
+        elif not out_linked and pan in (-100, 100) and (out + 1, src) in entries:
+            # The hard-panned pair an unlinked route writes. oscmix
+            # halved the gain on the way in, so the 6 dB compensation
+            # comes back off to recover the `level` the config asked for.
+            routes.append(Route(name="in%d-%d-out%d-%d-split" % (src, src + 1, out, out + 1),
+                                input=(src, src + 1), output=(out, out + 1),
+                                level=round(level - UNLINKED_GAIN_OFFSET, 1),
+                                stereo=False))
+            claimed.update({(out, src), (out + 1, src)})
+        elif pan == 0 and not out_linked:
+            routes.append(Route(name="in%d-out%d" % (src, out),
+                                input=(src,), output=(out,),
+                                level=round(level, 1)))
+            claimed.add((out, src))
+    return tuple(routes)
+
+
+def unrecoverable(device: Optional[Device] = None) -> Tuple[str, ...]:
+    """Register families a dump cannot reproduce, and why it matters.
+
+    Read from the register model rather than listed here, so a family
+    that becomes reportable stops being an excuse the moment the
+    recording says so.
+    """
+    if device is None:
+        return ()
+    return tuple(r.template for r in device.registers
+                 if r.verify == REESTABLISHED)
+
+
+def render_config(config: Config, device: Optional[Device] = None) -> str:
+    """A ``routing.conf`` that reproduces what the device reported.
+
+    Volume is deliberately **not** emitted. A route that declares
+    ``volume`` pins the fader on every start (ADR 0003), so writing it
+    into a dumped config would silently convert every output level the
+    user set by hand into a value forced back on them at boot. Which
+    registers a dump should pin is the pin/remember question, and it
+    belongs in the register table rather than in this writer.
+    """
+    missing = unrecoverable(device)
+    lines = [
+        "# Generated by oscmix-session --dump-config.",
+        "#",
+        "# This is what the device reported, not everything it is doing.",
+    ]
+    if missing:
+        lines += [
+            "#",
+            "# NOT IN HERE, because the device does not report it:",
+        ]
+        lines += ["#   %s" % t for t in missing]
+        lines += [
+            "#",
+            "# A `/mix` write to the playback matrix draws no reply and the",
+            "# state dump omits it, so software routing cannot be read back",
+            "# -- only re-established from a config. If you had playback",
+            "# routes, they are not below and this file will not restore",
+            "# them. Merge, do not replace.",
+        ]
+    lines += [
+        "#",
+        "# Output faders are not pinned here either: a route that declares",
+        "# 'volume' forces that level on every start, and a dump has no way",
+        "# to know you meant that rather than 'this is where I left it'.",
+        "",
+        "[device]",
+        "name = %s" % config.device_name,
+        "usb-id = %s" % config.usb_id,
+        "",
+        "[osc]",
+        "port = %d" % config.osc_port,
+        "",
+    ]
+    if not config.routes:
+        lines += ["# No input routing was reported. That is a device with no",
+                  "# direct monitoring set up, not an error."]
+    for route in config.routes:
+        kind, source = route.source
+        lines += [
+            "[route:%s]" % route.name,
+            "%s = %s" % (kind, "/".join(map(str, source))),
+            "output = %s" % "/".join(map(str, route.output)),
+            "level = %.1f" % route.level,
+        ]
+        if not route.stereo:
+            lines.append("stereo = false")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"

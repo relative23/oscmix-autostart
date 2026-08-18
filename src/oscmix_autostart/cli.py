@@ -4,16 +4,32 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Dict, Optional, Sequence, Tuple
 
-from .config import discover_config_path, load_config
-from .constants import DEFAULT_DEVICE_TIMEOUT, EXIT_CONFIG, EXIT_OK, __version__
+from .backend import loopback
+from .config import Config, discover_config_path, load_config
+from .constants import (
+    DEFAULT_DEVICE_TIMEOUT,
+    EXIT_CONFIG,
+    EXIT_FAILURE,
+    EXIT_OK,
+    __version__,
+)
 from .errors import ConfigError
 from .log import log
 from .pipewire import generate_pipewire_conf, pw_sink_info
+from .reconcile import observed, render_config, routes_from_observed
+from .registers import device_for_name
 from .session import run_session
+
+#: How long --dump-config listens for the device's reply. The dump is
+#: over in ~2 s on a UCX II (tests/data/cold-plug-timeline.json); this is
+#: several times that so a slower device is not truncated, and it costs
+#: nothing on a fast one because the read stops when the window ends.
+DUMP_READ_SECONDS = 8.0
 
 
 def build_arg_parser() -> ArgumentParser:
@@ -31,6 +47,9 @@ def build_arg_parser() -> ArgumentParser:
                         help="UDP port oscmix listens on (overrides config)")
     parser.add_argument("--dry-run", action="store_true",
                         help="show what would be started and sent, then exit")
+    parser.add_argument("--dump-config", action="store_true",
+                        help="ask the running device for its state and print "
+                             "a routing.conf that reproduces what it reports")
     parser.add_argument("--pipewire-sinks", action="store_true",
                         help="print a PipeWire config with one named sink "
                              "per stereo route, then exit")
@@ -66,6 +85,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.osc_port:
         config.osc_port = args.osc_port
 
+    if args.dump_config:
+        return _dump_config(config)
+
     if args.pipewire_sinks:
         target, positions = args.pipewire_target, None
         info = pw_sink_info(config.device_name, target=target)
@@ -85,3 +107,45 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return EXIT_OK
 
     return run_session(args, config)
+
+
+def _dump_config(config: Config) -> int:
+    """Print a routing.conf built from what the device reports.
+
+    Needs a running backend: this reads the device rather than the
+    config it was started from. An empty read is a failure and says so
+    -- printing an empty config would look like "you have no routing"
+    when it means "nobody answered", and the two call for opposite
+    responses.
+    """
+    device = loopback(config.osc_port, config.osc_recv_port)
+    listener = device.listen()
+    if listener is None:
+        log.error("UDP %d is in use -- close the mixer GUI; its meters and "
+                  "this read would split the device's replies",
+                  config.osc_recv_port)
+        return EXIT_FAILURE
+
+    seen: Dict[str, Tuple[object, ...]] = {}
+    try:
+        device.request_dump()
+        deadline = time.monotonic() + DUMP_READ_SECONDS
+        while time.monotonic() < deadline:
+            for path, _tags, args in listener.messages(0.25):
+                seen.setdefault(path, tuple(args))
+    finally:
+        listener.close()
+
+    if not seen:
+        log.error("no reply from the backend on UDP %d -- is oscmix running?",
+                  config.osc_recv_port)
+        return EXIT_FAILURE
+
+    dumped = Config(device_name=config.device_name, usb_id=config.usb_id,
+                    osc_port=config.osc_port,
+                    osc_recv_port=config.osc_recv_port,
+                    routes=list(routes_from_observed(observed(seen))))
+    log.info("read %d registers; %d input route(s) reconstructed",
+             len(seen), len(dumped.routes))
+    sys.stdout.write(render_config(dumped, device_for_name(config.device_name)))
+    return EXIT_OK

@@ -57,7 +57,8 @@ ALLOWED_IMPORTS = {
     "process": {"constants", "discovery", "log"},
     "session": {"config", "constants", "discovery", "log", "notify",
                 "process", "reconcile", "routing", "verify"},
-    "cli": {"config", "constants", "errors", "log", "pipewire", "session"},
+    "cli": {"backend", "config", "constants", "errors", "log", "pipewire",
+            "reconcile", "registers", "session"},
     "launcher": {"constants", "discovery"},
     "registers": set(),
     # The one place that opens a socket to the device. Its Traits name

@@ -1122,9 +1122,28 @@ it in the field.
 - **Channel state** -- `[input:N]` and `[output:N]` sections: phantom
   power that survives a reboot, gain, reference level, mute, pan, phase.
   Validated against the channels that actually have each option.
-- **`--dump-config`** -- read the device and emit a `routing.conf` that
-  reproduces it. Build it in the GUI, freeze it with one command. Testable
-  as a round trip: dump → apply → dump is a fixed point.
+- **`--dump-config` -- done.** Read the device and emit a `routing.conf`
+  that reproduces what it reports. Build it in the GUI, freeze it with
+  one command.
+
+  The round trip is a fixed point, proven twice: 16 tests over synthetic
+  states built from the same message shapes the apply sends, and once
+  against the device -- `input 1/2 -> output 1/2` at -6 dB written
+  through the normal apply path, read back as exactly that, then
+  restored to `-inf`.
+
+  **What it cannot do, and says so at the top of every file it writes:**
+  the playback matrix is not reported (ADR 0002), so software routing
+  cannot be read back. A dump reproduces monitoring paths and nothing
+  else -- *merge, do not replace*. It refuses outright when UDP 8222 is
+  held, because two readers split the device's replies and half an
+  answer rendered as a config looks authoritative.
+
+  It also declines to emit `volume`. A route that declares it pins the
+  fader on every start (ADR 0003), and a dump cannot tell "I meant this"
+  from "this is where I left it". Which registers a dump should pin is
+  the pin/remember question below, and the answer belongs in the
+  register table rather than in the writer.
 - **Profiles** -- several configs and a way to switch between them;
   TotalMix's eight snapshots, but as text.
 - **The pin/remember model** -- today's implicit rule made selectable per
