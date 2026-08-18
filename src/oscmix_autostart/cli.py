@@ -31,6 +31,9 @@ from .session import run_session
 #: nothing on a fast one because the read stops when the window ends.
 DUMP_READ_SECONDS = 8.0
 
+#: Stop early once no *new* register has arrived for this long.
+DUMP_QUIET_SECONDS = 1.0
+
 
 def build_arg_parser() -> ArgumentParser:
     parser = ArgumentParser(
@@ -130,9 +133,22 @@ def _dump_config(config: Config) -> int:
     try:
         device.request_dump()
         deadline = time.monotonic() + DUMP_READ_SECONDS
+        quiet_after = deadline
         while time.monotonic() < deadline:
+            fresh = False
             for path, _tags, args in listener.messages(0.25):
+                if path not in seen:
+                    fresh = True
                 seen.setdefault(path, tuple(args))
+            if fresh:
+                # Stop once the dump goes quiet rather than always
+                # waiting out the window: it is over in ~2 s on a UCX II,
+                # and a command that takes 8 s regardless invites being
+                # interrupted halfway. The level meters keep streaming,
+                # so "quiet" means no register we had not already seen.
+                quiet_after = time.monotonic() + DUMP_QUIET_SECONDS
+            elif seen and time.monotonic() > quiet_after:
+                break
     finally:
         listener.close()
 
