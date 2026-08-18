@@ -52,7 +52,7 @@ ALLOWED_IMPORTS = {
     # above routing while routing wanted to call it -- a cycle.
     "routing": {"backend", "config", "constants", "log", "osc", "reconcile"},
     "verify": {"backend", "config", "constants", "log", "osc", "reconcile",
-               "routing"},
+               "registers", "routing"},
     "pipewire": {"config", "errors", "log"},
     "process": {"constants", "discovery", "log"},
     "session": {"config", "constants", "discovery", "log", "notify",

@@ -50,7 +50,15 @@ from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .config import Config, Route
 from .constants import LEVEL_MIN, UNLINKED_GAIN_OFFSET
-from .registers import REESTABLISHED, VERIFIABLE, Device, verify_class
+from .registers import (
+    ENUM,
+    REESTABLISHED,
+    VERIFIABLE,
+    Device,
+    device_for_name,
+    settable_options,
+    verify_class,
+)
 
 Args = Tuple[object, ...]
 Message = Tuple[str, str, Args]
@@ -137,6 +145,11 @@ def mix_messages(route: Route) -> List[Tuple[str, str, Tuple[object, ...]]]:
 #: got wrong.
 PHASE_LINK = 0
 PHASE_MIX = 1
+#: Channel state -- `[input:N]` / `[output:N]`. After the mix because it
+#: does not depend on the link barrier, and because a fader or a
+#: reference level landing before the routing exists would be audible
+#: for the width of the barrier.
+PHASE_CHANNEL = 2
 
 #: Why a write is in the plan.
 MISSING = "missing"            # observed nothing for it
@@ -208,7 +221,44 @@ def desired(config: Config) -> Tuple[Entry, ...]:
         for route in config.routes:
             for path, tags, args in produce(route):
                 entries[path] = Entry(path, tags, tuple(args), phase)
-    return tuple(sorted(entries.values(), key=_send_order(config)))
+    ordered = sorted(entries.values(), key=_send_order(config))
+    return tuple(ordered) + channel_entries(config)
+
+
+def channel_entries(config: Config) -> Tuple[Entry, ...]:
+    """The `[input:N]` / `[output:N]` settings, as registers to write.
+
+    Enums go out as their **index**, not their name. Upstream accepts
+    either for `/output/<n>/reflevel` (`setenum`) and only an int for
+    `/input/<n>/reflevel` (`setint`) -- an asymmetry that writing names
+    would have hit on inputs alone, silently, since an ignored write
+    draws no reply.
+
+    The write tags therefore differ from the report tags: a reflevel is
+    written ``,i`` and reported ``,is`` with the name appended. The
+    comparison only reads as many arguments as were asked for, so the
+    extra name does not make it a mismatch.
+    """
+    device = device_for_name(config.device_name)
+    if device is None:
+        return ()
+    out = []
+    for setting in config.channels:
+        known = settable_options(device, setting.family)
+        register = known.get(setting.option)
+        if register is None:
+            continue
+        path = "/%s/%d/%s" % (setting.family, setting.channel, setting.option)
+        if register.domain == ENUM:
+            value = register.choices.index(str(setting.value))
+            out.append(Entry(path, "i", (value,), PHASE_CHANNEL))
+        elif isinstance(setting.value, float):
+            out.append(Entry(path, "f", (setting.value,), PHASE_CHANNEL))
+        else:
+            out.append(Entry(path, "i",
+                             (int(setting.value),),  # type: ignore[call-overload]
+                             PHASE_CHANNEL))
+    return tuple(out)
 
 
 def _send_order(config: Config) -> Callable[[Entry], int]:

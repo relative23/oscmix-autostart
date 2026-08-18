@@ -259,6 +259,10 @@ def test_config_discovery_returns_none_when_there_is_nothing(session_mod,
 # it meant.
 # --------------------------------------------------------------------------
 
+# Sections a *later* version might add. [input:N] and [output:N] used to
+# stand here and no longer can: 0.3.0 made them real, which is the rule
+# working rather than the test rotting. Whatever replaces them has to be
+# genuinely unknown, or this checks nothing.
 FUTURE_CONFIG = """\
 [device]
 name = Fireface UCX II
@@ -271,16 +275,15 @@ playback = 1/2
 output = 1/2
 level = 0.0
 
-[input:1]
-48v = true
-reflevel = +4
-
-[output:5]
-reflevel = +4
-mute = false
-
 [profile:tracking]
 routes = main
+
+[eq:output:5]
+band1freq = 80
+band1gain = -3.0
+
+[clock]
+source = Internal
 """
 
 
@@ -304,7 +307,7 @@ def test_a_config_from_a_newer_version_still_applies_what_we_understand(
     warnings = [record.getMessage() for record in caplog.records
                 if record.levelname == "WARNING"]
     assert len(warnings) == 3
-    for section in ("input:1", "output:5", "profile:tracking"):
+    for section in ("profile:tracking", "eq:output:5", "clock"):
         assert any("[%s]" % section in text for text in warnings), section
     assert any("newer version" in text for text in warnings)
 

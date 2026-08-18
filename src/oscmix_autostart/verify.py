@@ -11,6 +11,14 @@ from .config import Config, Route
 from .constants import VERIFY_SETTLE, VERIFY_TIMEOUT
 from .log import log
 from .reconcile import desired, matches
+from .registers import (
+    WRITE_ONLY,
+    Device,
+    cold_plug_complete,
+    device_for_name,
+    settable_options,
+    verify_class,
+)
 from .routing import (
     StopCheck,
     apply_routing,
@@ -53,31 +61,55 @@ def _register_matches(want_types: str, want_args: Sequence[object],
     """
     return matches(want_types, tuple(want_args), tuple(got_args))
 
-def register_promptly_reported(path: str) -> bool:
-    """Whether a register is expected early in a /refresh dump.
+def register_promptly_reported(path: str,
+                               device: Optional[Device] = None) -> bool:
+    """Whether an *absent* register is worth re-sending for.
 
-    This is a hint, not a filter: every register that *does* appear in
-    the dump is compared, whatever this function says. It steers two
-    things only -- the early-exit condition of the observation window,
-    and whether an *absent* register counts as a problem (promptly
-    reported but missing = probably lost, worth a re-send) or as merely
-    unverifiable (logged as information).
+    A hint, not a filter: every register that *does* appear in the dump
+    is compared, whatever this says. It steers two things -- the early
+    exit of the observation window, and whether a missing register is a
+    problem (probably lost, re-send) or merely unverifiable (a note).
 
-    Two families are not promptly reported, both measured against the
-    real device: upstream dumps the input mix matrix
-    (``/mix/<out>/input/<in>``, oscmix.c) but not the playback mix
-    matrix, so ``/mix/*/playback/*`` never appears at all; and the
-    ``/playback/*`` section sits near the end of a dump that streams
-    several thousand messages over MIDI for many seconds. The
-    ``/output/*`` registers -- the audible signal path -- arrive early
-    and verify reliably.
+    Two families are never reported at all, both measured: the playback
+    mix matrix does not appear in a dump, and neither does anything the
+    model calls write-only.
+
+    **And channel state is not reported *completely* after a cold plug.**
+    Measured across a real USB replug: 1234 of 1932 non-meter registers
+    arrived and nothing followed for 272 s. Only the stereo flags came
+    back for every channel. `/output/N/mute` returned for channels 1, 2,
+    3, 8, 9 and 10 and not for 4-7 or 11-20 -- ragged, so a truncated
+    stream rather than a rule.
+
+    Without this, an `[output:N]` section would be reported unconfirmed
+    on every hotplug and the whole routing re-sent, every time. The
+    registers this release verified before 0.3.0 are all in the fast,
+    complete part, which is exactly why nothing noticed until channel
+    state arrived.
     """
     if path.startswith("/mix/") and "/playback/" in path:
         return False
-    if path.startswith("/playback/"):  # noqa: SIM103 -- one branch per family
+    if path.startswith("/playback/"):
         return False
+    if device is not None:
+        if verify_class(device, path) == WRITE_ONLY:
+            return False
+        if _is_channel_state(device, path):
+            # Modelled, verifiable, and not guaranteed whole after a
+            # hotplug. Absence is a note; a value that *does* arrive is
+            # still compared like any other.
+            return cold_plug_complete(device, path)
     return True
 
+
+def _is_channel_state(device: Device, path: str) -> bool:
+    """Whether the model declares this path as something a config sets."""
+    for family in ("input", "output"):
+        if path.startswith("/%s/" % family):
+            option = path.rsplit("/", 1)[-1]
+            if option in settable_options(device, family):
+                return True
+    return False
 
 @dataclass
 class VerifyResult:
@@ -115,8 +147,14 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
                    timeout: float = VERIFY_TIMEOUT,
                    on_observed: Optional[Callable[[str, Sequence[object]],
                                                   None]] = None,
-                   should_stop: StopCheck = never_stop
+                   should_stop: StopCheck = never_stop,
+                   *,
+                   device_model: Optional[Device] = None,
                    ) -> Optional[VerifyResult]:
+    # device_model is keyword-only and last on purpose: inserting it into
+    # the positional signature silently shifted `timeout` into it for
+    # every existing caller, which the suite caught immediately and a
+    # reader would not have.
     """Ask oscmix to dump its state and compare it against ``registers``.
 
     Returns ``None`` when verification is impossible (the receive port is
@@ -134,7 +172,8 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
     """
     confirmed: Set[str] = set()
     mismatched: Set[str] = set()
-    prompt = {path for path in registers if register_promptly_reported(path)}
+    prompt = {path for path in registers
+              if register_promptly_reported(path, device_model)}
     device = loopback(send_port, recv_port)
     listener = device.listen()
     if listener is None:
@@ -223,7 +262,8 @@ def _reapply_without_confirmation(config: Config,
     send_mix(config)
 
 
-def _unconfirmed(result: VerifyResult) -> List[str]:
+def _unconfirmed(result: VerifyResult,
+                 device: Optional[Device] = None) -> List[str]:
     """The registers that count as a problem worth re-sending for.
 
     Mismatched always counts. Absent counts only for the families the
@@ -232,7 +272,7 @@ def _unconfirmed(result: VerifyResult) -> List[str]:
     retry it cannot win.
     """
     lost = [path for path in result.unobserved
-            if register_promptly_reported(path)]
+            if register_promptly_reported(path, device)]
     return sorted(result.mismatched + lost)
 
 
@@ -260,6 +300,7 @@ def verify_and_repair(config: Config,
     three writes below, and the session waits for this thread before
     exiting: docs/decisions/0009-verifier-stop-contract.md.
     """
+    device = device_for_name(config.device_name)
     registers = expected_registers(config.routes)
     pending_links = output_link_state(config.routes)
     reapplied = {"done": not pending_links}
@@ -273,7 +314,8 @@ def verify_and_repair(config: Config,
         result = verify_routing(registers, config.osc_port,
                                 config.osc_recv_port, VERIFY_TIMEOUT,
                                 on_observed=on_observed,
-                                should_stop=should_stop)
+                                should_stop=should_stop,
+                                device_model=device)
         if should_stop():
             return
         if result is None:
@@ -283,7 +325,7 @@ def verify_and_repair(config: Config,
             return
         if not reapplied["done"]:
             _reapply_without_confirmation(config, pending_links, reapplied)
-        problems = _unconfirmed(result)
+        problems = _unconfirmed(result, device)
         if not problems:
             log.info("routing verified against device state "
                      "(%d confirmed; %d not reported by the device dump)%s",

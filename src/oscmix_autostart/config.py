@@ -24,7 +24,7 @@ from .constants import (
 )
 from .errors import ConfigError
 from .log import log
-from .registers import device_for_name
+from .registers import BOOL, DB, ENUM, GAIN, device_for_name, settable_options
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,21 @@ class Route:
         return ("input", self.input) if self.input else ("playback", self.playback)
 
 
+@dataclass(frozen=True)
+class ChannelSetting:
+    """One option a ``[input:N]`` / ``[output:N]`` section pins.
+
+    Kept as (family, channel, option, value) rather than as a nested
+    structure: it is one row of the register table with a value, which
+    is exactly what the plan consumes.
+    """
+
+    family: str
+    channel: int
+    option: str
+    value: object
+
+
 @dataclass
 class Config:
     device_name: str = DEFAULT_DEVICE_NAME
@@ -68,6 +83,7 @@ class Config:
     osc_port: int = DEFAULT_OSC_PORT
     osc_recv_port: int = DEFAULT_OSC_RECV_PORT
     routes: List[Route] = field(default_factory=list)
+    channels: List[ChannelSetting] = field(default_factory=list)
 
 
 def discover_config_path() -> Optional[Path]:
@@ -193,6 +209,23 @@ def _parse_route(parser: configparser.ConfigParser, section: str) -> Route:
                  level=level, volume=volume, stereo=stereo)
 
 
+def _parse_osc(parser: configparser.ConfigParser, section: str,
+               config: Config) -> None:
+    """The [osc] section: two ports, both bounded."""
+    _check_options(section, "osc", parser.options(section))
+    for option, attr in (("port", "osc_port"), ("recv-port", "osc_recv_port")):
+        raw = parser.get(section, option, fallback=str(getattr(config, attr)))
+        try:
+            port = int(raw)
+        except ValueError:
+            raise ConfigError(
+                "[osc] %s: %r is not a port number" % (option, raw)) from None
+        if not 1 <= port <= 65535:
+            raise ConfigError(
+                "[osc] %s: %d out of range 1..65535" % (option, port))
+        setattr(config, attr, port)
+
+
 def load_config(path: Optional[Path]) -> Config:
     """Load routing.conf. ``path=None`` returns built-in defaults."""
     config = Config()
@@ -210,6 +243,7 @@ def load_config(path: Optional[Path]) -> Config:
     except (configparser.Error, OSError) as exc:
         raise ConfigError("cannot read %s: %s" % (path, exc)) from None
 
+    pending: List[str] = []
     for section in parser.sections():
         if section == "device":
             _check_options(section, "device", parser.options(section))
@@ -222,23 +256,11 @@ def load_config(path: Optional[Path]) -> Config:
                 )
             config.usb_id = usb_id.lower()
         elif section == "osc":
-            _check_options(section, "osc", parser.options(section))
-            for option, attr in (("port", "osc_port"),
-                                 ("recv-port", "osc_recv_port")):
-                raw = parser.get(section, option, fallback=str(getattr(config, attr)))
-                try:
-                    port = int(raw)
-                except ValueError:
-                    raise ConfigError(
-                        "[osc] %s: %r is not a port number" % (option, raw)
-                    ) from None
-                if not 1 <= port <= 65535:
-                    raise ConfigError(
-                        "[osc] %s: %d out of range 1..65535" % (option, port)
-                    )
-                setattr(config, attr, port)
+            _parse_osc(parser, section, config)
         elif section.startswith("route:"):
             config.routes.append(_parse_route(parser, section))
+        elif section.startswith(("input:", "output:")):
+            pending.append(section)
         else:
             # A warning, not an error. See
             # docs/decisions/0006-routing-conf-compatibility.md: a section
@@ -254,6 +276,14 @@ def load_config(path: Optional[Path]) -> Config:
                 "written by a newer version of oscmix-autostart "
                 "(known: [device], [osc], [route:<name>])", section
             )
+    # After the loop, because [device] may appear anywhere in the file
+    # and every check below is device-specific.
+    device = device_for_name(config.device_name)
+    for section in pending:
+        family = section.split(":", 1)[0]
+        config.channels.extend(
+            _parse_channel_section(parser, section, family, device))
+
     _check_device_channels(config)
     _check_link_agreement(config.routes)
     return config
@@ -329,3 +359,84 @@ def _check_link_agreement(routes: Sequence[Route]) -> None:
                    "/".join(map(str, route.output)),
                    str(previous.stereo).lower(), str(route.stereo).lower())
             )
+
+
+def _parse_channel_section(parser: "configparser.ConfigParser", section: str,
+                           family: str, device: object) -> List[ChannelSetting]:
+    """Parse ``[input:N]`` / ``[output:N]``.
+
+    Everything here is checked against the register model rather than
+    against a list kept in this file: which options exist, which
+    channels have them, and what values they take. A second list would
+    be a second place to disagree with the device.
+    """
+    raw = section.split(":", 1)[1].strip()
+    try:
+        channel = int(raw)
+    except ValueError:
+        raise ConfigError(
+            "[%s]: %r is not a channel number" % (section, raw)) from None
+
+    known = settable_options(device, family)  # type: ignore[arg-type]
+    if not known:
+        # An unmodelled device has no opinion, here as everywhere else.
+        return []
+
+    unknown = set(parser.options(section)) - set(known)
+    if unknown:
+        extra = ""
+        if family == "input" and "48v" in unknown:
+            extra = (" -- '48v' is deliberately not settable from a config "
+                     "yet: phantom power stays out until a hardware case "
+                     "proves the channel it names is the channel it hits")
+        raise ConfigError(
+            "[%s]: unknown option(s) %s (valid: %s)%s"
+            % (section, ", ".join(sorted(unknown)),
+               ", ".join(sorted(known)), extra))
+
+    settings = []
+    for option in parser.options(section):
+        register = known[option]
+        valid = device.channels_for(register.channels)  # type: ignore[attr-defined]
+        if channel not in valid:
+            raise ConfigError(
+                "[%s] %s: channel %d does not have it on a %s (it has %s "
+                "on %d..%d)"
+                % (section, option, channel,
+                   device.name, option, min(valid), max(valid)))  # type: ignore[attr-defined]
+        settings.append(ChannelSetting(
+            family, channel, option,
+            _parse_domain(parser.get(section, option), section, option,
+                          register)))
+    return settings
+
+
+def _parse_domain(raw: str, section: str, option: str,
+                  register: object) -> object:
+    """Read a value according to the register's declared domain."""
+    domain = register.domain           # type: ignore[attr-defined]
+    if domain == BOOL:
+        return 1 if _parse_bool(raw, section, option) else 0
+    if domain == ENUM:
+        choices = register.choices     # type: ignore[attr-defined]
+        value = raw.strip()
+        if value not in choices:
+            raise ConfigError(
+                "[%s] %s: %r is not one of %s -- these are the device's own "
+                "names, not ours" % (section, option, value,
+                                     ", ".join(choices)))
+        return value
+    if domain == GAIN:
+        try:
+            gain = float(raw)
+        except ValueError:
+            raise ConfigError(
+                "[%s] %s: %r is not a gain in dB" % (section, option, raw)
+            ) from None
+        if not 0.0 <= gain <= 75.0:
+            raise ConfigError(
+                "[%s] %s: %.1f dB out of range 0..75" % (section, option, gain))
+        return gain
+    if domain == DB:
+        return _parse_db(raw, section, option)
+    raise ConfigError("[%s] %s: no value domain declared" % (section, option))

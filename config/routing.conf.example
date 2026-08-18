@@ -93,3 +93,32 @@ level = 0.0
 # input = 1/2
 # output = 7/8
 # level = -6.0
+
+# --------------------------------------------------------------------------
+# Channel state: [input:N] and [output:N]
+#
+# Settings that survive a reboot, applied after the routing. Which
+# options a channel has is the device's business, not this file's --
+# the mic preamps (1/2) have gain but no reference level, inputs 3-8
+# have reflevel, hi-z is on 3/4 only. Asking for one a channel does not
+# have is an error naming the channels that do.
+#
+#   [input:3]
+#   gain = 12.0          # dB, range depends on the channel
+#   reflevel = +19dBu    # the device's own names: +13dBu, +19dBu
+#   hi-z = true
+#
+#   [output:5]
+#   volume = -10.0       # dB; pins the fader on every start
+#   mute = false
+#   reflevel = +4dBu     # outputs: +4dBu, +13dBu, +19dBu
+#
+# PHANTOM POWER IS NOT SETTABLE HERE. '48v' is deliberately left out
+# until a hardware measurement proves the channel a config names is the
+# channel the device powers. An off-by-one in a silent output is a bug;
+# an off-by-one in phantom power is a damaged ribbon microphone. Set it
+# in the mixer for now.
+#
+# These sections make a config unreadable by oscmix-autostart 0.2.0,
+# which rejects unknown sections' options rather than guessing.
+# --------------------------------------------------------------------------

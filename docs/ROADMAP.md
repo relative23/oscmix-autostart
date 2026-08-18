@@ -1119,9 +1119,32 @@ it in the field.
   measured for a playback source. oscmix runs both through one
   `setlevel()`, so the same halving is expected for an input -- expected,
   not measured; it needs a signal on a hardware input.
-- **Channel state** -- `[input:N]` and `[output:N]` sections: phantom
-  power that survives a reboot, gain, reference level, mute, pan, phase.
-  Validated against the channels that actually have each option.
+- **Channel state -- done, except phantom power.** `[input:N]` and
+  `[output:N]`: gain, reference level, mute, phase, hi-z, output volume.
+  Validated against the channels that actually have each option --
+  per *channel*, not per device: the mic preamps have gain and no
+  reflevel, inputs 3-8 have reflevel, hi-z is on 3/4.
+
+  None of that is listed in the parser. The settable surface is derived
+  from the register model: a register is settable exactly when it
+  declares a value domain. The model's ranges, read from a recorded
+  dump, turned out to agree exactly with upstream's own device table --
+  two independent sources, same answer.
+
+  **`48v` is deliberately not settable.** It is modelled, verifiable and
+  readable, and it has no value domain, so no config can reach it. The
+  rule below says a hardware case must prove the channel a config names
+  is the channel the device powers, and that case needs a microphone
+  nobody should risk. Asking for it is an error that says so.
+
+  *The measurement that shaped it:* after a cold plug the device does
+  not report channel state for every channel, so verifying it naively
+  would warn and re-send the whole routing on every hotplug.
+  `register_promptly_reported` now asks the model whether a family is
+  known to arrive whole, and treats absence as a note for the ones that
+  are not. Everything this project verified before 0.3.0 sits in the
+  fast, complete part -- which is exactly why nothing noticed until
+  channel state arrived.
 - **`--dump-config` -- done.** Read the device and emit a `routing.conf`
   that reproduces what it reports. Build it in the GUI, freeze it with
   one command.

@@ -56,6 +56,13 @@ REESTABLISHED = "re-established"
 VERIFY_CLASSES = (VERIFIABLE, WRITE_ONLY, REESTABLISHED)
 
 
+#: Value domains, as a config author has to satisfy them.
+BOOL = "bool"
+ENUM = "enum"
+GAIN = "gain"        # dB, per-channel range from the device table
+DB = "db"            # dB within LEVEL_MIN..LEVEL_MAX
+
+
 @dataclass(frozen=True)
 class Register:
     """One register family: where it lives, what it holds, how it verifies.
@@ -70,6 +77,15 @@ class Register:
     tags: str
     verify: str
     channels: str
+    #: What a config may set it to, or None when this project does not
+    #: expose it as a setting. A register with no domain is readable and
+    #: writable by the code, not by a `routing.conf`.
+    domain: Optional[str] = None
+    #: For ENUM: the accepted names, exactly as the device reports them.
+    #: Taken from upstream's device table, which is where the device's
+    #: own vocabulary lives -- inventing synonyms here would mean a
+    #: config that reads well and sets nothing.
+    choices: Tuple[str, ...] = ()
 
     @property
     def per_channel(self) -> bool:
@@ -155,7 +171,7 @@ UCX2 = Device(
         # --- what 0.2.0 already writes ---------------------------------
         Register("/playback/{ch}/stereo", "i", VERIFIABLE, "playback"),
         Register("/output/{ch}/stereo", "i", VERIFIABLE, "output"),
-        Register("/output/{ch}/volume", "f", VERIFIABLE, "output"),
+        Register("/output/{ch}/volume", "f", VERIFIABLE, "output", DB),
         # The playback matrix: a /mix write draws no reply and the dump
         # omits it entirely. Re-established from a known link state.
         Register("/mix/{out}/playback/{pb}", "fi", REESTABLISHED, "output"),
@@ -164,18 +180,25 @@ UCX2 = Device(
         # Reported, so almost all of the new surface is verifiable --
         # unlike the playback matrix this project started with.
         Register("/mix/{out}/input/{in_}", "fi", VERIFIABLE, "output"),
+        # 48v deliberately has NO domain: it is readable by the code and not
+        # settable from a routing.conf. See registers.settable_options and
+        # the roadmap's rule -- phantom power is not exposed until a
+        # hardware case proves the channel it names is the channel it
+        # hits, because an off-by-one is damaged equipment, not silence.
         Register("/input/{ch}/48v", "i", VERIFIABLE, "48v"),
-        Register("/input/{ch}/hi-z", "i", VERIFIABLE, "hi-z"),
-        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain"),
-        Register("/input/{ch}/reflevel", "is", VERIFIABLE, "input-reflevel"),
-        Register("/input/{ch}/mute", "i", VERIFIABLE, "input"),
-        Register("/input/{ch}/phase", "i", VERIFIABLE, "input"),
+        Register("/input/{ch}/hi-z", "i", VERIFIABLE, "hi-z", BOOL),
+        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain", GAIN),
+        Register("/input/{ch}/reflevel", "is", VERIFIABLE, "input-reflevel", ENUM,
+                 ("+13dBu", "+19dBu")),
+        Register("/input/{ch}/mute", "i", VERIFIABLE, "input", BOOL),
+        Register("/input/{ch}/phase", "i", VERIFIABLE, "input", BOOL),
         Register("/input/{ch}/stereo", "i", VERIFIABLE, "input"),
         # Verifiable, but see complete_after_cold_plug below: a cold
         # plug delivers these only for some channels.
-        Register("/output/{ch}/mute", "i", VERIFIABLE, "output"),
-        Register("/output/{ch}/phase", "i", VERIFIABLE, "output"),
-        Register("/output/{ch}/reflevel", "is", VERIFIABLE, "output-reflevel"),
+        Register("/output/{ch}/mute", "i", VERIFIABLE, "output", BOOL),
+        Register("/output/{ch}/phase", "i", VERIFIABLE, "output", BOOL),
+        Register("/output/{ch}/reflevel", "is", VERIFIABLE, "output-reflevel", ENUM,
+                 ("+4dBu", "+13dBu", "+19dBu")),
 
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),
@@ -298,3 +321,23 @@ def declared_paths(device: Device, capability_channels: Optional[
         for channel in channels:
             paths.append(register.path(ch=channel))
     return tuple(paths)
+
+
+def settable_options(device: Optional[Device], family: str) -> Dict[str, Register]:
+    """Options a ``[input:N]`` / ``[output:N]`` section may set.
+
+    Derived from the model rather than listed twice: a register is
+    settable exactly when it declares a value domain. That is also how
+    ``48v`` stays out -- it is modelled, verifiable and readable, and it
+    has no domain, so no config can reach it.
+
+    The roadmap's rule for phantom power is why: it may not be settable
+    from a text file until a hardware case proves the channel it names
+    is the channel it hits. An off-by-one in a silent output is a bug;
+    an off-by-one in phantom power is a damaged ribbon microphone.
+    """
+    if device is None:
+        return {}
+    prefix = "/%s/{ch}/" % family
+    return {r.template[len(prefix):]: r for r in device.registers
+            if r.domain is not None and r.template.startswith(prefix)}
