@@ -118,7 +118,7 @@ def _apply_and_verify(child: "subprocess.Popen[bytes]", config: Config,
         log.info("no routes configured; leaving mixer state untouched")
         return None
 
-    apply_routing(config.routes, config.osc_port, config.osc_recv_port)
+    apply_routing(config, config.osc_port, config.osc_recv_port)
 
     def should_stop() -> bool:
         # A dead backend counts as a stop: its port is gone, so every

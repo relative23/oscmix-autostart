@@ -154,7 +154,7 @@ def test_applying_routing_survives_a_device_that_never_answers(session_mod,
     device.start()
     started = time.monotonic()
     try:
-        session_mod.apply_routing([route], send_port, recv_port)
+        session_mod.apply_routing(session_mod.Config(routes=[route]), send_port, recv_port)
         device.drain()
     finally:
         device.stop()
@@ -173,7 +173,8 @@ def test_a_dead_backend_port_does_not_raise(session_mod, routing_mod,
     monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.05)
     route = make_route(session_mod)
     for _ in range(3):
-        session_mod.apply_routing([route], free_udp_port(), free_udp_port())
+        session_mod.apply_routing(session_mod.Config(routes=[route]),
+                                  free_udp_port(), free_udp_port())
 
 
 def test_verification_survives_a_flood_of_unrelated_registers(session_mod,
@@ -278,7 +279,7 @@ def test_a_backend_killed_between_the_phases_does_not_crash_the_session(
                          die_after="/output/5/stereo")
     device.start()
     try:
-        session_mod.apply_routing([make_route(session_mod)], send_port,
+        session_mod.apply_routing(session_mod.Config(routes=[make_route(session_mod)]), send_port,
                                   recv_port)
     finally:
         device.stop()
@@ -366,7 +367,7 @@ def test_applying_the_routing_is_repeatable(session_mod, routing_mod,
     device = LossyDevice(session_mod, send_port, recv_port)
     device.start()
     try:
-        session_mod.apply_routing([route], send_port, recv_port)
+        session_mod.apply_routing(session_mod.Config(routes=[route]), send_port, recv_port)
         device.drain(quiet=0.15, limit=3.0)
     finally:
         device.stop()

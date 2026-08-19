@@ -155,20 +155,27 @@ def await_link_echo(expected: Mapping[str, int], recv_port: int,
         listener.close()
 
 
-def apply_routing(routes: Sequence[Route], port: int,
+def apply_routing(config: Config, port: int,
                   recv_port: int = DEFAULT_OSC_RECV_PORT) -> None:
     """Send the routing in two phases: link the pairs, then fill the mix.
 
     Both phases are separated by the link barrier above. Sending them in
     one burst is what silences every even output (see LINK_ECHO_TIMEOUT).
 
-    The *what* is a ``reconcile.Plan`` now: the registers the config
-    asks for, deduplicated and split at the barrier. What is left here
-    is the *when* -- send, wait out the barrier, send -- which is this
+    The *what* is a ``reconcile.Plan``: the registers the config asks
+    for, deduplicated and split at the barrier. What is left here is the
+    *when* -- send, wait out the barrier, send -- which is this
     function's whole job and the only part that needs a socket and a
     clock.
+
+    It takes the **whole config**, not a list of routes. Rebuilding a
+    Config from routes alone silently dropped everything else in it:
+    `[input:N]` and `[output:N]` sections parsed, validated, appeared in
+    `--dry-run` and never reached the device. That is roadmap item G in
+    another shape -- the dry run and the apply reading different sources
+    -- and it came from avoiding exactly this signature change.
     """
-    wanted = plan(desired(Config(routes=list(routes))))
+    wanted = plan(desired(config))
     device = loopback(port, recv_port)
     # Only the output links need the barrier: /playback/<n>/stereo goes
     # through setinputstereo(), which updates oscmix's state right away,
@@ -177,7 +184,8 @@ def apply_routing(routes: Sequence[Route], port: int,
     device.send(w.message() for w in wanted.links())
 
     timeout = LINK_ECHO_TIMEOUT
-    echoed = await_link_echo(output_link_state(routes), recv_port, timeout)
+    echoed = await_link_echo(output_link_state(config.routes), recv_port,
+                             timeout)
     if echoed is None:
         log.info("link echo unobservable (UDP %d in use); waiting %.1fs",
                  recv_port, LINK_SETTLE)
@@ -190,14 +198,23 @@ def apply_routing(routes: Sequence[Route], port: int,
         log.info("channel pairs linked and confirmed by the device")
 
     device.send(w.message() for w in wanted.mix())
-    for route in routes:
+    # Channel state last: it does not depend on the barrier, and a fader
+    # or a reference level landing before the routing exists would be
+    # audible for the width of it.
+    device.send(w.message() for w in wanted.channel())
+    for route in config.routes:
+        kind, source = route.source
         log.info(
-            "route %r: playback %s -> output %s at %+.1f dB",
-            route.name,
-            "/".join(map(str, route.playback)),
+            "route %r: %s %s -> output %s at %+.1f dB",
+            route.name, kind,
+            "/".join(map(str, source)),
             "/".join(map(str, route.output)),
             route.level,
         )
+    if config.channels:
+        log.info("channel state: %d setting(s) on %d channel(s)",
+                 len(config.channels),
+                 len({(c.family, c.channel) for c in config.channels}))
 
 
 def output_link_state(routes: Sequence[Route]) -> Dict[str, int]:

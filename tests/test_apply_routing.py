@@ -106,7 +106,7 @@ def run_apply(session_mod, routes, **kwargs):
     device = FakeOscmix(session_mod, send_port, recv_port, **kwargs)
     device.start()
     try:
-        session_mod.apply_routing(routes, send_port, recv_port)
+        session_mod.apply_routing(session_mod.Config(routes=list(routes)), send_port, recv_port)
     finally:
         device.stop()
         device.join(timeout=3)
@@ -226,7 +226,7 @@ def test_falls_back_to_a_fixed_wait_when_the_port_is_taken(routing_mod, session_
     device = FakeOscmix(session_mod, send_port, recv_port, echo_delay=0.01)
     device.start()
     try:
-        session_mod.apply_routing([make_route(session_mod)], send_port,
+        session_mod.apply_routing(session_mod.Config(routes=[make_route(session_mod)]), send_port,
                                   recv_port)
     finally:
         blocker.close()
@@ -634,7 +634,7 @@ def test_the_dry_run_prints_exactly_the_datagrams_the_apply_sends(
     backend = CapturingBackend(session_mod, port)
     backend.start()
     try:
-        session_mod.apply_routing(routes, port, recv_port)
+        session_mod.apply_routing(session_mod.Config(routes=list(routes)), port, recv_port)
         # The apply returns as soon as the last sendto did; give the
         # reader a moment to drain the socket buffer.
         deadline = time.monotonic() + 3.0
@@ -666,3 +666,55 @@ def test_the_plan_puts_every_link_before_every_mix(session_mod):
     declared = [m for route in routes
                 for m in session_mod.route_messages(route)]
     assert sorted(plan.messages()) == sorted(declared)
+
+
+def test_everything_the_config_asks_for_reaches_the_wire(session_mod):
+    """The general form of a defect that shipped twice in two shapes.
+
+    First as roadmap item G: `--dry-run` walked route by route while the
+    apply walked the routing, so the printed order was not the sent
+    order. Fixed by giving both one source.
+
+    Then again, in the commit that added `[input:N]` and `[output:N]`:
+    `apply_routing` took a list of routes and rebuilt a Config from it,
+    so channel state parsed, validated, appeared in `--dry-run` and
+    never reached the device. The dry run and the apply were reading
+    different sources *again* -- and the earlier fix did not catch it
+    because it compared the two orderings, not the two contents.
+
+    So this asserts the property directly: every register `desired()`
+    produces is a datagram the device receives. Adding a section that
+    the apply forgets fails here, whatever shape the forgetting takes.
+    """
+    config = session_mod.Config(
+        device_name="Fireface UCX II",
+        routes=[make_route(session_mod, volume=-6.0),
+                session_mod.Route(name="mon", input=(1, 2), output=(7, 8))],
+        channels=[
+            session_mod.ChannelSetting("output", 5, "mute", 0),
+            session_mod.ChannelSetting("input", 3, "gain", 12.0),
+            session_mod.ChannelSetting("output", 5, "reflevel", "+4dBu"),
+        ])
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    config.osc_port, config.osc_recv_port = send_port, recv_port
+
+    device = CapturingBackend(session_mod, send_port)
+    device.start()
+    try:
+        session_mod.apply_routing(config, send_port, recv_port)
+        deadline = time.monotonic() + 3.0
+        from oscmix_autostart import reconcile
+
+        wanted = [e.path for e in reconcile.desired(config)]
+        while (len({p for p, _t, _a in device.received}) < len(wanted)
+               and time.monotonic() < deadline):
+            time.sleep(0.02)
+    finally:
+        device.stop()
+        device.join(timeout=3)
+        device.sock.close()
+
+    sent = {path for path, _tags, _args in device.received}
+    missing = [p for p in wanted if p not in sent]
+    assert missing == [], (
+        "the config asks for these and the apply never sent them: %s" % missing)

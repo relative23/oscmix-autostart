@@ -19,7 +19,13 @@ enforces that, along with the layering the modules are arranged in:
 
 from __future__ import annotations
 
-from .config import Config, Route, discover_config_path, load_config
+from .config import (
+                        ChannelSetting,
+                        Config,
+                        Route,
+                        discover_config_path,
+                        load_config,
+)
 from .constants import (
                         CHANNEL_MAX,
                         CHANNEL_MIN,
@@ -84,6 +90,7 @@ __all__ = [
                         "LEVEL_MAX",
                         "LEVEL_MIN",
                         "UNLINKED_GAIN_OFFSET",
+                        "ChannelSetting",
                         "Config",
                         "ConfigError",
                         "Route",

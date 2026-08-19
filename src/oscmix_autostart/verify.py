@@ -339,7 +339,7 @@ def verify_and_repair(config: Config,
                 return
             log.warning("%d register(s) unconfirmed (%s); re-sending routing",
                         len(problems), ", ".join(problems))
-            apply_routing(config.routes, config.osc_port,
+            apply_routing(config, config.osc_port,
                           config.osc_recv_port)
             if wait_unless_stopped(VERIFY_SETTLE, should_stop):
                 return

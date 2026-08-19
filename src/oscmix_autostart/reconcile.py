@@ -197,6 +197,9 @@ class Plan:
     def mix(self) -> Tuple[Write, ...]:
         return tuple(w for w in self.writes if w.phase == PHASE_MIX)
 
+    def channel(self) -> Tuple[Write, ...]:
+        return tuple(w for w in self.writes if w.phase == PHASE_CHANNEL)
+
     def messages(self) -> Tuple[Tuple[str, str, Args], ...]:
         """Every write in send order: all links, the barrier, then all mix."""
         return tuple(w.message() for w in self.writes)
