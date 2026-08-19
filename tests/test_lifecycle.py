@@ -71,7 +71,11 @@ def lifecycle(session_module, monkeypatch):
                             type("S", (), {"Popen": staticmethod(
                                 lambda *a, **k: FakeChild(returncode))})())
 
-        def fake_supervise(child, stop):
+        def fake_supervise(child, stop, on_reload=None,
+                           reload_requested=None):
+            # Signature mirrors the real one, keywords included: a double
+            # that accepts **kwargs would have swallowed the reconcile
+            # trigger silently instead of failing here.
             stop["stop"] = stop_requested
             return returncode
 

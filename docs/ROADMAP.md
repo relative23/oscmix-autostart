@@ -787,6 +787,11 @@ something else has changed it. With a start-only writer, `pin` means "set
 once, then hope" -- which is not what the word says, and is not more than
 TotalMix already offers.
 
+*Position two, taken in 0.3.0.* SIGHUP (`systemctl --user reload`) and a
+system-sleep hook for resume; hotplug needed nothing, because udev
+already restarts the unit and the cold-plug recording says so. No timer,
+asserted by test. [ADR 0013](decisions/0013-reconcile-triggers.md).
+
 *Three positions, in increasing cost:*
 
 - **Start-only, stated.** Applied at every start, the GUI always wins

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
-from .config import Config
+from .config import Config, discover_config_path, load_config
 from .constants import (
     EXIT_FAILURE,
     EXIT_OK,
@@ -24,12 +24,13 @@ from .constants import (
     VERIFY_SETTLE,
 )
 from .discovery import resolve_binary, udp_port_listening, usb_device_present, wait_for_seq_client
+from .errors import ConfigError
 from .log import log
 from .notify import sd_notify
 from .process import _cleanup_stale_backend, supervise
 from .reconcile import desired, plan
 from .routing import apply_routing, wait_unless_stopped
-from .verify import verify_and_repair
+from .verify import reconcile_now, verify_and_repair
 
 
 def _print_dry_run(client: int, config: Config) -> None:
@@ -81,6 +82,24 @@ def _install_stop_handlers(child: "subprocess.Popen[bytes]",
 
     signal.signal(signal.SIGTERM, handle_stop)
     signal.signal(signal.SIGINT, handle_stop)
+
+
+def _install_reload_handler(reload_requested: Dict[str, bool]) -> None:
+    """Turn SIGHUP into a request to reconcile, not into a reconcile.
+
+    The handler sets a flag and returns. Everything a reconcile does --
+    reading a config off disk, binding a port, waiting out the link
+    barrier -- is forbidden here: a signal handler runs between two
+    bytecodes of whatever was executing, and doing that work in place
+    means doing it *inside* the apply it was meant to follow.
+
+    The supervise loop picks the flag up within its poll interval, which
+    is the only place in this process where nothing else is half-done.
+    """
+    def handle_reload(_signum: int, _frame: object) -> None:
+        reload_requested["reload"] = True
+
+    signal.signal(signal.SIGHUP, handle_reload)
 
 
 def _await_backend_port(child: "subprocess.Popen[bytes]", config: Config,
@@ -189,7 +208,9 @@ def run_session(args: argparse.Namespace, config: Config) -> int:
         return EXIT_FAILURE
 
     stop_requested = {"stop": False}
+    reload_requested = {"reload": False}
     _install_stop_handlers(child, stop_requested)
+    _install_reload_handler(reload_requested)
     _await_backend_port(child, config, proc_root)
 
     verifier = None
@@ -198,9 +219,37 @@ def run_session(args: argparse.Namespace, config: Config) -> int:
         # The service is "started": backend up, routing applied.
         sd_notify("READY=1")
 
-    returncode = supervise(child, stop_requested)
+    returncode = supervise(child, stop_requested,
+                           on_reload=lambda: _reconcile(args, config,
+                                                        stop_requested),
+                           reload_requested=reload_requested)
     _await_verifier(verifier)
     return _exit_code_for(returncode, config, sysfs_usb, stop_requested)
+
+
+def _reconcile(args: argparse.Namespace, config: Config,
+               stop_requested: Dict[str, bool]) -> None:
+    """Re-read the config and re-apply it, on SIGHUP.
+
+    Re-reading is what makes SIGHUP mean what it means everywhere else.
+    A config that no longer parses is *not* applied and not fatal: the
+    session keeps running on the configuration it already has, which is
+    the state somebody is listening to. Exiting here would take the
+    routing down over a typo in a file nobody was forced to edit.
+    """
+    fresh = config
+    if getattr(args, "config", None) is not None or discover_config_path():
+        path = args.config or discover_config_path()
+        try:
+            fresh = load_config(path)
+        except ConfigError as exc:
+            log.error("SIGHUP: %s is not usable (%s); keeping the running "
+                      "configuration", path, exc)
+            return
+        log.info("SIGHUP: reloaded %s (%d route(s), %d channel setting(s))",
+                 path, len(fresh.routes), len(fresh.channels))
+        fresh.osc_port, fresh.osc_recv_port = config.osc_port, config.osc_recv_port
+    reconcile_now(fresh, "SIGHUP", lambda: stop_requested["stop"])
 
 
 def _await_verifier(verifier: Optional[threading.Thread]) -> None:

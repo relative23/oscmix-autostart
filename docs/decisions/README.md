@@ -23,3 +23,4 @@ silences half the outputs.
 | [0010](0010-timing-constants-need-a-recording.md) | A timing constant needs a recording, not a recollection |
 | [0011](0011-a-profile-switch-states-its-outcome.md) | A profile switch states its outcome; it never raises |
 | [0012](0012-pin-and-remember.md) | Pin and remember are a column in the register table |
+| [0013](0013-reconcile-triggers.md) | Reconcile on events, never on a clock |

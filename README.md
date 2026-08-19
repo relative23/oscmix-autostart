@@ -196,6 +196,21 @@ after start; it does not mean a background process fighting you all day.
 remembered ones as comments, because a dump cannot tell "I meant this"
 from "this is where I left it".
 
+**When does it insist?** At startup, and whenever you ask:
+
+```sh
+systemctl --user reload oscmix.service
+```
+
+That re-reads `routing.conf`, reads the device back, re-applies what is
+pinned and leaves what is remembered exactly where you put it. Use
+`reload`, not `kill --signal=SIGHUP`: the latter signals every process in
+the unit, and the backend does not handle SIGHUP, so it dies.
+
+A replug already does the full thing -- udev restarts the service. And
+after suspend, an installed hook asks for the same reconcile you would
+ask for by hand. Nothing runs on a timer.
+
 ## Named outputs in your sound settings (PipeWire)
 
 PipeWire presents the Fireface's analog outputs as a single "7.1

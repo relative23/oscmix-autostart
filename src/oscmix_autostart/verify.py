@@ -408,6 +408,54 @@ def _kept_by_the_device(result: VerifyResult,
                   if policy_for(path, device, overrides) != PIN)
 
 
+def reconcile_now(config: Config, reason: str,
+                  should_stop: StopCheck = never_stop,
+                  backend: Optional[Backend] = None) -> bool:
+    """Re-apply the routing, minus what the device is allowed to keep.
+
+    The trigger side of the pin/remember model (ADR 0012). Pinned
+    registers are written back; remembered ones the device is holding at
+    a different value are left exactly as they are, because somebody
+    turned them.
+
+    Reads the device *first* -- that read is the only way to know which
+    remembered registers to protect, and it is why this is a reconcile
+    rather than a re-apply. Without it the write would be indiscriminate
+    and every hand-set fader would snap back on every trigger, which is
+    the behaviour this model exists to end.
+
+    Returns whether the routing was written. False means the receive
+    port is held (the mixer GUI), and this refuses rather than writing
+    blind: with no dump there is no way to tell a remembered register
+    from a pinned one at the device, so a blind write would silently do
+    the indiscriminate thing.
+
+    Triggers are enumerated and never a timer: docs/decisions/0013.
+    """
+    device = device_for_name(config.device_name)
+    result = verify_routing(expected_registers(config), config.osc_port,
+                            config.osc_recv_port, VERIFY_TIMEOUT,
+                            should_stop=should_stop, device_model=device,
+                            backend=backend)
+    if should_stop():
+        return False
+    if result is None:
+        log.warning("reconcile (%s) skipped: UDP %d in use -- with no dump "
+                    "there is no way to tell what to leave alone",
+                    reason, config.osc_recv_port)
+        return False
+
+    kept = _kept_by_the_device(result, device, config.policies)
+    problems = _unconfirmed(result, device, config.policies)
+    log.info("reconcile (%s): %d confirmed, %d to correct%s",
+             reason, len(result.confirmed), len(problems),
+             ", %d left to the device (%s)" % (len(kept), ", ".join(kept))
+             if kept else "")
+    apply_routing(config, config.osc_port, config.osc_recv_port,
+                  leave_alone=kept, backend=backend)
+    return True
+
+
 def verify_and_repair(config: Config,
                       should_stop: StopCheck = never_stop) -> None:
     """Read the applied routing back and re-send once on problems.

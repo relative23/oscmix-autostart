@@ -25,6 +25,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/oscmix"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UDEV_RULE="/etc/udev/rules.d/90-rme-fireface.rules"
+SLEEP_HOOK="/usr/lib/systemd/system-sleep/oscmix"
 
 DO_BUILD=1
 DO_UDEV=1
@@ -35,7 +36,8 @@ usage: ./install.sh [options]
 
 options:
   --no-build   skip building oscmix (use already installed binaries)
-  --no-udev    skip the udev rule (no root needed; no hotplug autostart)
+  --no-udev    skip the root steps: the udev rule (no hotplug autostart)
+               and the resume hook (no reconcile after suspend)
   -h, --help   show this help
 
 environment:
@@ -226,7 +228,7 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 # --------------------------------------------------------------------------
-# udev rule (the only step that needs root)
+# The steps that need root: the udev rule, and the resume hook
 # --------------------------------------------------------------------------
 
 if [ "$DO_UDEV" = 1 ]; then
@@ -248,8 +250,27 @@ if [ "$DO_UDEV" = 1 ]; then
         warn "  sudo install -m 644 udev/90-rme-fireface.rules $UDEV_RULE"
         warn "  sudo udevadm control --reload-rules"
     fi
+
+    # Reconcile after resume. A system-sleep hook and not a user unit:
+    # there is no user-level sleep.target to hang one on, checked rather
+    # than assumed. It runs `systemctl --user ... reload`, which reaches
+    # the session process alone -- signalling the unit kills the backend,
+    # measured.
+    if [ -d "$(dirname "$SLEEP_HOOK")" ]; then
+        if $SUDO install -m 755 "$PROJECT_DIR/systemd/system-sleep/oscmix" \
+            "$SLEEP_HOOK"; then
+            info "installed resume hook $SLEEP_HOOK"
+        else
+            warn "could not install $SLEEP_HOOK -- the mixer state will not"
+            warn "be reconciled after suspend. To finish manually:"
+            warn "  sudo install -m 755 systemd/system-sleep/oscmix $SLEEP_HOOK"
+        fi
+    else
+        warn "no system-sleep directory; skipping the resume hook"
+    fi
 else
-    info "skipping udev rule (--no-udev)"
+    info "skipping the root steps (--no-udev): no hotplug autostart, no"
+    info "reconcile after resume"
 fi
 
 # --------------------------------------------------------------------------

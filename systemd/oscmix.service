@@ -13,6 +13,17 @@ StartLimitBurst=5
 # has been applied; verification then runs in the background.
 Type=notify
 ExecStart=%h/.local/bin/oscmix-session
+# Reconcile without restarting: re-read routing.conf, read the device
+# back, and re-apply what the config pins -- leaving alone what it
+# remembers (ADR 0012, ADR 0013).
+#
+# $MAINPID and not `systemctl kill`. That was measured the hard way:
+# `systemctl --user kill --signal=SIGHUP oscmix.service` signals *every*
+# process in the unit, and neither oscmix nor alsaseqio handles SIGHUP,
+# so the default action applies and the backend dies. The service went
+# inactive. ExecReload reaches the session process alone.
+ExecReload=/bin/kill -HUP $MAINPID
+
 Restart=on-failure
 RestartSec=3
 # Exit code 2 means a routing.conf error -- restarting cannot fix that.

@@ -1,0 +1,443 @@
+"""When the routing is re-applied, and how it is asked for.
+
+Three triggers were on the roadmap: SIGHUP, resume, hotplug. Only two of
+them needed building.
+
+**Hotplug was already covered**, and building a second path for it would
+have been the mistake this release keeps finding. `udev/90-rme-fireface.rules`
+pulls `oscmix.service` in on `add` and `StopWhenUnneeded=yes` drops it on
+`remove`, so a replug is a full process restart with a full apply --
+recorded in `tests/data/cold-plug-timeline.json`, whose condition line
+reads "cold USB replug -- device unplugged 14.4 s, udev restarted the
+unit".
+
+**SIGHUP** is the mechanism, and it reconciles rather than restarting:
+pinned settings are re-applied, remembered ones are left where the user
+put them.
+
+**Resume** rides on SIGHUP through a system-sleep hook, because there is
+no user-level sleep.target to hang a unit on.
+"""
+
+import re
+
+from conftest import repo_file
+
+
+def unit_text():
+    return repo_file("systemd", "oscmix.service").read_text()
+
+
+def hook_text():
+    return repo_file("systemd", "system-sleep", "oscmix").read_text()
+
+
+# --------------------------------------------------------------------------
+# How a reconcile is asked for.
+# --------------------------------------------------------------------------
+
+def test_the_unit_reloads_by_signalling_only_the_main_process():
+    """`systemctl kill` is a footgun here, and that was measured.
+
+    `systemctl --user kill --signal=SIGHUP oscmix.service` signals *every*
+    process in the unit. Neither oscmix nor alsaseqio installs a SIGHUP
+    handler, so the default action applies and both die; the service went
+    inactive on the machine this was tried on.
+
+    ExecReload with $MAINPID reaches the session process alone, which is
+    the only one that knows what a reload means.
+    """
+    text = unit_text()
+    assert "ExecReload=" in text, "no way to reconcile without a restart"
+    reload_line = next(line for line in text.splitlines()
+                       if line.startswith("ExecReload="))
+    assert "$MAINPID" in reload_line, (
+        "a reload must not reach the backend processes: %s" % reload_line)
+    assert "HUP" in reload_line
+
+
+def test_the_unit_does_not_restart_to_reconcile():
+    # A restart would tear the backend down and re-apply everything
+    # indiscriminately, putting remembered faders back -- which is what
+    # the pin/remember model exists to prevent.
+    reload_line = next(line for line in unit_text().splitlines()
+                       if line.startswith("ExecReload="))
+    assert "restart" not in reload_line.lower()
+
+
+# --------------------------------------------------------------------------
+# Resume.
+# --------------------------------------------------------------------------
+
+def test_the_resume_hook_is_a_system_sleep_script_not_a_user_unit():
+    """Checked against systemd rather than assumed.
+
+    A user unit with `WantedBy=sleep.target` installs cleanly, enables
+    cleanly and never runs: on systemd 259 `systemctl --user cat
+    sleep.target` reports "No files found for sleep.target". The user
+    manager has no such target. A system-sleep hook does run, and can
+    reach the user manager via `--machine=<user>@.host`.
+    """
+    path = repo_file("systemd", "system-sleep", "oscmix")
+    assert path.exists()
+    assert path.stat().st_mode & 0o111, "a sleep hook has to be executable"
+    assert not list(repo_file("systemd").glob("*resume*.service")), (
+        "a user unit cannot hook sleep.target; that route was measured "
+        "and does not exist")
+
+
+def test_the_resume_hook_only_acts_after_waking():
+    # `pre` runs on the way down, when reconciling is pointless and the
+    # device is about to go away.
+    assert re.search(r'\[\s*"\$1"\s*=\s*"post"\s*\]', hook_text()), (
+        "the hook must exit unless invoked with 'post'")
+
+
+def test_the_resume_hook_reloads_rather_than_killing():
+    """Checked against the commands, not the whole file.
+
+    The comment above them explains why `systemctl kill --signal=SIGHUP`
+    is wrong, and a test that searched the text would have banned the
+    explanation along with the mistake.
+    """
+    commands = [line for line in hook_text().splitlines()
+                if line.strip() and not line.lstrip().startswith("#")]
+    body = "\n".join(commands)
+    assert "reload oscmix.service" in body
+    assert "--signal" not in body, (
+        "signalling the unit kills the backend -- measured; use reload")
+
+
+def test_the_resume_hook_survives_a_missing_service():
+    """Waking up with no Fireface attached is the common case.
+
+    A hook that reported failure there would put a line in every wake-up
+    log, and people learn to ignore logs that cry wolf.
+    """
+    assert "|| :" in hook_text() or "|| true" in hook_text()
+
+
+# --------------------------------------------------------------------------
+# Hotplug: covered already, and this says where.
+# --------------------------------------------------------------------------
+
+def test_hotplug_is_handled_by_udev_and_not_by_a_second_mechanism():
+    """The trigger that needed no code.
+
+    If this ever stops being true -- the rule loses its `add` pull-in, or
+    the unit loses `StopWhenUnneeded` -- then hotplug silently stops
+    re-applying anything, and the session has no path of its own to fall
+    back on. So both halves are asserted here rather than assumed from a
+    comment.
+    """
+    rules = repo_file("udev", "90-rme-fireface.rules").read_text()
+    assert 'ACTION=="add"' in rules
+    assert "SYSTEMD_USER_WANTS" in rules
+    assert "oscmix.service" in rules
+    assert 'ACTION=="remove"' in rules
+    assert "StopWhenUnneeded=yes" in unit_text()
+
+
+def test_no_timer_anywhere_triggers_a_reconcile():
+    """Triggers are events, never a clock.
+
+    A timer would make this a background process that fights the user on
+    a schedule -- and, given that the device does not report a change,
+    each tick would cost a full 2002-register dump. The roadmap ruled it
+    out and this keeps it ruled out.
+    """
+    for path in repo_file("systemd").rglob("*"):
+        if path.is_file():
+            assert path.suffix != ".timer", path
+    assert "OnUnitActiveSec" not in unit_text()
+    assert "OnCalendar" not in unit_text()
+
+
+# --------------------------------------------------------------------------
+# What SIGHUP does inside the process.
+# --------------------------------------------------------------------------
+
+def test_the_signal_handler_only_sets_a_flag():
+    """Everything a reconcile does is forbidden in a signal handler.
+
+    A handler runs between two bytecodes of whatever was executing, so
+    opening a socket, reading a file or waiting out the link barrier
+    there means doing it *inside* the apply it was meant to follow. The
+    handler sets a flag; the supervise loop is the one place in this
+    process where nothing else is half-done.
+    """
+    import ast
+
+    source = repo_file("src", "oscmix_autostart", "session.py").read_text()
+    tree = ast.parse(source)
+    handler = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "handle_reload")
+    statements = [n for n in handler.body
+                  if not isinstance(n, (ast.Expr, ast.Pass))
+                  or not isinstance(getattr(n, "value", None), ast.Constant)]
+    assert len(statements) == 1, (
+        "the SIGHUP handler does more than raise a flag: %s"
+        % ast.dump(handler))
+    assert isinstance(statements[0], ast.Assign)
+    assert not [n for n in ast.walk(handler) if isinstance(n, ast.Call)], (
+        "a signal handler must not call anything")
+
+
+def test_a_reload_request_is_cleared_before_it_is_served(session_mod):
+    """A SIGHUP during a reconcile queues another rather than vanishing.
+
+    Clearing the flag after the callback would swallow every request that
+    arrived while one was running -- so holding the key down, or two
+    wake-ups close together, would lose the last one.
+    """
+    from oscmix_autostart import process
+
+    seen = []
+
+    class Child:
+        def __init__(self):
+            self.calls = 0
+
+        def wait(self, timeout=None):
+            self.calls += 1
+            if self.calls > 3:
+                return 0
+            raise process.subprocess.TimeoutExpired("x", timeout)
+
+    reload_requested = {"reload": True}
+
+    def on_reload():
+        # The flag must already be down when the work starts.
+        seen.append(reload_requested["reload"])
+
+    process.supervise(Child(), {"stop": False}, on_reload=on_reload,
+                      reload_requested=reload_requested)
+    assert seen == [False], (
+        "the flag was still set while the reconcile ran, so a SIGHUP "
+        "arriving now would be lost")
+
+
+def test_a_stop_wins_over_a_pending_reload(session_mod, monkeypatch):
+    """Shutdown must not be delayed by a reconcile nobody will see.
+
+    The reconcile writes routing and waits out the barrier; doing that
+    to a backend that is being torn down is both pointless and the exact
+    "half-applied mix" the two-phase design exists to prevent.
+    """
+    from oscmix_autostart import process
+
+    # The escalation grace, not the property under test.
+    monkeypatch.setattr(process, "CHILD_STOP_GRACE", 0.05)
+    called = []
+
+    class Child:
+        def wait(self, timeout=None):
+            # A real Popen.wait() without a timeout blocks until the
+            # child is gone and then returns; only the timed form can
+            # raise. A double that raised either way made the reap after
+            # SIGKILL look like a hang.
+            if timeout is None:
+                return 0
+            raise process.subprocess.TimeoutExpired("x", timeout)
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            pass
+
+        def kill(self):
+            return 0
+
+    process.supervise(Child(), {"stop": True},
+                      on_reload=lambda: called.append(1),
+                      reload_requested={"reload": True})
+    assert called == []
+
+
+def test_a_broken_config_on_reload_keeps_the_running_one(tmp_path, session_mod,
+                                                        monkeypatch):
+    """SIGHUP with a typo must not take the routing down.
+
+    The session is holding state somebody is listening to. Exiting over
+    an unparseable file -- one nobody was forced to edit, and which the
+    running configuration does not depend on -- would turn a typo into
+    silence.
+    """
+    import argparse
+
+    from oscmix_autostart import session as session_module
+
+    path = tmp_path / "routing.conf"
+    path.write_text("[route:x]\noutput = 99\nplayback = 1\n")
+    applied = []
+    monkeypatch.setattr(session_module, "reconcile_now",
+                        lambda *a, **k: applied.append(a))
+
+    session_module._reconcile(argparse.Namespace(config=path),
+                              session_mod.Config(), {"stop": False})
+    assert applied == [], "a config that does not parse must not be applied"
+
+
+def test_the_installer_and_uninstaller_agree_about_the_sleep_hook():
+    """uninstall.sh says it removes everything install.sh created.
+
+    A hook left behind runs on every wake for a service that is no longer
+    there. Harmless, and exactly the kind of leftover that makes people
+    distrust an uninstaller.
+    """
+    install = repo_file("install.sh").read_text()
+    uninstall = repo_file("uninstall.sh").read_text()
+    assert "system-sleep/oscmix" in install
+    assert "system-sleep/oscmix" in uninstall
+
+
+def test_skipping_the_root_step_skips_both_of_its_parts():
+    """--no-udev is documented as "no root needed", so it has to mean it.
+
+    The flag predates the resume hook. If the hook had been added outside
+    its guard, `--no-udev` would have kept promising a root-free install
+    while asking for a password.
+    """
+    install = repo_file("install.sh").read_text()
+    guarded = install.split('if [ "$DO_UDEV" = 1 ]; then', 1)[1]
+    guarded = guarded.split("\nelse\n", 1)[0]
+    assert "system-sleep/oscmix" in guarded, (
+        "the resume hook is installed outside the --no-udev guard")
+
+
+# --------------------------------------------------------------------------
+# What a reconcile writes, against a backend that can be inspected.
+# --------------------------------------------------------------------------
+
+CONF = """
+[route:main]
+playback = 1/2
+output = 1/2
+level = 0.0
+
+[output:1]
+volume = -6.0
+"""
+
+
+def _config(tmp_path, extra=""):
+    from oscmix_autostart.config import load_config
+
+    path = tmp_path / "routing.conf"
+    path.write_text(CONF + extra)
+    return load_config(path)
+
+
+class _Device:
+    """A backend that reports whatever it is told to, and records writes."""
+
+    def __init__(self, reports):
+        self.sent = []
+        self._reports = reports
+        from oscmix_autostart import backend as backend_mod
+        self.traits = backend_mod.OSCMIX
+
+    def send(self, messages):
+        self.sent.extend((p, t, tuple(a)) for p, t, a in messages)
+
+    def request_dump(self):
+        pass
+
+    def listen(self):
+        return _Replay(self._reports)
+
+
+class _Replay:
+    def __init__(self, reports):
+        self._reports = list(reports)
+
+    def messages(self, _timeout):
+        while self._reports:
+            yield self._reports.pop(0)
+
+    def close(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        pass
+
+
+def test_a_reconcile_leaves_a_remembered_value_alone(tmp_path, monkeypatch):
+    """The behaviour the whole trigger exists for.
+
+    Measured at the device first: SIGHUP with the fader moved to -20.0 dB
+    logged "1 left to the device (/output/1/volume)" and the device still
+    read -20.0 afterwards. This is that, in a form CI can run.
+    """
+    from oscmix_autostart import routing, verify
+
+    monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
+    monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
+    # A mismatch deliberately holds the observation window open for a
+    # correcting report, so at the shipped 10 s this test would pay all
+    # of it -- per mutant, in the mutation run. The outcome is what is
+    # under test; tests/test_pin_remember.py owns the durations.
+    monkeypatch.setattr(verify, "VERIFY_TIMEOUT", 0.3)
+
+    device = _Device([("/output/1/stereo", "i", (1,)),
+                      ("/playback/1/stereo", "i", (1,)),
+                      ("/output/1/volume", "f", (-20.0,))])
+    assert verify.reconcile_now(_config(tmp_path), "test", backend=device)
+
+    written = {path for path, _t, _a in device.sent}
+    assert "/output/1/volume" not in written, (
+        "the fader the user moved was written back")
+    assert "/mix/1/playback/1" in written, (
+        "the routing itself still has to be re-established")
+
+
+def test_a_reconcile_corrects_a_pinned_value(tmp_path, monkeypatch):
+    from oscmix_autostart import routing, verify
+
+    monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
+    monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
+    monkeypatch.setattr(verify, "VERIFY_TIMEOUT", 0.3)
+
+    device = _Device([("/output/1/stereo", "i", (1,)),
+                      ("/playback/1/stereo", "i", (1,)),
+                      ("/output/1/volume", "f", (-20.0,))])
+    config = _config(tmp_path, "\n[pin]\noutput.volume = pin\n")
+    assert verify.reconcile_now(config, "test", backend=device)
+
+    sent = {path: args for path, _t, args in device.sent}
+    assert sent.get("/output/1/volume") == (-6.0,), (
+        "a pinned register that drifted has to be written back")
+
+
+def test_a_reconcile_refuses_rather_than_writing_blind(tmp_path):
+    """No dump means no way to tell pinned from remembered *at the device*.
+
+    Writing anyway would be the indiscriminate re-apply this model
+    exists to end, so a held receive port is a refusal -- and it says so
+    rather than reporting success.
+    """
+    from oscmix_autostart import verify
+
+    class Deaf(_Device):
+        def listen(self):
+            return None
+
+    device = Deaf([])
+    assert verify.reconcile_now(_config(tmp_path), "test",
+                                backend=device) is False
+    assert device.sent == []
+
+
+def test_a_stop_during_a_reconcile_writes_nothing(tmp_path):
+    from oscmix_autostart import verify
+
+    device = _Device([("/output/1/stereo", "i", (1,))])
+    assert verify.reconcile_now(_config(tmp_path), "test",
+                                should_stop=lambda: True,
+                                backend=device) is False
+    assert device.sent == []

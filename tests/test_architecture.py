@@ -55,8 +55,8 @@ ALLOWED_IMPORTS = {
                "registers", "routing"},
     "pipewire": {"config", "errors", "log"},
     "process": {"constants", "discovery", "log"},
-    "session": {"config", "constants", "discovery", "log", "notify",
-                "process", "reconcile", "routing", "verify"},
+    "session": {"config", "constants", "discovery", "errors", "log",
+                "notify", "process", "reconcile", "routing", "verify"},
     "cli": {"backend", "config", "constants", "errors", "log", "pipewire",
             "profiles", "reconcile", "registers", "session"},
     # Sits above verify because a switch has to report whether the

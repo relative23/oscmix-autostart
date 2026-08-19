@@ -245,10 +245,19 @@ def apply_routing(config: Config, port: int,
             "/".join(map(str, route.output)),
             route.level,
         )
-    if config.channels:
-        log.info("channel state: %d setting(s) on %d channel(s)",
-                 len(config.channels),
-                 len({(c.family, c.channel) for c in config.channels}))
+    # Counted from what was *written*, not from what the config holds.
+    # Those differ as soon as `leave_alone` is in play, and a log line
+    # claiming work it did not do is worse than no line: it is the first
+    # place anybody looks when a fader did not move.
+    written = {w.path for w in wanted.channel()}
+    if written:
+        log.info("channel state: %d setting(s) on %d channel(s)%s",
+                 len(written),
+                 len({tuple(p.split("/")[1:3]) for p in written}),
+                 "" if not skip else " (%d left to the device)" % len(skip))
+    elif skip:
+        log.info("channel state: nothing to write; %d setting(s) left to "
+                 "the device", len(skip))
 
 
 def output_link_state(routes: Sequence[Route]) -> Dict[str, int]:

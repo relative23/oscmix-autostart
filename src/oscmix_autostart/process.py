@@ -7,7 +7,7 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from .constants import CHILD_STOP_GRACE, STALE_BACKEND_SETTLE
 from .discovery import udp_port_listening
@@ -93,14 +93,31 @@ def _terminate(pid: int) -> None:
 
 
 def supervise(child: "subprocess.Popen[bytes]",
-              stop_requested: Dict[str, bool]) -> int:
-    """Wait for the child; escalate SIGTERM -> SIGKILL on shutdown."""
+              stop_requested: Dict[str, bool],
+              on_reload: Optional[Callable[[], None]] = None,
+              reload_requested: Optional[Dict[str, bool]] = None) -> int:
+    """Wait for the child; escalate SIGTERM -> SIGKILL on shutdown.
+
+    Also the one place a reconcile can safely run. ``reload_requested``
+    is set by the SIGHUP handler, which does nothing else -- a signal
+    handler runs between two bytecodes of whatever was executing, so the
+    work has to happen somewhere nothing is half-done, and this loop is
+    that place.
+
+    The flag is cleared *before* the callback runs, so a SIGHUP arriving
+    during a reconcile queues one more rather than being swallowed by
+    it: holding a key down should not lose the last request.
+    """
     kill_deadline: Optional[float] = None
     while True:
         try:
             return child.wait(timeout=0.5)
         except subprocess.TimeoutExpired:
             pass
+        if (reload_requested is not None and reload_requested["reload"]
+                and on_reload is not None and not stop_requested["stop"]):
+            reload_requested["reload"] = False
+            on_reload()
         if stop_requested["stop"]:
             now = time.monotonic()
             if kill_deadline is None:

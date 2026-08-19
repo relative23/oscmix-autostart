@@ -9,6 +9,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/oscmix"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UDEV_RULE="/etc/udev/rules.d/90-rme-fireface.rules"
+SLEEP_HOOK="/usr/lib/systemd/system-sleep/oscmix"
 
 PURGE=0
 case "${1:-}" in
@@ -40,11 +41,18 @@ if [ -d "$DATA_DIR/glib-2.0/schemas" ]; then
 fi
 systemctl --user daemon-reload
 
-if [ -e "$UDEV_RULE" ]; then
-    info "removing udev rule (needs root)"
+if [ -e "$UDEV_RULE" ] || [ -e "$SLEEP_HOOK" ]; then
+    info "removing the root-installed files (needs root)"
     if SUDO=""; [ "$(id -u)" != 0 ]; then SUDO="sudo"; fi
-    $SUDO rm -f "$UDEV_RULE" && $SUDO udevadm control --reload-rules \
-        || echo "warning: remove $UDEV_RULE manually" >&2
+    if [ -e "$UDEV_RULE" ]; then
+        $SUDO rm -f "$UDEV_RULE" && $SUDO udevadm control --reload-rules \
+            || echo "warning: remove $UDEV_RULE manually" >&2
+    fi
+    # Left behind, this fires on every wake for a service that is gone.
+    if [ -e "$SLEEP_HOOK" ]; then
+        $SUDO rm -f "$SLEEP_HOOK" \
+            || echo "warning: remove $SLEEP_HOOK manually" >&2
+    fi
 fi
 
 if [ "$PURGE" = 1 ]; then
