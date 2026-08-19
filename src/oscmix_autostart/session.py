@@ -237,9 +237,9 @@ def _reconcile(args: argparse.Namespace, config: Config,
     the state somebody is listening to. Exiting here would take the
     routing down over a typo in a file nobody was forced to edit.
     """
+    path = getattr(args, "config", None) or discover_config_path()
     fresh = config
-    if getattr(args, "config", None) is not None or discover_config_path():
-        path = args.config or discover_config_path()
+    if path is not None:
         try:
             fresh = load_config(path)
         except ConfigError as exc:
@@ -248,7 +248,14 @@ def _reconcile(args: argparse.Namespace, config: Config,
             return
         log.info("SIGHUP: reloaded %s (%d route(s), %d channel setting(s))",
                  path, len(fresh.routes), len(fresh.channels))
-        fresh.osc_port, fresh.osc_recv_port = config.osc_port, config.osc_recv_port
+        # The backend is already bound and already talking to a device.
+        # A reload reconciles the *desk*; the ports and the device name
+        # belong to the process that is running, and changing them here
+        # would mean writing to a port nobody is listening on -- with no
+        # error, because OSC over UDP has no delivery guarantee.
+        fresh.osc_port = config.osc_port
+        fresh.osc_recv_port = config.osc_recv_port
+        fresh.device_name = config.device_name
     reconcile_now(fresh, "SIGHUP", lambda: stop_requested["stop"])
 
 

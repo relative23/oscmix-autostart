@@ -353,12 +353,17 @@ def _reapply_without_confirmation(config: Config,
 
 
 def _report(result: VerifyResult, config: Config, device: Optional[Device],
-            attempt: int) -> List[str]:
-    """Say what the read-back found, and return what still needs re-sending.
+            attempt: int) -> Tuple[List[str], List[str]]:
+    """Say what the read-back found; return (problems, kept).
 
     Split out of ``verify_and_repair`` when it crossed the length
     ceiling, and the split is where the seam already was: this is the
     judgement, the caller is the retry loop.
+
+    Both lists are returned rather than the caller recomputing ``kept``
+    for the re-apply. Two computations of one fact is how a log and an
+    action come to disagree -- and "real in the log, absent at the
+    device" is a defect this release has already shipped once.
     """
     kept = _kept_by_the_device(result, device, config.policies)
     if kept:
@@ -374,7 +379,7 @@ def _report(result: VerifyResult, config: Config, device: Optional[Device],
                  "(%d confirmed; %d not reported by the device dump)%s",
                  len(result.confirmed), len(result.unobserved),
                  "" if attempt == 1 else " -- after retry")
-    return problems
+    return problems, kept
 
 
 def _unconfirmed(result: VerifyResult, device: Optional[Device] = None,
@@ -446,9 +451,15 @@ def reconcile_now(config: Config, reason: str,
         return False
 
     kept = _kept_by_the_device(result, device, config.policies)
-    problems = _unconfirmed(result, device, config.policies)
-    log.info("reconcile (%s): %d confirmed, %d to correct%s",
-             reason, len(result.confirmed), len(problems),
+    drifted = _unconfirmed(result, device, config.policies)
+    # "drifted", not "to correct". The write below is not selective: it
+    # re-applies everything except `kept`, because the playback mix
+    # matrix is never reported and so can never be shown to be intact.
+    # Saying "N to correct" implied a selectivity that is not there, and
+    # a log line that overstates what happened is the first thing
+    # somebody reads when a fader did not move.
+    log.info("reconcile (%s): %d confirmed, %d drifted%s; re-applying",
+             reason, len(result.confirmed), len(drifted),
              ", %d left to the device (%s)" % (len(kept), ", ".join(kept))
              if kept else "")
     apply_routing(config, config.osc_port, config.osc_recv_port,
@@ -505,7 +516,7 @@ def verify_and_repair(config: Config,
             return
         if not reapplied["done"]:
             _reapply_without_confirmation(config, pending_links, reapplied)
-        problems = _report(result, config, device, attempt)
+        problems, kept = _report(result, config, device, attempt)
         if not problems:
             return
         if attempt == 1:
@@ -521,8 +532,7 @@ def verify_and_repair(config: Config,
             # config value -- the policy would be real in the log and
             # absent at the device.
             apply_routing(config, config.osc_port, config.osc_recv_port,
-                          leave_alone=_kept_by_the_device(
-                              result, device, config.policies))
+                          leave_alone=kept)
             if wait_unless_stopped(VERIFY_SETTLE, should_stop):
                 return
     log.warning("unconfirmed after retry: %s", ", ".join(problems))

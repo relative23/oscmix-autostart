@@ -441,3 +441,156 @@ def test_a_stop_during_a_reconcile_writes_nothing(tmp_path):
                                 should_stop=lambda: True,
                                 backend=device) is False
     assert device.sent == []
+
+
+def test_a_reconcile_corrects_what_the_register_table_pins(tmp_path,
+                                                           monkeypatch):
+    """The table's own policy, with no `[pin]` section anywhere.
+
+    Found by mutation testing: replacing `device_for_name(...)` with
+    `None` inside reconcile_now survived every test. With no device
+    model the policy lookup falls through to REMEMBER for everything, so
+    pinning stops working entirely -- and the only tests that covered
+    the pinned branch used a `[pin]` override, which is consulted
+    *before* the model and therefore kept working.
+
+    `reflevel` is pinned by the table because it has to match the cable.
+    Nothing overrides it here, so this fails if the model is not
+    consulted.
+    """
+    from oscmix_autostart import routing, verify
+
+    monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
+    monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
+    monkeypatch.setattr(verify, "VERIFY_TIMEOUT", 0.3)
+
+    config = _config(tmp_path, "\n[output:5]\nreflevel = +4dBu\n")
+    device = _Device([("/output/1/stereo", "i", (1,)),
+                      ("/playback/1/stereo", "i", (1,)),
+                      ("/output/5/reflevel", "is", (2, "+19dBu")),
+                      ("/output/1/volume", "f", (-6.0,))])
+    assert verify.reconcile_now(config, "test", backend=device)
+
+    sent = {path: args for path, _t, args in device.sent}
+    # An enum is *written* as its index and *reported* as (index, name).
+    # "+4dBu" is index 0 of ("+4dBu", "+13dBu", "+19dBu"); the device
+    # above reports index 2, so this drifted.
+    assert sent.get("/output/5/reflevel") == (0,), (
+        "a register the table pins drifted and was not written back")
+
+
+def test_a_reconcile_leaves_what_the_register_table_remembers(tmp_path,
+                                                              monkeypatch):
+    """The mirror, and the half that the same mutant also hid.
+
+    With no device model everything reads as remembered, so a test that
+    only checked the remembered direction would pass on a broken lookup.
+    This pairs with the one above: same run, same backend, one register
+    corrected and one left alone, decided only by the table.
+    """
+    from oscmix_autostart import routing, verify
+
+    monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
+    monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
+    monkeypatch.setattr(verify, "VERIFY_TIMEOUT", 0.3)
+
+    config = _config(tmp_path, "\n[output:5]\nreflevel = +4dBu\n")
+    device = _Device([("/output/1/stereo", "i", (1,)),
+                      ("/playback/1/stereo", "i", (1,)),
+                      ("/output/5/reflevel", "is", (2, "+19dBu")),
+                      ("/output/1/volume", "f", (-20.0,))])
+    assert verify.reconcile_now(config, "test", backend=device)
+
+    written = {path for path, _t, _a in device.sent}
+    assert "/output/5/reflevel" in written, "pinned by the table"
+    assert "/output/1/volume" not in written, "remembered by the table"
+
+
+def test_the_reconcile_log_does_not_claim_to_be_selective(tmp_path,
+                                                          monkeypatch, caplog):
+    """The write is not selective, so the line must not say it is.
+
+    `reconcile_now` re-applies everything except what is kept -- it
+    cannot do less, because the playback mix matrix is never reported
+    and so can never be shown to be intact. An earlier wording said
+    "N to correct", which reads as though only those N were written.
+    """
+    import logging
+
+    from oscmix_autostart import routing, verify
+
+    monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
+    monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
+    monkeypatch.setattr(verify, "VERIFY_TIMEOUT", 0.3)
+
+    device = _Device([("/output/1/stereo", "i", (1,)),
+                      ("/playback/1/stereo", "i", (1,)),
+                      ("/output/1/volume", "f", (-6.0,))])
+    with caplog.at_level(logging.INFO):
+        verify.reconcile_now(_config(tmp_path), "test", backend=device)
+    line = next(r.getMessage() for r in caplog.records
+                if "reconcile (test)" in r.getMessage())
+
+    assert "re-applying" in line
+    assert "to correct" not in line
+    # Nothing drifted, and the routing was still written.
+    assert "0 drifted" in line
+    assert "/mix/1/playback/1" in {p for p, _t, _a in device.sent}
+
+
+# --------------------------------------------------------------------------
+# What a reload carries over, and what it re-reads.
+# --------------------------------------------------------------------------
+
+def _reconciled(monkeypatch, args, running):
+    """Run the SIGHUP path and return the Config it reconciled with."""
+    from oscmix_autostart import session as session_module
+
+    seen = []
+    monkeypatch.setattr(session_module, "reconcile_now",
+                        lambda config, *a, **k: seen.append(config))
+    session_module._reconcile(args, running, {"stop": False})
+    return seen[0] if seen else None
+
+
+def test_a_reload_with_no_config_file_reconciles_what_is_running(
+        tmp_path, session_mod, monkeypatch):
+    """The defaults case, and a mutation-testing find.
+
+    Replacing `fresh = config` with `fresh = None` survived every test:
+    nothing exercised a SIGHUP on a machine with no routing.conf, where
+    the running configuration is all there is. That path ends in
+    `reconcile_now(None, ...)`.
+    """
+    import argparse
+
+    from oscmix_autostart import session as session_module
+
+    monkeypatch.setattr(session_module, "discover_config_path", lambda: None)
+    running = session_mod.Config(device_name="Fireface UCX II")
+    assert _reconciled(monkeypatch, argparse.Namespace(config=None),
+                       running) is running
+
+
+def test_a_reload_keeps_the_ports_the_backend_is_bound_to(
+        tmp_path, session_mod, monkeypatch):
+    """Re-reading the desk must not move the process's own sockets.
+
+    The backend is already listening. Taking new ports from the file
+    would mean writing to a port nobody is on -- and OSC over UDP has no
+    delivery guarantee, so it would fail in complete silence.
+    """
+    import argparse
+
+    path = tmp_path / "routing.conf"
+    path.write_text("[osc]\nport = 9100\nrecv-port = 9101\n"
+                    "[device]\nname = Fireface 802\n" + CONF)
+    running = session_mod.Config(device_name="Fireface UCX II",
+                                 osc_port=7222, osc_recv_port=8222)
+
+    fresh = _reconciled(monkeypatch, argparse.Namespace(config=path), running)
+    assert fresh is not running, "the file was not re-read at all"
+    assert [r.name for r in fresh.routes] == ["main"]
+    assert (fresh.osc_port, fresh.osc_recv_port) == (7222, 8222)
+    assert fresh.device_name == "Fireface UCX II", (
+        "a reload cannot move to another device; that needs a restart")
