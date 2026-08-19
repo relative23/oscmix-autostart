@@ -114,12 +114,27 @@ so running it on a wake where nothing was lost costs one dump; and the
 remembered faders back exactly as they were configured -- undoing the
 whole point of ADR 0012 on every wake.
 
-**Poll `/clock/samplerate` and reconcile on a rate change.** The roadmap
-wants this and it is the one trigger that would cover a real, routine way
-the mixer loses state. Not done, and not guessed at: whether the UCX II
-resets the matrix on a rate change is unmeasured, and measuring it means
-changing the sample rate on somebody's working machine. It stays open,
-marked unmeasured.
+**Reconcile on a sample rate change.** Measured after this ADR was first
+written, and the measurement removed the feature rather than justifying
+it.
+
+A 48 kHz -> 44.1 kHz change on a UCX II destroys nothing. 1931 of 1932
+reported registers were identical across it; the one that differed was
+`/clock/samplerate`. The playback mix matrix survived as well -- shown
+by signal, because it is never reported: a 1 kHz tone at -40 dBFS into
+playback 1/2 still came out at outputs 1, 5 and 7 at the levels
+`routing.conf` routes it to.
+
+The trigger would also have been the cheapest of the three, because
+`/clock/samplerate` is the *second* register found to be pushed on
+change (the first is `/output/{ch}/stereo`): ten seconds of quiet
+observation, then the change, then exactly one datagram. So it needs no
+poll and no timer.
+
+Not built, because there is no measured loss to repair. If one turns up
+-- at 88.2 kHz and above the device changes its channel count, which is
+a different question and unmeasured -- the trigger is a few lines, and
+this paragraph is where to start.
 
 **A D-Bus listener for logind's `PrepareForSleep`.** Would remove the
 root install. Rejected: the runtime imports nothing outside the standard

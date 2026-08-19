@@ -62,7 +62,10 @@ VERIFY_CLASSES = (VERIFIABLE, WRITE_ONLY, REESTABLISHED)
 # Measured on a UCX II, and the measurement is what shapes this. Of every
 # register a config can set, exactly one is *pushed* to listeners when it
 # changes: `/output/{ch}/stereo`, which the device echoes over MIDI --
-# the echo the two-phase apply already waits for. `volume`, `mute`,
+# the echo the two-phase apply already waits for. (`/clock/samplerate` is
+# pushed as well, measured later; no config sets it, so it does not
+# change the argument below -- but it is the one register a session can
+# react to without asking.) `volume`, `mute`,
 # `hi-z`, `gain`, `reflevel` and `/playback/{ch}/stereo` all change
 # silently; only a `/refresh` reveals them.
 #

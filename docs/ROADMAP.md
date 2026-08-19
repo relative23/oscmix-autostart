@@ -846,16 +846,45 @@ this project handles, and more routine than a hotplug, which it also
 handles. A project whose premise is "the state survives" has an
 unexamined hole exactly where the state does not survive.
 
-*Open, and unmeasured:* does the UCX II reset the matrix on a rate
-change, and which registers survive it? `/clock/samplerate` is in the
-dump, so a session can *see* the change happen. What it should do about
-it is the reconciler question above, in its first concrete instance --
-which is why these two are one decision, not two.
+*Measured, 0.3.0, and the premise above is wrong for this device.* A
+48 kHz -> 44.1 kHz change destroys nothing:
 
-*A first step that needs no decision:* notice it and log it. A session
-that reports `/clock/samplerate` changing costs nothing and turns a
-future "the routing was gone after I switched to 96k" into a readable
-journal.
+- **1931 of 1932 reported registers were byte-identical across the
+  change.** The one that differed was `/clock/samplerate` itself.
+- **The playback mix matrix survived too**, and that had to be shown by
+  signal rather than by dump, because the matrix is never reported: a
+  1 kHz tone at -40 dBFS into playback 1/2 came out at outputs 1, 5 and
+  7 afterwards, at the levels `routing.conf` routes it to.
+- **`/clock/samplerate` is pushed when it changes.** Ten seconds of
+  genuinely quiet observation -- no `/refresh` anywhere near the window
+  -- then the change, then exactly one datagram: `/clock/samplerate
+  (44100,)` at t=11.16 s. So a rate change *can* be a trigger without
+  polling, unlike every other register a config sets.
+
+Which leaves the trigger with nothing to do. It is buildable and cheap,
+and there is no measured loss for it to repair. **Not built**, on that
+basis, and this paragraph is the reason rather than an omission.
+
+Two false starts are worth recording, because both produced confident
+wrong answers first. Watching while `pw-metadata` was written saw
+nothing: the device only re-opens when a stream starts, so the window
+held the *request* and not the change. And a tone that lit no meter at
+all looked like a destroyed matrix until the levels turned out to be
+reported in dB -- `-inf`, against a comparison seeded at `0.0` -- with
+the audio going to the 20-channel `Direct` sink rather than through the
+named one. Neither zero meant what it looked like.
+
+*A first step that needs no decision, and now cheaper than it looked:*
+notice it and log it. The register is pushed, so a session that already
+holds the receive port sees the change arrive -- no poll, no timer. That
+turns a future "the routing was gone after I switched to 96k" into a
+readable journal entry, and it is the honest amount to build for a loss
+nobody has observed.
+
+*Still unmeasured:* rates above 48 kHz. The UCX II halves its channel
+count at 88.2/96 kHz and quarters it at 176.4/192 kHz, so the register
+*model* changes shape there, which is a different question from whether
+state survives -- and one the channel map would have to answer first.
 
 ### More than one Fireface
 

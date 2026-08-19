@@ -594,3 +594,42 @@ def test_a_reload_keeps_the_ports_the_backend_is_bound_to(
     assert (fresh.osc_port, fresh.osc_recv_port) == (7222, 8222)
     assert fresh.device_name == "Fireface UCX II", (
         "a reload cannot move to another device; that needs a restart")
+
+
+# --------------------------------------------------------------------------
+# The trigger that was measured and then not built.
+# --------------------------------------------------------------------------
+
+def test_no_sample_rate_trigger_exists_and_that_is_deliberate():
+    """A rate change destroys nothing on this device, so nothing reacts.
+
+    Measured on a UCX II across 48 kHz -> 44.1 kHz: 1931 of 1932 reported
+    registers were identical, the one that differed was
+    `/clock/samplerate` itself, and the playback mix matrix survived too
+    -- shown by signal, since it is never reported. A 1 kHz tone at
+    -40 dBFS into playback 1/2 still came out at outputs 1, 5 and 7.
+
+    The trigger would have been the cheapest of the three: unlike the
+    registers a config sets, `/clock/samplerate` *is* pushed when it
+    changes, so no poll is needed. It is not built because there is
+    nothing measured for it to repair, and this test exists so that
+    stays a decision rather than becoming an oversight -- if somebody
+    adds the handler, they have to come here and say what loss it fixes.
+
+    docs/decisions/0013-reconcile-triggers.md, "Alternatives considered".
+    """
+    import ast
+
+    # Parsed, not grepped: the comment in registers.py that records the
+    # measurement mentions the register by name, and a text search would
+    # have banned the explanation along with the feature. An AST sees
+    # string literals only.
+    handlers = []
+    for path in sorted(repo_file("src", "oscmix_autostart").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and "clock/samplerate" in node.value):
+                handlers.append("%s:%d" % (path.name, node.lineno))
+    assert handlers == [], (
+        "something now acts on the sample rate: %s -- ADR 0013 says the "
+        "measured loss is zero, so say what changed" % handlers)
