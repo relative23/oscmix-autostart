@@ -114,28 +114,32 @@ jobs:
     # quality (new code brings new mutants). It reports; the policy
     # script fails only when the *score* drops.
     #
-    # The timeout comes from the job's own history, not from a guess.
-    # Measured across twelve consecutive runs on main:
+    # The timeout was 45 and two consecutive runs hit it. The first
+    # diagnosis -- that the job had simply grown past its ceiling -- was
+    # wrong, and raising it to 90 did not help: that run hit 90 too.
     #
-    #   c8ae1c3 34   860f42f 34   0750a0f 37   afed144 37
-    #   988c5ac 38   1828dc4 37   eb2ba3d 38   267febe 38
-    #   70b1efd 39   997ff89 44   1da6439 42   c8f05e6 45 (cancelled)
+    # The real cause was test wall-clock, not mutant count. mutmut
+    # re-runs the covering tests per mutant, so a slow test is paid
+    # thousands of times:
     #
-    # That is +10 minutes over twelve commits, and c8f05e6 hit the old
-    # 45-minute ceiling and was killed mid-run -- reported as
-    # "cancelled", which reads like somebody stopped it rather than like
-    # a gate that ran out of room. The comment here also claimed
-    # "~15 minutes", which had not been true for a long time.
+    #   - the profile tests each waited out the link barrier, because
+    #     apply_routing was handed a backend and the barrier opened its
+    #     own socket anyway, so no double could answer it;
+    #   - one CLI test waited the full 10 s verify window with nothing
+    #     to answer it, at 11.5 s the slowest single test in the suite;
+    #   - CapturingBackend and FakeOscmix used a 3 s socket timeout and
+    #     ended the thread on timeout, so stop() cost up to 3 s in
+    #     join() -- per test, asserting nothing. test_faults.py had used
+    #     0.2 s for a long time; this file had not adopted it.
     #
-    # A local run on the 0.3.0 tree took 56 minutes on a warm cache,
-    # which is a different machine and not a substitute for the runner
-    # numbers above -- but it points the same way, and it is already
-    # past the old ceiling.
+    # Suite: 106 s -> 73 s. A clean local run (cache cleared, as here)
+    # is 44 minutes at 1.43 mutations/second, down from 56 with a warm
+    # cache before the fix.
     #
-    # 90 gives roughly 2x the measured maximum: about fifty commits of
-    # headroom at the observed growth rate, and still short enough that
-    # a genuinely hung run does not burn an hour unnoticed. Re-measure
-    # when a run passes 60.
+    # 90 stays, now with room rather than as a guess. Runner history for
+    # reference: 34, 34, 37, 37, 38, 37, 38, 38, 39, 44, 42, then two
+    # cancellations at the ceiling. Re-measure when a run passes 60 --
+    # and check the slowest tests before touching this number again.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     continue-on-error: true
     runs-on: ubuntu-latest

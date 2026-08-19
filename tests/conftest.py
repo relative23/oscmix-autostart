@@ -221,12 +221,26 @@ class _ReplayListener:
         self.close()
 
 
+def _echo_link_flags_only(sent):
+    """What a device does promptly: report the stereo flags, nothing else.
+
+    Enough to release the link barrier, which is what the real device
+    does and what makes these tests take milliseconds instead of the
+    1.5 s the barrier waits when nothing answers. Deliberately *not* an
+    echo of everything -- confirming the rest is what
+    `confirming_backend` is for, and a double that confirms by accident
+    is how a test starts asserting a device nobody has.
+    """
+    return [(path, tags, args) for path, tags, args in sent
+            if path.endswith("/stereo")]
+
+
 @pytest.fixture
 def recording_backend():
-    """Records the wire; verification is not attempted."""
+    """Records the wire, and answers the link barrier like a device does."""
     from oscmix_autostart import backend as backend_mod
     _RecordingBackend.traits = backend_mod.OSCMIX
-    return _RecordingBackend()
+    return _RecordingBackend(reports=_echo_link_flags_only)
 
 
 @pytest.fixture

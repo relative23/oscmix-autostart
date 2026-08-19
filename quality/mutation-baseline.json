@@ -21,41 +21,44 @@
     "",
     "0.65 -> 0.67 (2026-08-19), and this is the largest rise so far,",
     "against the largest growth so far: 2726 -> 3745 mutants, over a",
-    "thousand new ones, while not_covered stayed at exactly 82.",
+    "0.65 -> 0.68 (2026-08-19), the largest rise so far against the",
+    "largest growth so far: 2726 -> 3739 mutants, with not_covered",
+    "unchanged at exactly 82.",
     "",
     "The 0.2.0 re-baseline noted that pure functions checked against",
     "recorded dumps kill mutants that socket-and-clock code cannot, and",
     "called that an argument for pushing more logic into that shape.",
-    "0.3.0 did, and the number moved again in the same direction. This",
-    "is now two independent observations rather than one, which is the",
-    "point at which it is worth treating as a rule for where new code",
-    "should go rather than as a nice result.",
+    "0.3.0 did, and the number moved the same way again. Two",
+    "independent observations rather than one is the point at which",
+    "that is worth treating as a rule for where new code should go.",
     "",
-    "One caveat on this run, stated because the number is being used to",
-    "raise a gate: it was measured locally with a warm mutmut cache",
-    "(only non-Python files had changed, so every Python mutant was",
-    "re-run) and took 56 minutes. CI measures clean and has landed",
-    "0.001 below a local run before -- which is why the floor is",
-    "min_score - tolerance rather than min_score."
+    "Measured on a cleared cache, which is what CI does, in 44 minutes.",
+    "An earlier warm-cache run on the same tree read 0.679 in 56",
+    "minutes and was discarded rather than kept: it is not the thing CI",
+    "measures. CI has landed 0.001 below a local run before, which is",
+    "why the gate is min_score - tolerance rather than min_score."
   ],
   "measured": {
+    "total": 3739,
+    "killed": 2497,
+    "survived": 1151,
+    "not_covered": 82,
+    "timeout": 9,
+    "score": 0.684,
+    "run_minutes": 44,
+    "cache": "cleared before the run, as CI does"
+  },
+  "previous": {
+    "recorded": "2026-08-19",
     "total": 3745,
     "killed": 2486,
     "survived": 1177,
     "not_covered": 82,
-    "score": 0.679
-  },
-  "previous": {
-    "recorded": "2026-08-17",
-    "total": 2726,
-    "killed": 1727,
-    "survived": 909,
-    "not_covered": 82,
-    "score": 0.655,
+    "score": 0.679,
     "why_it_moved": [
-      "0.643 -> 0.655 as registers, reconcile and backend landed: pure",
-      "functions checked against recorded dumps, which kill mutants that",
-      "socket-and-clock code cannot."
+      "Measured hours earlier on the same tree with a warm mutmut cache.",
+      "Replaced by the clean run below rather than kept as a second",
+      "data point: a warm-cache number is not what CI measures."
     ]
   },
   "confirmed_by_ci": {
@@ -72,7 +75,7 @@
       "is the number a re-baseline turns on."
     ]
   },
-  "min_score": 0.67,
+  "min_score": 0.68,
   "tolerance": 0.01,
   "floor_note": [
     "The gate is min_score - tolerance = 0.64. That is the number that",

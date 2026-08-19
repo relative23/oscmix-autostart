@@ -42,7 +42,13 @@ class FakeOscmix(threading.Thread):
         self.order = []              # every path, in arrival order
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("127.0.0.1", send_port))
-        self.sock.settimeout(3.0)
+        # 0.2 s, like the fakes in test_faults.py, and a timeout keeps
+        # the loop alive instead of ending it. At 3.0 s with `return`,
+        # stop() was only noticed when the next recvfrom expired, so
+        # every test here paid up to three seconds in join() -- time
+        # that asserted nothing, multiplied by every mutant these tests
+        # cover.
+        self.sock.settimeout(0.2)
         self.stopping = threading.Event()
         self.timers = []             # pending echo timers, cancelled on stop
 
@@ -90,7 +96,7 @@ class FakeOscmix(threading.Thread):
             try:
                 data, _ = self.sock.recvfrom(65536)
             except socket.timeout:
-                return
+                continue
             except OSError:
                 return
             for message in self.session_mod.iter_osc_messages(data):
@@ -581,7 +587,12 @@ class CapturingBackend(threading.Thread):
         self.received = []
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("127.0.0.1", port))
-        self.sock.settimeout(3.0)
+        # Short, and a timeout continues rather than ends the thread.
+        # It used to be 3.0 s with `return` on timeout, which meant
+        # stop() was only noticed after the next recvfrom expired -- so
+        # every test using this paid a 3-second join it was not
+        # measuring anything with. That is per test, per mutant.
+        self.sock.settimeout(0.05)
         self.stopping = threading.Event()
 
     def stop(self):
@@ -591,7 +602,9 @@ class CapturingBackend(threading.Thread):
         while not self.stopping.is_set():
             try:
                 data, _ = self.sock.recvfrom(65536)
-            except (socket.timeout, OSError):
+            except socket.timeout:
+                continue
+            except OSError:
                 return
             for message in self.session_mod.iter_osc_messages(data):
                 try:
@@ -668,7 +681,8 @@ def test_the_plan_puts_every_link_before_every_mix(session_mod):
     assert sorted(plan.messages()) == sorted(declared)
 
 
-def test_everything_the_config_asks_for_reaches_the_wire(session_mod):
+def test_everything_the_config_asks_for_reaches_the_wire(session_mod,
+                                                        monkeypatch):
     """The general form of a defect that shipped twice in two shapes.
 
     First as roadmap item G: `--dry-run` walked route by route while the
@@ -686,6 +700,13 @@ def test_everything_the_config_asks_for_reaches_the_wire(session_mod):
     produces is a datagram the device receives. Adding a section that
     the apply forgets fails here, whatever shape the forgetting takes.
     """
+    # Real sockets on purpose -- the claim is about datagrams, not about
+    # what a double was handed. But the barrier is not what is being
+    # tested, and at its shipped 1.5 s it was the whole cost of this
+    # test; the timing tests below own that number.
+    from oscmix_autostart import routing as routing_mod
+    monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.05)
+
     config = session_mod.Config(
         device_name="Fireface UCX II",
         routes=[make_route(session_mod, volume=-6.0),

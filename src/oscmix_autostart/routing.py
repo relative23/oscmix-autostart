@@ -107,7 +107,8 @@ def routing_plan(routes: Sequence[Route]) -> RoutingPlan:
 
 
 def await_link_echo(expected: Mapping[str, int], recv_port: int,
-                    timeout: Optional[float] = None) -> Optional[bool]:
+                    timeout: Optional[float] = None, *,
+                    backend: Optional[Backend] = None) -> Optional[bool]:
     """Wait until oscmix reports every register in ``expected`` at its value.
 
     ``expected`` maps an OSC path to the integer the device has to report
@@ -120,12 +121,21 @@ def await_link_echo(expected: Mapping[str, int], recv_port: int,
     Returns True when everything arrived, False on timeout, and None when
     the receive port is unavailable (the mixer GUI holds it), in which
     case the caller falls back to a plain wait.
+
+    ``backend`` is the caller's, when it has one. Without it this built
+    its own from ``recv_port`` and ignored the one ``apply_routing`` had
+    been handed -- the same "second implementation of something that
+    already exists" that produced three defects in this release, and
+    here it also meant the barrier was the one part of the write path a
+    test could not stand in for. Every profile test paid 1.5 s of real
+    waiting for an echo no double could send.
     """
     if not expected:
         return True
     if timeout is None:
         timeout = LINK_ECHO_TIMEOUT
-    listener = loopback(0, recv_port).listen()
+    device = backend if backend is not None else loopback(0, recv_port)
+    listener = device.listen()
     if listener is None:
         return None
     pending = dict(expected)
@@ -191,7 +201,7 @@ def apply_routing(config: Config, port: int,
 
     timeout = LINK_ECHO_TIMEOUT
     echoed = await_link_echo(output_link_state(config.routes), recv_port,
-                             timeout)
+                             timeout, backend=device)
     if echoed is None:
         log.info("link echo unobservable (UDP %d in use); waiting %.1fs",
                  recv_port, LINK_SETTLE)

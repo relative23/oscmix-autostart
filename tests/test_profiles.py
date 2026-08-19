@@ -59,8 +59,9 @@ def test_a_config_that_does_not_parse_is_refused_with_nothing_on_the_wire(
     messages.
     """
     path = write_config(tmp_path / "profiles" / "broken.conf", broken)
-    outcome = profiles.switch_profile("broken", config_path=tmp_path / "routing.conf",
-                              backend=recording_backend)
+    outcome = profiles.switch_profile("broken",
+                                      config_path=tmp_path / "routing.conf",
+                                      backend=recording_backend)
 
     assert outcome.state == profiles.REFUSED, why
     assert outcome.applied is False
@@ -75,8 +76,9 @@ def test_a_config_that_does_not_parse_is_refused_with_nothing_on_the_wire(
 
 
 def test_a_missing_profile_is_refused_not_crashed(tmp_path, recording_backend):
-    outcome = profiles.switch_profile("nosuch", config_path=tmp_path / "routing.conf",
-                              backend=recording_backend)
+    outcome = profiles.switch_profile("nosuch",
+                                      config_path=tmp_path / "routing.conf",
+                                      backend=recording_backend)
     assert outcome.state == profiles.REFUSED
     assert recording_backend.sent == []
     assert "nosuch" in outcome.reason
@@ -99,8 +101,9 @@ def test_an_unknown_section_applies_without_it_rather_than_refusing(
     """
     write_config(tmp_path / "profiles" / "odd.conf",
                  GOOD + "\n[from-a-newer-version]\nx = 1\n")
-    outcome = profiles.switch_profile("odd", config_path=tmp_path / "routing.conf",
-                              backend=recording_backend, verify=False)
+    outcome = profiles.switch_profile("odd",
+                                      config_path=tmp_path / "routing.conf",
+                                      backend=recording_backend, verify=False)
     assert outcome.applied is True
     assert recording_backend.sent, "the sections it did understand still apply"
 
@@ -108,8 +111,9 @@ def test_an_unknown_section_applies_without_it_rather_than_refusing(
 def test_a_name_that_escapes_the_directory_is_refused(tmp_path,
                                                       recording_backend):
     # ../../etc/something.conf would parse fine as an ini file.
-    outcome = profiles.switch_profile("../evil", config_path=tmp_path / "routing.conf",
-                              backend=recording_backend)
+    outcome = profiles.switch_profile("../evil",
+                                      config_path=tmp_path / "routing.conf",
+                                      backend=recording_backend)
     assert outcome.state == profiles.REFUSED
     assert recording_backend.sent == []
 
@@ -128,8 +132,9 @@ def test_a_good_profile_applies_everything_the_config_asks_for(
     shares a code path with the first.
     """
     write_config(tmp_path / "profiles" / "tracking.conf", GOOD)
-    outcome = profiles.switch_profile("tracking", config_path=tmp_path / "routing.conf",
-                              backend=recording_backend, verify=False)
+    outcome = profiles.switch_profile("tracking",
+                                      config_path=tmp_path / "routing.conf",
+                                      backend=recording_backend, verify=False)
 
     assert outcome.applied is True
     paths = {path for path, _tags, _args in recording_backend.sent}
@@ -162,7 +167,7 @@ def test_verified_means_the_device_confirmed_it(tmp_path, confirming_backend):
 # --------------------------------------------------------------------------
 
 def test_an_unverifiable_switch_names_what_it_could_not_confirm(
-        tmp_path, silent_backend):
+        tmp_path, silent_backend, monkeypatch):
     """The outcome the desktop actually hits.
 
     The mixer GUI holds UDP 8222 whenever its window is open, so the
@@ -171,9 +176,17 @@ def test_an_unverifiable_switch_names_what_it_could_not_confirm(
     the word "verified" mean nothing on the machine where it matters
     most.
     """
+    # A backend that cannot be listened to also cannot release the link
+    # barrier, so this is the one profile test that pays a real wait.
+    # Shortened here because the outcome is under test, not the
+    # duration -- tests/test_apply_routing.py owns the timing.
+    from oscmix_autostart import routing as routing_mod
+    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.01)
+
     write_config(tmp_path / "profiles" / "tracking.conf", GOOD)
-    outcome = profiles.switch_profile("tracking", config_path=tmp_path / "routing.conf",
-                              backend=silent_backend)
+    outcome = profiles.switch_profile("tracking",
+                                      config_path=tmp_path / "routing.conf",
+                                      backend=silent_backend)
 
     assert outcome.state == profiles.APPLIED_UNVERIFIED
     assert outcome.applied is True

@@ -85,7 +85,8 @@ def test_a_missing_profile_exits_config(tmp_path, capsys):
     assert "nosuch" in capsys.readouterr().out
 
 
-def test_an_applied_but_unverifiable_switch_still_exits_ok(tmp_path, capsys):
+def test_an_applied_but_unverifiable_switch_still_exits_ok(tmp_path, capsys,
+                                                          monkeypatch):
     """No backend is running, so the read-back confirms nothing.
 
     This is the desktop case in miniature: applied, unconfirmable, and
@@ -93,6 +94,19 @@ def test_an_applied_but_unverifiable_switch_still_exits_ok(tmp_path, capsys):
     here would make every switch on a machine with the mixer GUI open
     look broken.
     """
+    # This runs the real CLI against nothing, so both real waits apply:
+    # the link barrier, and then the full verify window with no device
+    # to answer it. At their shipped values that is 11.5 s -- the
+    # slowest single test in the suite, and mutmut re-runs it per
+    # mutant, which is what pushed the mutation job past a 90-minute
+    # CI timeout. The outcome is what is under test here, not the
+    # durations; ADR 0010's timing tests own those.
+    from oscmix_autostart import profiles as profiles_mod
+    from oscmix_autostart import routing as routing_mod
+    monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.05)
+    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.05)
+    monkeypatch.setattr(profiles_mod, "VERIFY_TIMEOUT", 0.3)
+
     path = _config_with(tmp_path, {"tracking": GOOD})
     assert cli.main(["--config", str(path),
                      "--profile", "tracking"]) == EXIT_OK
