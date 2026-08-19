@@ -440,3 +440,43 @@ def _parse_domain(raw: str, section: str, option: str,
     if domain == DB:
         return _parse_db(raw, section, option)
     raise ConfigError("[%s] %s: no value domain declared" % (section, option))
+
+
+def profiles_dir(config_path: Optional[Path] = None) -> Optional[Path]:
+    """Where profiles live: ``profiles/`` beside the routing config.
+
+    Beside it rather than inside it, because a profile *is* a
+    ``routing.conf`` -- complete, parsed by the same code, subject to
+    the same compatibility rule (ADR 0006). A new section type for them
+    would have meant a second format with a second set of promises, and
+    ``--dump-config > profiles/tracking.conf`` would not compose.
+    """
+    base = config_path or discover_config_path()
+    if base is None:
+        return None
+    return base.parent / "profiles"
+
+
+def list_profiles(config_path: Optional[Path] = None) -> List[str]:
+    """Profile names, sorted. Missing directory is empty, not an error."""
+    directory = profiles_dir(config_path)
+    if directory is None or not directory.is_dir():
+        return []
+    return sorted(p.stem for p in directory.glob("*.conf") if p.is_file())
+
+
+def profile_path(name: str, config_path: Optional[Path] = None) -> Path:
+    """The file a profile name refers to.
+
+    Refuses a name that is not a plain identifier: profiles are selected
+    on a command line and a path separator would let one escape the
+    directory. Checked here rather than at each call site.
+    """
+    if not name or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        raise ConfigError(
+            "%r is not a profile name -- letters, digits, dot, dash and "
+            "underscore, and it may not start with punctuation" % name)
+    directory = profiles_dir(config_path)
+    if directory is None:
+        raise ConfigError("no config directory, so no profiles either")
+    return directory / ("%s.conf" % name)

@@ -114,7 +114,7 @@ def test_expected_registers_scales_linearly(session_mod):
         routes = [session_mod.Route(name="r%d" % n, playback=(1, 2),
                                     output=(1, 2), level=0.0)
                   for n in range(count)]
-        return timed(lambda: session_mod.expected_registers(routes))
+        return timed(lambda: session_mod.expected_registers(session_mod.Config(routes=routes)))
 
     assert_scales_linearly(build(50), build(500), factor=10)
 

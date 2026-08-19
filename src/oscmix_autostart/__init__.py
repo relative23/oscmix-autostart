@@ -24,7 +24,9 @@ from .config import (
                         Config,
                         Route,
                         discover_config_path,
+                        list_profiles,
                         load_config,
+                        profile_path,
 )
 from .constants import (
                         CHANNEL_MAX,
@@ -57,6 +59,15 @@ from .notify import sd_notify
 from .osc import decode_osc, encode_osc, iter_osc_messages
 from .pipewire import generate_pipewire_conf, pipewire_positions, pw_sink_info
 from .process import find_stale_backends, supervise
+from .profiles import (
+                        APPLIED_UNVERIFIED,
+                        APPLIED_VERIFIED,
+                        REFUSED,
+                        Outcome,
+                        describe_profiles,
+                        load_profile,
+                        switch_profile,
+)
 from .reconcile import link_messages, mix_messages
 from .routing import (
                         apply_routing,
@@ -77,6 +88,8 @@ from .verify import (
 )
 
 __all__ = [
+                        "APPLIED_UNVERIFIED",
+                        "APPLIED_VERIFIED",
                         "CHANNEL_MAX",
                         "CHANNEL_MIN",
                         "DEFAULT_DEVICE_NAME",
@@ -89,10 +102,12 @@ __all__ = [
                         "EXIT_OK",
                         "LEVEL_MAX",
                         "LEVEL_MIN",
+                        "REFUSED",
                         "UNLINKED_GAIN_OFFSET",
                         "ChannelSetting",
                         "Config",
                         "ConfigError",
+                        "Outcome",
                         "Route",
                         "VerifyResult",
                         "__version__",
@@ -100,6 +115,7 @@ __all__ = [
                         "await_link_echo",
                         "blind_reapply_mix",
                         "decode_osc",
+                        "describe_profiles",
                         "discover_config_path",
                         "encode_osc",
                         "expected_registers",
@@ -109,12 +125,15 @@ __all__ = [
                         "iter_osc_messages",
                         "launch_mixer",
                         "link_messages",
+                        "list_profiles",
                         "load_config",
+                        "load_profile",
                         "log",
                         "mix_messages",
                         "output_link_state",
                         "parse_seq_clients",
                         "pipewire_positions",
+                        "profile_path",
                         "pw_sink_info",
                         "register_promptly_reported",
                         "resolve_binary",
@@ -124,6 +143,7 @@ __all__ = [
                         "sd_notify",
                         "send_mix",
                         "supervise",
+                        "switch_profile",
                         "udp_port_listening",
                         "usb_device_present",
                         "verify_and_repair",

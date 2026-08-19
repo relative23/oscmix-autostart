@@ -160,6 +160,8 @@ is in [docs/ROADMAP.md](docs/ROADMAP.md).
 systemctl --user status oscmix.service      # is the backend running?
 journalctl --user -u oscmix.service -e      # backend logs
 oscmix-session --dry-run                    # what would be started/sent?
+oscmix-session --list-profiles              # profiles found beside routing.conf
+oscmix-session --profile tracking           # switch the desk to profiles/tracking.conf
 ```
 
 More in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).

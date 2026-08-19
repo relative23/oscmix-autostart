@@ -12,7 +12,7 @@ import socket
 import threading
 import time
 
-from conftest import free_udp_port
+from conftest import free_udp_port, repo_file
 
 
 def make_route(session_mod, **kwargs):
@@ -718,3 +718,41 @@ def test_everything_the_config_asks_for_reaches_the_wire(session_mod):
     missing = [p for p in wanted if p not in sent]
     assert missing == [], (
         "the config asks for these and the apply never sent them: %s" % missing)
+
+
+def test_nothing_takes_a_part_of_the_config_and_rebuilds_the_rest(session_mod):
+    """The guard for a defect this project has now shipped twice.
+
+    Both had the same shape: a function took `config.routes`, rebuilt
+    `Config(routes=...)` internally, and silently dropped
+    `config.channels`. The first was on the write path -- every
+    `[input:N]` and `[output:N]` parsed, validated, showed up in
+    --dry-run and never reached the device. The second was the mirror on
+    the read path: the same registers were written, then left out of the
+    read-back, so the run logged "routing verified" without having looked
+    at one of them.
+
+    Neither was visible in what it *did* report, which is why neither a
+    green suite nor a green CI noticed. The tests that catch each one
+    individually exist; this catches the third instance, in whatever
+    function it turns up in next.
+    """
+    import ast
+
+    package = repo_file("src", "oscmix_autostart")
+    offenders = []
+    for path in sorted(package.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "Config"):
+                continue
+            # A Config built from every field it has is a real config;
+            # one built from a strict subset is a config with holes.
+            given = {kw.arg for kw in node.keywords if kw.arg}
+            if given and given < {"routes"} | {"channels"} and "channels" not in given:
+                offenders.append("%s:%d" % (path.name, node.lineno))
+    assert offenders == [], (
+        "these rebuild a Config from routes alone, dropping channel "
+        "sections -- pass the whole Config instead: %s" % offenders)

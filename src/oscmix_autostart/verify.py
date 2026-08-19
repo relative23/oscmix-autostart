@@ -6,8 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
-from .backend import loopback
-from .config import Config, Route
+from .backend import Backend, loopback
+from .config import Config
 from .constants import VERIFY_SETTLE, VERIFY_TIMEOUT
 from .log import log
 from .reconcile import desired, matches
@@ -34,20 +34,27 @@ from .routing import (
 Registers = Dict[str, Tuple[str, Tuple[object, ...]]]
 
 
-def expected_registers(routes: Sequence[Route]) -> Registers:
-    """The register state the routes should produce, keyed by OSC path.
+def expected_registers(config: Config) -> Registers:
+    """The register state ``config`` should produce, keyed by OSC path.
+
+    Takes the whole ``Config``, not its routes. It used to take
+    ``Sequence[Route]`` and rebuild ``Config(routes=...)`` internally,
+    which silently dropped ``config.channels``: every ``[input:N]`` and
+    ``[output:N]`` register was written to the device and then left out
+    of the read-back, so the run reported "routing verified" without
+    having looked at any of it.
+
+    That is the *same* defect as the one on the write path a commit
+    earlier -- a function that took a part of the config and reconstructed
+    the rest as empty. Both were invisible because everything they did
+    report was correct. Taking the whole config is the fix and also the
+    guard: there is no longer a part to forget.
 
     This is ``reconcile.desired`` projected to the shape the read-back
-    has always used. Delegating rather than keeping a second walk of the
-    same routes is the first thing the reconciler is load-bearing for --
-    on the *reading* side, which is where a mistake is a wrong verdict
-    rather than a wrong device state.
-
-    ``tests/test_reconcile.py`` asserts the two agree for every config
-    shape in its table, so this cannot drift back apart quietly.
+    uses. ``tests/test_reconcile.py`` asserts the two agree for every
+    config shape in its table, so they cannot drift apart quietly.
     """
-    return {entry.path: (entry.tags, entry.args)
-            for entry in desired(Config(routes=list(routes)))}
+    return {entry.path: (entry.tags, entry.args) for entry in desired(config)}
 
 
 def _register_matches(want_types: str, want_args: Sequence[object],
@@ -61,18 +68,58 @@ def _register_matches(want_types: str, want_args: Sequence[object],
     """
     return matches(want_types, tuple(want_args), tuple(got_args))
 
+def register_ever_reported(path: str,
+                           device: Optional[Device] = None) -> bool:
+    """Whether this backend reports the register *at all*.
+
+    One family never appears, measured: the playback *mix matrix*,
+    ``/mix/<out>/playback/<pb>``. Anything the register model calls
+    write-only is excluded too.
+
+    Note the shape of that path. This rule used to exclude everything
+    under ``/playback/`` as well, which is wrong and was wrong in a
+    released version: the recorded dump carries 42 registers under
+    ``/playback/``, including every ``/playback/<n>/stereo`` -- the
+    input-side link flags, which arrive first, at 0.0 s. Excluding them
+    meant a lost link write was never counted as a problem and never
+    retried, on the exact register family the stereo-link race is about.
+
+    ``tests/test_verify.py`` now holds this function against
+    ``tests/data/refresh-dump.json`` register by register, so the rule
+    cannot drift away from the recording again.
+
+    Distinct from :func:`register_promptly_reported`, and the split
+    matters. That function used to answer both questions -- "is absence
+    a problem?" and "may the observation window close?" -- and channel
+    state answers them differently: it is reported on a warm dump but
+    ragged after a cold plug. Sharing one answer meant the window closed
+    as soon as the *stereo flags* matched, so `/output/1/volume` was
+    never confirmed even when the device had already reported it.
+
+    Measured on a UCX II: applied, correct at the device (0.0 -> -6.0),
+    and reported unverified by a read-back that had stopped listening.
+    """
+    if path.startswith("/mix/") and "/playback/" in path:
+        return False
+    return not (device is not None
+                and verify_class(device, path) == WRITE_ONLY)
+
+
 def register_promptly_reported(path: str,
                                device: Optional[Device] = None) -> bool:
     """Whether an *absent* register is worth re-sending for.
 
     A hint, not a filter: every register that *does* appear in the dump
-    is compared, whatever this says. It steers two things -- the early
-    exit of the observation window, and whether a missing register is a
-    problem (probably lost, re-send) or merely unverifiable (a note).
+    is compared, whatever this says. It steers exactly one thing --
+    whether a missing register is a problem (probably lost, re-send) or
+    merely unverifiable (a note).
 
-    Two families are never reported at all, both measured: the playback
-    mix matrix does not appear in a dump, and neither does anything the
-    model calls write-only.
+    It used to steer the early exit of the observation window as well.
+    That was one answer to two questions, and channel state answers them
+    differently; see :func:`register_ever_reported` for what that cost.
+
+    Everything :func:`register_ever_reported` rules out is ruled out
+    here too.
 
     **And channel state is not reported *completely* after a cold plug.**
     Measured across a real USB replug: 1234 of 1932 non-meter registers
@@ -87,18 +134,13 @@ def register_promptly_reported(path: str,
     complete part, which is exactly why nothing noticed until channel
     state arrived.
     """
-    if path.startswith("/mix/") and "/playback/" in path:
+    if not register_ever_reported(path, device):
         return False
-    if path.startswith("/playback/"):
-        return False
-    if device is not None:
-        if verify_class(device, path) == WRITE_ONLY:
-            return False
-        if _is_channel_state(device, path):
-            # Modelled, verifiable, and not guaranteed whole after a
-            # hotplug. Absence is a note; a value that *does* arrive is
-            # still compared like any other.
-            return cold_plug_complete(device, path)
+    if device is not None and _is_channel_state(device, path):
+        # Modelled, verifiable, and not guaranteed whole after a
+        # hotplug. Absence is a note; a value that *does* arrive is
+        # still compared like any other.
+        return cold_plug_complete(device, path)
     return True
 
 
@@ -143,6 +185,32 @@ def _absorb(report: Tuple[str, str, Sequence[object]], registers: Registers,
         mismatched.add(path)
 
 
+def _window_may_close(registers: Registers, reportable: Set[str],
+                      confirmed: Set[str], mismatched: Set[str]) -> bool:
+    """Whether the observation window has learned everything it can.
+
+    A mismatch always keeps it open: a stale value echoed during
+    settling is normal, and a later correcting report must be able to
+    override it.
+
+    Otherwise it closes once every register this backend *can* report
+    has been confirmed. Waiting past that only waits for registers the
+    backend will never send -- the playback mix matrix, and anything
+    write-only -- so the remaining time buys nothing.
+
+    ``reportable`` used to be the *promptly* reported set, which is a
+    smaller one, and the difference was not academic: the stereo flags
+    always arrive first and always match, so the window closed before
+    any channel state could arrive and `/output/<n>/volume` came back
+    unconfirmed while sitting correct on the device.
+    """
+    if mismatched:
+        return False
+    if len(confirmed) == len(registers):
+        return True
+    return bool(reportable) and reportable <= confirmed
+
+
 def verify_routing(registers: Registers, send_port: int, recv_port: int,
                    timeout: float = VERIFY_TIMEOUT,
                    on_observed: Optional[Callable[[str, Sequence[object]],
@@ -150,6 +218,7 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
                    should_stop: StopCheck = never_stop,
                    *,
                    device_model: Optional[Device] = None,
+                   backend: Optional[Backend] = None,
                    ) -> Optional[VerifyResult]:
     # device_model is keyword-only and last on purpose: inserting it into
     # the positional signature silently shifted `timeout` into it for
@@ -172,9 +241,23 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
     """
     confirmed: Set[str] = set()
     mismatched: Set[str] = set()
+    # The early exit turns on what the backend reports *ever*, not on
+    # what it reports promptly: closing the window on the prompt set
+    # meant channel state was structurally unconfirmable, because the
+    # stereo flags always arrive first and always match.
+    #
+    # The cost is paid on a cold plug, where channel state is ragged and
+    # this now waits out the full window instead of exiting early. That
+    # is once per hotplug, against a verdict that was otherwise wrong
+    # every time.
     prompt = {path for path in registers
-              if register_promptly_reported(path, device_model)}
-    device = loopback(send_port, recv_port)
+              if register_ever_reported(path, device_model)}
+    # A caller may hand in its own backend -- the profile switch does,
+    # so that the switch and the session share one read-back loop
+    # instead of two that can disagree. Both defects this release fixed
+    # were a second implementation of something that already existed.
+    device = backend if backend is not None else loopback(send_port,
+                                                          recv_port)
     listener = device.listen()
     if listener is None:
         return None
@@ -189,14 +272,8 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
             # whether to act on it, and it will not.
             if should_stop():
                 break
-            # Exit early only while nothing is mismatched: a mismatch
-            # keeps the window open so a later correcting report (stale
-            # value echoed during settling) can still override it.
-            if not mismatched:
-                if len(confirmed) == len(registers):
-                    break  # every register observed and matching
-                if prompt and prompt <= confirmed:
-                    break  # the reliably-reported set fully matches
+            if _window_may_close(registers, prompt, confirmed, mismatched):
+                break
             for report in listener.messages(0.25):
                 _absorb(report, registers, confirmed, mismatched, on_observed)
         unobserved = [path for path in registers
@@ -301,7 +378,7 @@ def verify_and_repair(config: Config,
     exiting: docs/decisions/0009-verifier-stop-contract.md.
     """
     device = device_for_name(config.device_name)
-    registers = expected_registers(config.routes)
+    registers = expected_registers(config)
     pending_links = output_link_state(config.routes)
     reapplied = {"done": not pending_links}
     on_observed = _link_sync_observer(config, pending_links, reapplied,

@@ -180,10 +180,20 @@ def test_the_measured_dump_disagrees_with_the_prose_and_says_so(
     assert dump["dump_seconds"] < 5.0, (
         "the dump took %.1fs; the 15-20s figure in constants.py and the "
         "roadmap may be describing this after all" % dump["dump_seconds"])
-    # Still classified not-prompt, deliberately and conservatively.
-    # Changing this is a behaviour change on a path that has not been
-    # measured after a real hotplug -- so it is a decision, not a tidy-up.
-    assert session_mod.register_promptly_reported("/playback/1/stereo") is False
+    # Now classified prompt, and this is the measurement that decided it.
+    #
+    # The line above used to assert False, with the note that changing it
+    # was a decision rather than a tidy-up because the hotplug case had
+    # not been measured. It has been now, from
+    # tests/data/cold-plug-timeline.json: all 20 /playback/<n>/stereo
+    # come back after a cold USB replug, every one of them at 0.00 s --
+    # complete, and earlier than /output/<n>/stereo, which takes 2.26 s.
+    # See test_playback_stereo_survives_a_cold_plug_completely below.
+    #
+    # What the old classification cost: a lost /playback/<n>/stereo was
+    # never counted as a problem and so never re-sent, on precisely the
+    # register family the two-phase apply exists to get right.
+    assert session_mod.register_promptly_reported("/playback/1/stereo") is True
 
 
 # --------------------------------------------------------------------------
@@ -337,3 +347,26 @@ def test_the_blind_delay_still_fits_the_shutdown_budget(cold):
     assert constants.LINK_SYNC_BLIND_DELAY < 10.0, (
         "a blind delay longer than TimeoutStopSec is only survivable "
         "because wait_unless_stopped exists; see ADR 0009")
+
+
+def test_playback_stereo_survives_a_cold_plug_completely(cold):
+    """The evidence for classifying /playback/*/stereo as promptly reported.
+
+    A cold plug is where the dump is *incomplete* -- 1234 of 1932
+    non-meter registers, and `/output/<n>/mute` came back for channels
+    1, 2, 3, 8, 9 and 10 but not 4-7 or 11-20. So "the device reports it
+    in a warm dump" is not on its own enough to call a register prompt;
+    the hotplug case is where the classification actually bites.
+
+    The input-side link flags pass that test outright: all twenty, at
+    t=0.00 s, before anything else. They are the first thing the device
+    says after it comes back.
+    """
+    first = cold["first_report_seconds"]
+    stereo = {path: seen for path, seen in first.items()
+              if path.startswith("/playback/") and path.endswith("/stereo")}
+    assert len(stereo) == 20, (
+        "only %d of 20 /playback/<n>/stereo came back" % len(stereo))
+    assert max(stereo.values()) == 0.0, (
+        "the latest arrived at %.2fs, so 'first' is too strong"
+        % max(stereo.values()))

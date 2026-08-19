@@ -470,7 +470,7 @@ def test_the_dump_window_ends_when_a_stop_arrives(session_mod, verify_mod):
     # for a dump that never comes. A stop must end that window at the
     # next loop turn, not at the deadline.
     send_port, recv_port = free_udp_port(), free_udp_port()
-    registers = verify_mod.expected_registers([make_route(session_mod)])
+    registers = verify_mod.expected_registers(session_mod.Config(routes=[make_route(session_mod)]))
     started = time.monotonic()
     result = verify_mod.verify_routing(registers, send_port, recv_port,
                                        timeout=10.0, should_stop=lambda: True)

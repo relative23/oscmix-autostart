@@ -111,7 +111,7 @@ def test_every_dropped_message_was_a_repeat_of_the_same_value(
     d["name"] for d in r))
 def test_desired_is_exactly_what_the_verifier_expects_today(session_mod, routes):
     config = make_config(session_mod, *[route(session_mod, **r) for r in routes])
-    old = session_mod.expected_registers(config.routes)
+    old = session_mod.expected_registers(config)
     new = {e.path: (e.tags, e.args) for e in reconcile.desired(config)}
     assert new == old
 

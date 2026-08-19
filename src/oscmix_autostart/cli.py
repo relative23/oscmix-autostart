@@ -21,6 +21,7 @@ from .constants import (
 from .errors import ConfigError
 from .log import log
 from .pipewire import generate_pipewire_conf, pw_sink_info
+from .profiles import REFUSED, describe_profiles, switch_profile
 from .reconcile import observed, render_config, routes_from_observed
 from .registers import device_for_name
 from .session import run_session
@@ -59,6 +60,11 @@ def build_arg_parser() -> ArgumentParser:
     parser.add_argument("--pipewire-target", metavar="NODE",
                         help="Fireface sink node.name for --pipewire-sinks "
                              "(default: auto-detect via pw-dump)")
+    parser.add_argument("--profile", metavar="NAME",
+                        help="switch the desk to profiles/NAME.conf and "
+                             "report the outcome, then exit")
+    parser.add_argument("--list-profiles", action="store_true",
+                        help="list the profiles found beside the config")
     parser.add_argument("--verbose", action="store_true", help="debug logging")
     parser.add_argument("--version", action="version", version=__version__)
     return parser
@@ -88,6 +94,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.osc_port:
         config.osc_port = args.osc_port
 
+    if args.list_profiles:
+        for line in describe_profiles(config_path):
+            sys.stdout.write(line + "\n")
+        return EXIT_OK
+
+    if args.profile:
+        return _switch_profile(args.profile, config_path)
+
     if args.dump_config:
         return _dump_config(config)
 
@@ -110,6 +124,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return EXIT_OK
 
     return run_session(args, config)
+
+
+def _switch_profile(name: str, config_path: Optional[Path]) -> int:
+    """Apply a profile and turn its outcome into an exit code.
+
+    Three states, three codes, and the distinction the caller needs is
+    between "nothing happened" and "something happened that I could not
+    check" -- a script that treats those the same will re-run a switch
+    that already took effect.
+
+    EXIT_CONFIG for a refusal is the same code a bad routing.conf gives
+    at startup, because it is the same failure: the config did not parse
+    and nothing was written.
+    """
+    outcome = switch_profile(name, config_path=config_path)
+    sys.stdout.write(outcome.describe() + "\n")
+    if outcome.state == REFUSED:
+        return EXIT_CONFIG
+    return EXIT_OK
 
 
 def _dump_config(config: Config) -> int:

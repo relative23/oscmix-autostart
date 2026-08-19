@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
-from .backend import loopback
+from .backend import Backend, loopback
 from .config import Config, Route
 from .constants import (
     DEFAULT_OSC_RECV_PORT,
@@ -156,7 +156,8 @@ def await_link_echo(expected: Mapping[str, int], recv_port: int,
 
 
 def apply_routing(config: Config, port: int,
-                  recv_port: int = DEFAULT_OSC_RECV_PORT) -> None:
+                  recv_port: int = DEFAULT_OSC_RECV_PORT, *,
+                  backend: Optional[Backend] = None) -> None:
     """Send the routing in two phases: link the pairs, then fill the mix.
 
     Both phases are separated by the link barrier above. Sending them in
@@ -176,7 +177,12 @@ def apply_routing(config: Config, port: int,
     -- and it came from avoiding exactly this signature change.
     """
     wanted = plan(desired(config))
-    device = loopback(port, recv_port)
+    # A caller may supply the backend. The profile switch does, because
+    # the alternative -- its own send/barrier/send -- is what it had
+    # first, and it dropped the barrier: applying and verifying a
+    # profile took 48 ms on a live UCX II, which is not enough time for
+    # a barrier that is measured in seconds.
+    device = backend if backend is not None else loopback(port, recv_port)
     # Only the output links need the barrier: /playback/<n>/stereo goes
     # through setinputstereo(), which updates oscmix's state right away,
     # while /output/<n>/stereo relies on the device report -- see

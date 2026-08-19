@@ -58,7 +58,12 @@ ALLOWED_IMPORTS = {
     "session": {"config", "constants", "discovery", "log", "notify",
                 "process", "reconcile", "routing", "verify"},
     "cli": {"backend", "config", "constants", "errors", "log", "pipewire",
-            "reconcile", "registers", "session"},
+            "profiles", "reconcile", "registers", "session"},
+    # Sits above verify because a switch has to report whether the
+    # device confirmed it. Below cli because the outcome is a value, not
+    # an exit code -- the mapping to one is the CLI's business.
+    "profiles": {"backend", "config", "constants", "errors", "log",
+                 "registers", "routing", "verify"},
     "launcher": {"constants", "discovery"},
     "registers": set(),
     # The one place that opens a socket to the device. Its Traits name
@@ -69,8 +74,8 @@ ALLOWED_IMPORTS = {
     # recordings instead of hardware.
     "reconcile": {"config", "constants", "registers"},
     "__init__": {"config", "constants", "discovery", "errors", "launcher",
-                 "log", "notify", "osc", "pipewire", "process", "reconcile",
-                 "routing", "session", "verify"},
+                 "log", "notify", "osc", "pipewire", "process", "profiles",
+                 "reconcile", "registers", "routing", "session", "verify"},
 }
 
 

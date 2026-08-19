@@ -70,7 +70,7 @@ GUI expose it at all?
 | Optical/SPDIF mode, standalone, key lock | `/hardware/*` (10) | 0.4.0 |
 | Loopback, channel names | **absent** -- write-only | 0.4.0, unverifiable by construction |
 | Metering | 70 streamed registers | never: a meter is not state |
-| Snapshots (8) | -- | 0.3.0 as profiles, plural text files |
+| Snapshots (8) | -- | 0.3.0: profiles, plural text files -- done |
 | Workspaces, layouts, matrix view | -- | never: GUI, and no device state |
 | DURec transport | not in this dump | never: interactive |
 | Remote control (MIDI/OSC) | the whole interface is OSC | already better than the original |
@@ -1167,8 +1167,78 @@ it in the field.
   from "this is where I left it". Which registers a dump should pin is
   the pin/remember question below, and the answer belongs in the
   register table rather than in the writer.
-- **Profiles** -- several configs and a way to switch between them;
-  TotalMix's eight snapshots, but as text.
+- **Profiles** -- *done.* Several configs and a way to switch between
+  them; TotalMix's eight snapshots, but as text. A profile is a whole
+  `routing.conf` in `profiles/` beside the main one -- not a new section
+  type, so it is parsed by the same code, inherits ADR 0006, and
+  `--dump-config > profiles/tracking.conf` composes. `--profile NAME`
+  switches, `--list-profiles` lists.
+
+  Machine settings are *not* the profile's: `[osc]` ports and the device
+  name are inherited from the main config unless the profile states them
+  itself. That rule came from an accident -- a profile fixture with no
+  `[osc]` section fell back to the compiled-in 7222, which on this
+  machine is the live backend, so a unit test moved a fader on the
+  UCX II. It passed, because everything it asserted was true.
+
+  The three outcomes are held by `tests/test_profiles.py`, written
+  before the module existed, and measured at the device:
+
+  | outcome | measured |
+  |---|---|
+  | refused, nothing written | 0 datagrams; 5 for a good profile through the same counter, seconds apart |
+  | applied | `/output/1/volume` 0.0 -> -6.0, read back through a second `/refresh` |
+  | applied, with the list | `/mix/1/playback/1` only -- the one family this backend never reports |
+
+  `APPLIED_VERIFIED` is reachable only for a profile that pins channel
+  state without touching the matrix, because `/mix/<out>/playback/<pb>`
+  is never reported back. That is stated in the outcome rather than
+  papered over: `unverifiable` is a separate list from `unverified`, so
+  "I could not check it" and "it cannot be checked" do not read the same.
+  **What building it from the contract first turned up.** The tests were
+  written before `profiles.py` existed, and four of the five defects
+  they found were not in the profile code at all -- three were in the
+  path every boot already runs:
+
+  1. `expected_registers()` took `config.routes` and rebuilt a `Config`
+     from them, dropping `config.channels`. Every `[input:N]` and
+     `[output:N]` register was written to the device and then left out
+     of the read-back, so a run logged "routing verified" without having
+     looked at one of them. Exact mirror of the write-path defect fixed
+     one commit earlier; both now covered by a structural test that
+     fails on *any* function rebuilding a Config from a subset.
+  2. `register_promptly_reported()` excluded everything under
+     `/playback/` as never-reported. The recorded dump carries 42
+     registers there, every `/playback/<n>/stereo` among them, and the
+     cold-plug timeline has all 20 coming back at t=0.00 s -- earlier
+     and more completely than `/output/<n>/stereo` at 2.26 s. A lost
+     input-side link write was therefore never a problem and never
+     re-sent, on the one register family the two-phase apply exists for.
+     The old test asserted the wrong rule, which is why it survived; the
+     new one asserts against the recording, which cannot hold a belief.
+  3. The observation window closed as soon as the *promptly* reported
+     set matched. The stereo flags always arrive first and always match,
+     so channel state was structurally unconfirmable -- measured on the
+     UCX II as `/output/1/volume` correct at the device and reported
+     unverified. One flag was answering two different questions; they
+     are now two functions.
+  4. In the profile code itself: `_write` sent links, mix and channel
+     state with nothing between them, dropping the link barrier. The
+     whole switch took 48 ms on live hardware, where the barrier alone
+     is 1.5 s. That is the stereo-link race of 0.2.0, reintroduced on a
+     new write path, and it is why the switch now calls `apply_routing`
+     rather than sending its own three bursts.
+
+  Three of those four are the same mistake: a second implementation of
+  something that already existed, correct in everything it did and
+  missing something the original had. The seam made each fix a
+  delegation rather than a repair.
+
+  A fifth was in the test double, not the code: `confirming_backend`
+  echoed back everything it was sent, including the playback matrix that
+  upstream never reports. A double more capable than the thing it stands
+  in for hides exactly the outcomes that exist because of the limit.
+
 - **The pin/remember model** -- today's implicit rule made selectable per
   option. `48v` wants pinning; a monitor fader wants remembering.
 

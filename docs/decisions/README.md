@@ -21,3 +21,4 @@ silences half the outputs.
 | [0008](0008-pinned-upstream-revision.md) | The upstream backend is pinned, and the pin moves only after a measurement |
 | [0009](0009-verifier-stop-contract.md) | The background verifier stops between phases, and the session waits for it |
 | [0010](0010-timing-constants-need-a-recording.md) | A timing constant needs a recording, not a recollection |
+| [0011](0011-a-profile-switch-states-its-outcome.md) | A profile switch states its outcome; it never raises |

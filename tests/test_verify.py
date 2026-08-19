@@ -3,7 +3,7 @@
 import socket
 import threading
 
-from conftest import free_udp_port
+from conftest import free_udp_port, repo_file
 
 
 def make_route(session_mod, **kwargs):
@@ -14,7 +14,8 @@ def make_route(session_mod, **kwargs):
 
 
 def test_expected_registers_keyed_by_path(session_mod):
-    registers = session_mod.expected_registers([make_route(session_mod)])
+    config = session_mod.Config(routes=[make_route(session_mod)])
+    registers = session_mod.expected_registers(config)
     assert registers["/mix/5/playback/1"] == ("fi", (0.0, 0))
     assert registers["/output/5/stereo"] == ("i", (1,))
     assert len(registers) == 5
@@ -26,7 +27,12 @@ def test_prompt_reporting_hint(session_mod):
     # awaited. The audible /output/* path arrives early.
     prompt = session_mod.register_promptly_reported
     assert prompt("/mix/5/playback/1") is False
-    assert prompt("/playback/1/stereo") is False
+    # Reported, and promptly: it is in the recording, at 0.0 s. This
+    # line asserted False for two releases and is why the rule drifted
+    # -- a test written from the same wrong belief as the code cannot
+    # catch it. test_never_reported_agrees_with_the_recorded_dump
+    # asserts against the dump instead, which cannot hold a belief.
+    assert prompt("/playback/1/stereo") is True
     assert prompt("/mix/5/input/3") is True
     assert prompt("/output/5/volume") is True
     assert prompt("/output/5/stereo") is True
@@ -82,7 +88,7 @@ def run_verify(session_mod, registers, state, timeout=3.0):
 
 def test_verify_confirms_matching_state(session_mod):
     route = make_route(session_mod)
-    registers = session_mod.expected_registers([route])
+    registers = session_mod.expected_registers(session_mod.Config(routes=[route]))
     state = [session_mod.encode_osc(path, types, *args)
              for path, types, args in session_mod.route_messages(route)]
     result = run_verify(session_mod, registers, state)
@@ -95,7 +101,7 @@ def test_verify_confirms_matching_state(session_mod):
 
 def test_verify_classifies_wrong_value_as_mismatch(session_mod):
     route = make_route(session_mod)
-    registers = session_mod.expected_registers([route])
+    registers = session_mod.expected_registers(session_mod.Config(routes=[route]))
     state = []
     for path, types, args in session_mod.route_messages(route):
         if path == "/output/5/volume":
@@ -110,7 +116,7 @@ def test_verify_classifies_wrong_value_as_mismatch(session_mod):
 
 def test_verify_classifies_missing_register_as_unobserved(session_mod):
     route = make_route(session_mod)
-    registers = session_mod.expected_registers([route])
+    registers = session_mod.expected_registers(session_mod.Config(routes=[route]))
     state = [session_mod.encode_osc(path, types, *args)
              for path, types, args in session_mod.route_messages(route)
              if path != "/mix/5/playback/1"]
@@ -142,7 +148,7 @@ def test_later_matching_report_overrides_mismatch(session_mod):
 
 def test_verify_returns_none_when_recv_port_taken(session_mod):
     route = make_route(session_mod)
-    registers = session_mod.expected_registers([route])
+    registers = session_mod.expected_registers(session_mod.Config(routes=[route]))
     send_port, recv_port = free_udp_port(), free_udp_port()
     blocker = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     blocker.bind(("127.0.0.1", recv_port))
@@ -221,3 +227,48 @@ def test_observer_receives_the_path_and_its_arguments(session_mod):
                                seen.append((path, tuple(args))))
     reflector.join()
     assert ("/output/5/stereo", (1,)) in seen
+
+
+# --------------------------------------------------------------------------
+# The "never reported" rule, held against the recording it describes.
+# --------------------------------------------------------------------------
+
+def test_never_reported_agrees_with_the_recorded_dump(session_mod):
+    """Every register the device actually sent must count as reportable.
+
+    The rule was written from memory and drifted: it excluded everything
+    under `/playback/`, while the recording carries 42 registers there,
+    every `/playback/<n>/stereo` among them. Those are the input-side
+    link flags. Calling them unreportable meant a lost link write was
+    never a problem and never retried -- on the one register family the
+    whole two-phase apply exists for.
+
+    Asserting against the recording rather than against a list keeps the
+    rule and the evidence in one place.
+    """
+    import json
+
+    from oscmix_autostart.registers import device_for_name
+    from oscmix_autostart.verify import register_ever_reported
+
+    dump = json.loads(repo_file("tests", "data", "refresh-dump.json"
+                                ).read_text())
+    device = device_for_name("Fireface UCX II")
+    denied = [path for path in dump["registers"]
+              if not register_ever_reported(path, device)]
+    assert denied == [], (
+        "the device reported these, but the rule says it never does: %s"
+        % denied[:10])
+
+
+def test_the_playback_mix_matrix_is_the_family_that_is_absent(session_mod):
+    # The other direction: the one exclusion that the recording supports.
+    import json
+
+    from oscmix_autostart.verify import register_ever_reported
+
+    dump = json.loads(repo_file("tests", "data", "refresh-dump.json"
+                                ).read_text())
+    assert [p for p in dump["registers"]
+            if p.startswith("/mix/") and "/playback/" in p] == []
+    assert register_ever_reported("/mix/1/playback/1") is False

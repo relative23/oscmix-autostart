@@ -122,3 +122,37 @@ level = 0.0
 # These sections make a config unreadable by oscmix-autostart 0.2.0,
 # which rejects unknown sections' options rather than guessing.
 # --------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------
+# Profiles
+# ---------------------------------------------------------------------
+# A profile is a complete routing.conf in a 'profiles' directory beside
+# this one:
+#
+#     ~/.config/oscmix/routing.conf
+#     ~/.config/oscmix/profiles/tracking.conf
+#     ~/.config/oscmix/profiles/mixdown.conf
+#
+#     oscmix-session --list-profiles
+#     oscmix-session --profile tracking
+#
+# Not a new section type on purpose: a profile is parsed by the same
+# code as this file, follows the same compatibility rule, and
+# '--dump-config > profiles/tracking.conf' composes without anything
+# extra.
+#
+# Leave [osc] and [device] out of a profile. Those describe the machine,
+# not the desk, and are inherited from this file unless the profile
+# states them itself -- a profile that restates them is wrong the moment
+# it is copied to another machine, or silently right, which is worse.
+#
+# A switch reports exactly one of three outcomes and never half-applies:
+#
+#   applied 'tracking' and verified it at the device
+#   applied 'tracking'; 1 register(s) this backend cannot report: ...
+#   refused 'tracking', nothing written: [route:x] output: channel 99 ...
+#
+# A refusal costs nothing -- the config is parsed and validated in full
+# before the first datagram, so a typo costs you an error message and
+# not your monitoring. See
+# docs/decisions/0011-a-profile-switch-states-its-outcome.md.

@@ -162,3 +162,100 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         "less than it says.")
     terminalreporter.write_line("")
     terminalreporter.write_line("    pip install -r requirements-dev.txt")
+
+
+def write_config(path, text):
+    """Write a config, creating the directory. Returns the path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+class _RecordingBackend:
+    """A backend that records the wire and never confirms anything.
+
+    A double rather than a real socket because the property under test is
+    *what was sent*, and specifically that a refused config sends
+    nothing. A real socket can only show absence by waiting, which is a
+    slow test that passes when the code is merely slow.
+    """
+
+    traits = None  # filled in below from the real table
+
+    def __init__(self, reports=None):
+        self.sent = []
+        self.dumps = 0
+        self._reports = reports
+
+    def send(self, messages):
+        self.sent.extend((p, t, tuple(a)) for p, t, a in messages)
+
+    def request_dump(self):
+        self.dumps += 1
+
+    def listen(self):
+        if self._reports is None:
+            return None          # port taken: the mixer GUI case
+        return _ReplayListener(self, self._reports)
+
+
+class _ReplayListener:
+    def __init__(self, backend, reports):
+        self._backend = backend
+        self._reports = reports
+        self._done = False
+
+    def messages(self, _timeout):
+        if self._done:
+            return
+        self._done = True
+        yield from self._reports(self._backend.sent)
+
+    def close(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.close()
+
+
+@pytest.fixture
+def recording_backend():
+    """Records the wire; verification is not attempted."""
+    from oscmix_autostart import backend as backend_mod
+    _RecordingBackend.traits = backend_mod.OSCMIX
+    return _RecordingBackend()
+
+
+@pytest.fixture
+def silent_backend():
+    """The desktop case: the receive port is held, so nothing can be read."""
+    from oscmix_autostart import backend as backend_mod
+    _RecordingBackend.traits = backend_mod.OSCMIX
+    return _RecordingBackend(reports=None)
+
+
+def _echo_within_traits(sent):
+    """Echo back what a backend with OSCMIX's traits would report.
+
+    Not everything it was told. The first version of this double echoed
+    the lot, including `/mix/<out>/playback/<pb>` -- which upstream never
+    reports, measured, and declared as
+    `backend.Traits.dumps_playback_matrix = False`. A double more
+    capable than the thing it stands in for turns every test that uses
+    it into a test of a device nobody has, and hides exactly the
+    outcomes that only exist because of the limitation.
+    """
+    return [(path, tags, args) for path, tags, args in sent
+            if not (path.startswith("/mix/") and "/playback/" in path)
+            and path != "/refresh"]
+
+
+@pytest.fixture
+def confirming_backend():
+    """A device that echoes back what its traits say it can report."""
+    from oscmix_autostart import backend as backend_mod
+    _RecordingBackend.traits = backend_mod.OSCMIX
+    return _RecordingBackend(reports=_echo_within_traits)
