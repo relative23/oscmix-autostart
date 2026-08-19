@@ -165,40 +165,15 @@ def await_link_echo(expected: Mapping[str, int], recv_port: int,
         listener.close()
 
 
-def apply_routing(config: Config, port: int,
-                  recv_port: int = DEFAULT_OSC_RECV_PORT, *,
-                  backend: Optional[Backend] = None) -> None:
-    """Send the routing in two phases: link the pairs, then fill the mix.
+def _cross_the_barrier(config: Config, recv_port: int,
+                       device: Backend) -> None:
+    """Wait until oscmix's link state is right, or until waiting is futile.
 
-    Both phases are separated by the link barrier above. Sending them in
-    one burst is what silences every even output (see LINK_ECHO_TIMEOUT).
-
-    The *what* is a ``reconcile.Plan``: the registers the config asks
-    for, deduplicated and split at the barrier. What is left here is the
-    *when* -- send, wait out the barrier, send -- which is this
-    function's whole job and the only part that needs a socket and a
-    clock.
-
-    It takes the **whole config**, not a list of routes. Rebuilding a
-    Config from routes alone silently dropped everything else in it:
-    `[input:N]` and `[output:N]` sections parsed, validated, appeared in
-    `--dry-run` and never reached the device. That is roadmap item G in
-    another shape -- the dry run and the apply reading different sources
-    -- and it came from avoiding exactly this signature change.
+    The three outcomes are all normal and only one of them is the happy
+    path, which is why each says so in the journal: the echo arrived, the
+    pairs were already linked so there was nothing to echo, or the
+    receive port is held and the wait is blind.
     """
-    wanted = plan(desired(config))
-    # A caller may supply the backend. The profile switch does, because
-    # the alternative -- its own send/barrier/send -- is what it had
-    # first, and it dropped the barrier: applying and verifying a
-    # profile took 48 ms on a live UCX II, which is not enough time for
-    # a barrier that is measured in seconds.
-    device = backend if backend is not None else loopback(port, recv_port)
-    # Only the output links need the barrier: /playback/<n>/stereo goes
-    # through setinputstereo(), which updates oscmix's state right away,
-    # while /output/<n>/stereo relies on the device report -- see
-    # backend.Traits.reports_link_state_on_write.
-    device.send(w.message() for w in wanted.links())
-
     timeout = LINK_ECHO_TIMEOUT
     echoed = await_link_echo(output_link_state(config.routes), recv_port,
                              timeout, backend=device)
@@ -212,6 +187,49 @@ def apply_routing(config: Config, port: int,
                  "be re-applied after the register sync", timeout)
     else:
         log.info("channel pairs linked and confirmed by the device")
+
+
+def apply_routing(config: Config, port: int,
+                  recv_port: int = DEFAULT_OSC_RECV_PORT, *,
+                  backend: Optional[Backend] = None,
+                  leave_alone: Sequence[str] = ()) -> None:
+    """Send the routing in two phases: link the pairs, then fill the mix.
+
+    Both phases are separated by the link barrier above. Sending them in
+    one burst is what silences every even output (see LINK_ECHO_TIMEOUT).
+
+    The *what* is a ``reconcile.Plan``: the registers the config asks
+    for, deduplicated and split at the barrier. What is left here is the
+    *when* -- send, wait out the barrier, send -- which is this
+    function's whole job and the only part that needs a socket and a
+    clock.
+
+    ``leave_alone`` names registers this apply must not touch -- the
+    remembered ones somebody has turned. A re-apply writes the whole
+    routing, so without it one unconfirmed link register drags every
+    remembered fader back to the config value (ADR 0012).
+
+    It takes the **whole config**, not a list of routes. Rebuilding one
+    from routes alone silently dropped `config.channels`, so channel
+    sections parsed, validated, showed in `--dry-run` and never reached
+    the device. `tests/test_apply_routing.py` now fails on any function
+    that rebuilds a Config from a subset of its fields.
+    """
+    skip = set(leave_alone)
+    wanted = plan([e for e in desired(config) if e.path not in skip])
+    # A caller may supply the backend. The profile switch does, because
+    # the alternative -- its own send/barrier/send -- is what it had
+    # first, and it dropped the barrier: applying and verifying a
+    # profile took 48 ms on a live UCX II, which is not enough time for
+    # a barrier that is measured in seconds.
+    device = backend if backend is not None else loopback(port, recv_port)
+    # Only the output links need the barrier: /playback/<n>/stereo goes
+    # through setinputstereo(), which updates oscmix's state right away,
+    # while /output/<n>/stereo relies on the device report -- see
+    # backend.Traits.reports_link_state_on_write.
+    device.send(w.message() for w in wanted.links())
+
+    _cross_the_barrier(config, recv_port, device)
 
     device.send(w.message() for w in wanted.mix())
     # Channel state last: it does not depend on the barrier, and a fader

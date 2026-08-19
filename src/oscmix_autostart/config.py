@@ -24,7 +24,15 @@ from .constants import (
 )
 from .errors import ConfigError
 from .log import log
-from .registers import BOOL, DB, ENUM, GAIN, device_for_name, settable_options
+from .registers import (
+    BOOL,
+    DB,
+    ENUM,
+    GAIN,
+    POLICIES,
+    device_for_name,
+    settable_options,
+)
 
 
 @dataclass(frozen=True)
@@ -84,6 +92,9 @@ class Config:
     osc_recv_port: int = DEFAULT_OSC_RECV_PORT
     routes: List[Route] = field(default_factory=list)
     channels: List[ChannelSetting] = field(default_factory=list)
+    #: ``(family, option) -> "pin" | "remember"`` from a ``[pin]``
+    #: section, overriding the register table's default for that option.
+    policies: Dict[Tuple[str, str], str] = field(default_factory=dict)
 
 
 def discover_config_path() -> Optional[Path]:
@@ -153,6 +164,52 @@ _KNOWN_OPTIONS = {
     "osc": {"port", "recv-port"},
     "route": {"playback", "input", "output", "level", "volume", "stereo"},
 }
+
+#: Overrides for who wins after the initial write, as
+#: ``<family>.<option> = pin|remember``. The register table carries a
+#: default for every option; this is for the installation that disagrees
+#: with it -- a fixed venue that really does want its monitor faders
+#: pinned, or a studio that would rather ride an input gain by hand.
+#:
+#: A section rather than an option inside ``[output:N]``, and that is not
+#: a style choice: ADR 0006 makes an unknown *option* in a known section
+#: an error, so putting it there would mean every config using it is
+#: rejected whole by 0.2.x. An unknown *section* only warns, so this one
+#: degrades to "the defaults apply", which is the behaviour those
+#: versions already have.
+
+
+def _parse_pin(parser: "configparser.ConfigParser", section: str,
+               config: "Config") -> None:
+    """Read ``[pin]``: per-option overrides of the register table default.
+
+    Keys are ``<family>.<option>``; values are ``pin`` or ``remember``.
+    Both halves are checked against the register model rather than
+    accepted as strings, because a typo here is silent by nature -- the
+    routing still applies, and the only symptom is a fader that does or
+    does not come back weeks later.
+    """
+    device = device_for_name(config.device_name)
+    for key in parser.options(section):
+        raw = parser.get(section, key).strip().lower()
+        if raw not in POLICIES:
+            raise ConfigError(
+                "[pin] %s: expected one of %s, got %r"
+                % (key, " or ".join(sorted(POLICIES)), raw))
+        if key.count(".") != 1:
+            raise ConfigError(
+                "[pin] %s: expected '<family>.<option>', e.g. 'output.volume'"
+                % key)
+        family, option = key.split(".", 1)
+        if family not in ("input", "output"):
+            raise ConfigError(
+                "[pin] %s: unknown family %r (input or output)" % (key, family))
+        known = settable_options(device, family)
+        if option not in known:
+            raise ConfigError(
+                "[pin] %s: %s has no settable option %r (valid: %s)"
+                % (key, family, option, ", ".join(sorted(known)) or "none"))
+        config.policies[(family, option)] = raw
 
 
 def _check_options(section: str, kind: str, options: Sequence[str]) -> None:
@@ -261,6 +318,8 @@ def load_config(path: Optional[Path]) -> Config:
             config.routes.append(_parse_route(parser, section))
         elif section.startswith(("input:", "output:")):
             pending.append(section)
+        elif section == "pin":
+            _parse_pin(parser, section, config)
         else:
             # A warning, not an error. See
             # docs/decisions/0006-routing-conf-compatibility.md: a section
@@ -274,7 +333,8 @@ def load_config(path: Optional[Path]) -> Config:
             log.warning(
                 "ignoring unknown section [%s] -- this config may have been "
                 "written by a newer version of oscmix-autostart "
-                "(known: [device], [osc], [route:<name>])", section
+                "(known: [device], [osc], [pin], [route:<name>], "
+                "[input:<n>], [output:<n>])", section
             )
     # After the loop, because [device] may appear anywhere in the file
     # and every check below is device-specific.

@@ -156,3 +156,30 @@ level = 0.0
 # before the first datagram, so a typo costs you an error message and
 # not your monitoring. See
 # docs/decisions/0011-a-profile-switch-states-its-outcome.md.
+
+# ---------------------------------------------------------------------
+# Pin and remember
+# ---------------------------------------------------------------------
+# Every setting written here is either pinned -- the config wins, and is
+# re-sent if the device disagrees -- or remembered -- set once at start,
+# and after that the mixer wins.
+#
+# The defaults follow what a setting is. The routing itself, channel
+# links, 'reflevel', 'gain', 'hi-z' and '48v' are pinned: they describe
+# what is physically plugged in, and a wrong value is a signal problem.
+# 'volume', 'mute' and 'phase' are remembered: turn a monitor fader
+# during a session and it stays turned.
+#
+# Override per option where your setup disagrees:
+#
+#     [pin]
+#     output.volume = pin      # fixed install, levels set once
+#     input.gain = remember    # gain ridden by hand
+#
+# Pinning does NOT mean the value snaps back the moment you change it in
+# the mixer. It cannot: of everything a config sets, this device
+# announces only channel links when they change -- measured. Everything
+# else is silent until a full state dump is requested. Pinning means
+# this session insists, through the read-back after start.
+#
+# See docs/decisions/0012-pin-and-remember.md.

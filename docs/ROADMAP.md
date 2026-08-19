@@ -800,9 +800,22 @@ TotalMix already offers.
   writers genuinely fight: a user watching a knob undo itself files a
   bug, not a compliment.
 
-*What would settle it, and it is measurable today:* does a GUI-initiated
-change show up as a report on the receive port? The device reports on
-change, so it should -- but this is one measurement, not an argument.
+*Measured, 0.3.0, and the answer is mostly no.* Only
+`/output/{ch}/stereo` is pushed when it changes; every other register a
+config can set is silent until a `/refresh`. The reason is visible in
+upstream: `wfd` in main.c is one socket on a fixed address, and state
+comes back only from device echoes over MIDI, which this device sends
+for the link flags and not for faders, mutes, reference levels or gains.
+
+That rules out position three. It leaves position two intact -- one
+dump per event is cheap -- and it is why 0.3.0's `pin` is defined as
+"the config wins while this session is still looking" rather than as
+"snaps back", which nothing here could honestly deliver.
+
+*The original phrasing, kept because it is the right question:* does a
+GUI-initiated change show up as a report on the receive port? The device
+reports on change, so it should -- but this is one measurement, not an
+argument.
 
 It cannot be done with `scripts/record-dump.py`, which binds UDP 8222 and
 therefore cannot run while the GUI holds it. Sniff the loopback instead,
@@ -1239,8 +1252,34 @@ it in the field.
   upstream never reports. A double more capable than the thing it stands
   in for hides exactly the outcomes that exist because of the limit.
 
-- **The pin/remember model** -- today's implicit rule made selectable per
-  option. `48v` wants pinning; a monitor fader wants remembering.
+- **The pin/remember model** -- *done.* A `policy` column in the register
+  table, PIN or REMEMBER, overridable per option by a `[pin]` section.
+  [ADR 0012](decisions/0012-pin-and-remember.md).
+
+  **The measurement this section asked for was taken, and it settles the
+  three positions.** Of every register a config can set, exactly one is
+  pushed to listeners when it changes: `/output/{ch}/stereo`, which the
+  device echoes over MIDI. `volume`, `mute`, `hi-z`, `gain`, `reflevel`
+  and `/playback/{ch}/stereo` all change silently -- each verified by
+  reading the value, writing a different one, and confirming from a
+  later dump that it really moved.
+
+  So **position three is dead**: continuous reconciliation would mean
+  polling a 2002-register dump forever, against a device already
+  streaming ~880 meter datagrams a second. Position two remains open and
+  bounded, and pinning is written so that a trigger can be added without
+  changing what the word means.
+
+  What the model replaced was an accident, and that is measured too. A
+  fader turned 0.5 s after a restart came back at the config's value;
+  the same turn at 1.5, 3 and 6 seconds survived -- and the 0.5 s case
+  was overwritten by the ordinary start-up apply, which finishes around
+  1.8 s, not by the verifier. The line between "the config wins" and
+  "the user wins" was how long the apply took.
+
+  It also settles what `--dump-config` pins, which this section said it
+  would: pinned options are emitted as config, remembered ones as
+  comments carrying the value.
 
 **Prerequisite, and it is met.** `--dump-config` makes the file
 machine-generated and profiles make it plural, so neither was shippable

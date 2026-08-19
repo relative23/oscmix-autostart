@@ -48,14 +48,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .config import Config, Route
+from .config import ChannelSetting, Config, Route
 from .constants import LEVEL_MIN, UNLINKED_GAIN_OFFSET
 from .registers import (
+    BOOL,
     ENUM,
+    PIN,
     REESTABLISHED,
     VERIFIABLE,
     Device,
+    Register,
     device_for_name,
+    register_policy,
     settable_options,
     verify_class,
 )
@@ -443,6 +447,49 @@ def _mix_entries(seen: Mapping[str, Args]) -> Dict[Tuple[int, int], Args]:
     return entries
 
 
+def channels_from_observed(seen: Mapping[str, Args],
+                           device: Optional[Device] = None
+                           ) -> Tuple[ChannelSetting, ...]:
+    """Channel state read back out of a dump, as config would express it.
+
+    Only options a config can actually set: the register model's
+    ``settable_options``. Anything else the device reports is state this
+    project has no vocabulary for, and inventing one in the dump writer
+    is how a config grows options nothing can parse.
+
+    Written because ``render_config`` could format channel sections and
+    nothing produced any -- the renderer was reachable only from tests.
+    That is the same shape as the two defects this release already
+    fixed: a capability built, correct, and wired to nothing.
+    """
+    if device is None:
+        return ()
+    found: List[ChannelSetting] = []
+    for family in ("input", "output"):
+        for option, register in sorted(settable_options(device, family).items()):
+            for channel in device.channels.get(register.channels, ()):
+                args = seen.get(register.path(ch=channel))
+                if args:
+                    found.append(ChannelSetting(family, channel, option,
+                                                _config_value(register, args)))
+    return tuple(found)
+
+
+def _config_value(register: "Register", args: Args) -> object:
+    """One reported register as the value a config would carry.
+
+    Enums report ``(index, name)`` and a config writes the name; booleans
+    report an int and a config writes true/false. Getting this wrong is
+    silent -- the dump looks fine and the file it produces sets something
+    else -- so the round trip is asserted in tests/test_pin_remember.py.
+    """
+    if register.domain == ENUM:
+        return args[1] if len(args) > 1 else args[0]
+    if register.domain == BOOL:
+        return bool(args[0])
+    return args[0]
+
+
 def routes_from_observed(seen: Mapping[str, Args]) -> Tuple[Route, ...]:
     """Reconstruct the routes a device's reported state implies.
 
@@ -507,12 +554,18 @@ def unrecoverable(device: Optional[Device] = None) -> Tuple[str, ...]:
 def render_config(config: Config, device: Optional[Device] = None) -> str:
     """A ``routing.conf`` that reproduces what the device reported.
 
-    Volume is deliberately **not** emitted. A route that declares
-    ``volume`` pins the fader on every start (ADR 0003), so writing it
-    into a dumped config would silently convert every output level the
-    user set by hand into a value forced back on them at boot. Which
-    registers a dump should pin is the pin/remember question, and it
-    belongs in the register table rather than in this writer.
+    What a dump does with an observed value is the pin/remember question
+    in its other form, and the register table now answers it: **pinned
+    options are emitted as config, remembered ones as comments.**
+
+    A dump cannot tell "I meant this" from "this is where I left it".
+    For a reference level or a hi-Z switch the distinction barely
+    matters -- both readings say the cable needs it. For a fader it is
+    the whole difference between a useful config and one that forces
+    every hand-set level back to wherever it happened to be the day the
+    dump was taken. So a remembered value is written out commented, with
+    the value visible: uncommenting it is a decision the person makes,
+    which is exactly the decision a dump cannot make for them.
     """
     missing = unrecoverable(device)
     lines = [
@@ -536,9 +589,12 @@ def render_config(config: Config, device: Optional[Device] = None) -> str:
         ]
     lines += [
         "#",
-        "# Output faders are not pinned here either: a route that declares",
-        "# 'volume' forces that level on every start, and a dump has no way",
-        "# to know you meant that rather than 'this is where I left it'.",
+        "# Values are emitted as config where the register model pins them,",
+        "# and commented out where it remembers them -- a dump cannot tell",
+        "# 'I meant this' from 'this is where I left it', so for anything a",
+        "# person turns during a session it does not decide. Uncomment to",
+        "# make it a pin. See",
+        "# docs/decisions/0012-pin-and-remember.md.",
         "",
         "[device]",
         "name = %s" % config.device_name,
@@ -562,4 +618,69 @@ def render_config(config: Config, device: Optional[Device] = None) -> str:
         if not route.stereo:
             lines.append("stereo = false")
         lines.append("")
+    lines += _channel_sections(config, device)
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _channel_sections(config: Config,
+                      device: Optional[Device]) -> List[str]:
+    """``[input:N]`` / ``[output:N]`` blocks for the observed channel state.
+
+    Pinned options become config lines, remembered ones become comments
+    carrying the same value. A section whose every option is remembered
+    is still emitted: seeing what the device holds is most of why anyone
+    runs a dump, and hiding it would make the file look like the channel
+    had no state at all.
+    """
+    by_channel: Dict[Tuple[str, int], List[ChannelSetting]] = {}
+    for setting in config.channels:
+        by_channel.setdefault((setting.family, setting.channel),
+                              []).append(setting)
+    lines: List[str] = []
+    for (family, channel), settings in sorted(by_channel.items()):
+        lines.append("[%s:%d]" % (family, channel))
+        for setting in sorted(settings, key=lambda s: s.option):
+            path = "/%s/%d/%s" % (family, channel, setting.option)
+            entry = "%s = %s" % (setting.option, _render_value(setting.value))
+            if policy_for(path, device) == PIN:
+                lines.append(entry)
+            else:
+                lines.append("# %s   # remembered: the device's value wins"
+                             % entry)
+        lines.append("")
+    return lines
+
+
+def _render_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return "%.1f" % value
+    return str(value)
+
+
+def policy_for(path: str, device: Optional[Device] = None,
+               overrides: Optional[Mapping[Tuple[str, str], str]] = None
+               ) -> str:
+    """PIN or REMEMBER for a path, config override beating the table.
+
+    Pure, and here rather than in ``registers`` because the override
+    comes from a ``Config`` and the register model deliberately knows
+    nothing about configs.
+
+    The override is keyed by ``(family, option)`` -- per kind of setting,
+    not per channel. That is the granularity the question actually has:
+    "should a monitor fader come back after a restart" is one answer for
+    the installation, and a per-channel version would be four more lines
+    of config for a distinction nobody asked for. If a real case turns
+    up, the key grows a channel and old configs keep meaning what they
+    meant.
+    """
+    if overrides:
+        parts = path.strip("/").split("/")
+        if len(parts) == 3:
+            family, _channel, option = parts
+            override = overrides.get((family, option))
+            if override is not None:
+                return override
+    return register_policy(device, path)

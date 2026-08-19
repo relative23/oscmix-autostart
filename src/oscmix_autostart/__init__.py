@@ -68,7 +68,8 @@ from .profiles import (
                         load_profile,
                         switch_profile,
 )
-from .reconcile import link_messages, mix_messages
+from .reconcile import link_messages, mix_messages, policy_for
+from .registers import PIN, REMEMBER
 from .routing import (
                         apply_routing,
                         await_link_echo,
@@ -102,7 +103,9 @@ __all__ = [
                         "EXIT_OK",
                         "LEVEL_MAX",
                         "LEVEL_MIN",
+                        "PIN",
                         "REFUSED",
+                        "REMEMBER",
                         "UNLINKED_GAIN_OFFSET",
                         "ChannelSetting",
                         "Config",
@@ -133,6 +136,7 @@ __all__ = [
                         "output_link_state",
                         "parse_seq_clients",
                         "pipewire_positions",
+                        "policy_for",
                         "profile_path",
                         "pw_sink_info",
                         "register_promptly_reported",

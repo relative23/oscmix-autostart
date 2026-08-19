@@ -184,7 +184,11 @@ def test_volume_is_not_pinned_by_a_dump(session_mod):
     text = reconcile.render_config(config_of(session_mod, recovered),
                                    registers.UCX2)
     assert "volume" not in text.split("[route:")[1]
-    assert "not pinned" in text
+    # The header now states the general rule rather than singling volume
+    # out: pinned options are emitted as config, remembered ones as
+    # comments, and the register table decides which is which.
+    assert "remembers them" in text
+    assert "cannot tell" in text
 
 
 def test_an_empty_device_says_so_rather_than_looking_broken(session_mod):

@@ -56,6 +56,42 @@ REESTABLISHED = "re-established"
 VERIFY_CLASSES = (VERIFIABLE, WRITE_ONLY, REESTABLISHED)
 
 
+# --------------------------------------------------------------------------
+# Who wins after the initial write.
+#
+# Measured on a UCX II, and the measurement is what shapes this. Of every
+# register a config can set, exactly one is *pushed* to listeners when it
+# changes: `/output/{ch}/stereo`, which the device echoes over MIDI --
+# the echo the two-phase apply already waits for. `volume`, `mute`,
+# `hi-z`, `gain`, `reflevel` and `/playback/{ch}/stereo` all change
+# silently; only a `/refresh` reveals them.
+#
+# So "pin" cannot mean "snaps back when the mixer GUI changes it". There
+# is nothing to react to short of polling a 2002-register dump, against
+# a device already streaming ~880 meter datagrams a second. What pin can
+# honestly mean is: **the config wins for as long as this session is
+# still looking** -- through the read-back window, and through any
+# future reconcile trigger.
+#
+# What that replaces is an accident. Today a declared option behaves as
+# pinned for roughly the two seconds the apply and dump take, and as
+# remembered after -- measured by turning a fader at 0.5, 1.5, 3 and 6
+# seconds after a restart: only the 0.5 s change was overwritten, and by
+# the ordinary start-up apply rather than by the verifier. The cut-off
+# was the shape of the timing, not anybody's decision.
+
+#: The config wins. A device value that disagrees is a mismatch: the
+#: read-back re-sends it, and so does any later reconcile.
+PIN = "pin"
+
+#: The device wins after the initial write. The config value is applied
+#: at start and then let go -- a later disagreement is the user having
+#: turned something, which is information, not a fault.
+REMEMBER = "remember"
+
+POLICIES = (PIN, REMEMBER)
+
+
 #: Value domains, as a config author has to satisfy them.
 BOOL = "bool"
 ENUM = "enum"
@@ -86,6 +122,17 @@ class Register:
     #: own vocabulary lives -- inventing synonyms here would mean a
     #: config that reads well and sets nothing.
     choices: Tuple[str, ...] = ()
+    #: Who wins after the initial write, PIN or REMEMBER. The default is
+    #: REMEMBER because that is ADR 0003's rule -- do not wipe what the
+    #: user left in the mixer -- and a register that forgot to declare a
+    #: policy should fall on the side that surprises nobody.
+    #:
+    #: PIN belongs to registers that describe the *installation* rather
+    #: than a preference: a reference level or a hi-Z switch has to match
+    #: the cable that is plugged in, and a wrong value there is a real
+    #: signal problem rather than a matter of taste. REMEMBER belongs to
+    #: everything a person reaches for during a session.
+    policy: str = REMEMBER
 
     @property
     def per_channel(self) -> bool:
@@ -169,36 +216,42 @@ UCX2 = Device(
     },
     registers=(
         # --- what 0.2.0 already writes ---------------------------------
-        Register("/playback/{ch}/stereo", "i", VERIFIABLE, "playback"),
-        Register("/output/{ch}/stereo", "i", VERIFIABLE, "output"),
+        Register("/playback/{ch}/stereo", "i", VERIFIABLE, "playback",
+                 policy=PIN),
+        Register("/output/{ch}/stereo", "i", VERIFIABLE, "output",
+                 policy=PIN),
         Register("/output/{ch}/volume", "f", VERIFIABLE, "output", DB),
         # The playback matrix: a /mix write draws no reply and the dump
         # omits it entirely. Re-established from a known link state.
-        Register("/mix/{out}/playback/{pb}", "fi", REESTABLISHED, "output"),
+        Register("/mix/{out}/playback/{pb}", "fi", REESTABLISHED, "output",
+                 policy=PIN),
 
         # --- the surface 0.3.0 declares --------------------------------
         # Reported, so almost all of the new surface is verifiable --
         # unlike the playback matrix this project started with.
-        Register("/mix/{out}/input/{in_}", "fi", VERIFIABLE, "output"),
+        Register("/mix/{out}/input/{in_}", "fi", VERIFIABLE, "output",
+                 policy=PIN),
         # 48v deliberately has NO domain: it is readable by the code and not
         # settable from a routing.conf. See registers.settable_options and
         # the roadmap's rule -- phantom power is not exposed until a
         # hardware case proves the channel it names is the channel it
         # hits, because an off-by-one is damaged equipment, not silence.
-        Register("/input/{ch}/48v", "i", VERIFIABLE, "48v"),
-        Register("/input/{ch}/hi-z", "i", VERIFIABLE, "hi-z", BOOL),
-        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain", GAIN),
+        Register("/input/{ch}/48v", "i", VERIFIABLE, "48v", policy=PIN),
+        Register("/input/{ch}/hi-z", "i", VERIFIABLE, "hi-z", BOOL,
+                 policy=PIN),
+        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain", GAIN,
+                 policy=PIN),
         Register("/input/{ch}/reflevel", "is", VERIFIABLE, "input-reflevel", ENUM,
-                 ("+13dBu", "+19dBu")),
+                 ("+13dBu", "+19dBu"), policy=PIN),
         Register("/input/{ch}/mute", "i", VERIFIABLE, "input", BOOL),
         Register("/input/{ch}/phase", "i", VERIFIABLE, "input", BOOL),
-        Register("/input/{ch}/stereo", "i", VERIFIABLE, "input"),
+        Register("/input/{ch}/stereo", "i", VERIFIABLE, "input", policy=PIN),
         # Verifiable, but see complete_after_cold_plug below: a cold
         # plug delivers these only for some channels.
         Register("/output/{ch}/mute", "i", VERIFIABLE, "output", BOOL),
         Register("/output/{ch}/phase", "i", VERIFIABLE, "output", BOOL),
         Register("/output/{ch}/reflevel", "is", VERIFIABLE, "output-reflevel", ENUM,
-                 ("+4dBu", "+13dBu", "+19dBu")),
+                 ("+4dBu", "+13dBu", "+19dBu"), policy=PIN),
 
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),
@@ -252,6 +305,21 @@ def channel_limit(device: Optional[Device], capability: str = "output") -> Optio
         return None
     channels = device.channels_for(capability)
     return max(channels) if channels else None
+
+
+def register_policy(device: Optional[Device], path: str) -> str:
+    """PIN or REMEMBER for a concrete path, from the register table.
+
+    REMEMBER for anything the model does not know, matching the field
+    default: an unmodelled register is not something this project should
+    start insisting on.
+    """
+    if device is None:
+        return REMEMBER
+    for register in device.registers:
+        if _matches(register.template, path):
+            return register.policy
+    return REMEMBER
 
 
 def verify_class(device: Optional[Device], path: str) -> Optional[str]:

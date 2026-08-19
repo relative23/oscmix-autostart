@@ -21,6 +21,30 @@ CHILD_STOP_GRACE = float(os.environ.get("OSCMIX_STOP_GRACE", "5"))
 # and takes a few seconds on a 20-channel interface; the loop exits early
 # once every expected register is confirmed, so a generous window only
 # costs time in the mismatch case.
+# Bind the receive port, then wait this long before asking for a dump.
+#
+# Upstream writes to a *connected* UDP socket, and `writeosc` in main.c
+# ignores ECONNREFUSED. While nothing is bound on the receive port, each
+# of the ~880 meter datagrams a second draws an ICMP port-unreachable
+# that Linux queues as a pending socket error, and the next write fails
+# with exactly that errno -- silently, by design, because the normal case
+# is "the GUI is not running and we do not care".
+#
+# So the first datagram after a bind is spent absorbing that error. And
+# the first datagram after a /refresh is the one thing setrefresh()
+# flushes by hand: every /playback/<n>/stereo, all twenty, in one bundle.
+# Bind and ask immediately and they are gone.
+#
+# Measured on a UCX II, twelve trials per gap: 0.0 s delivered them 4
+# times out of 12, 0.1 s and 0.3 s twelve out of twelve. The mechanism
+# needs one datagram, which at the meter rate is about 1.1 ms, so 0.1 s
+# is roughly ninety times what it takes -- a margin, not a tuned value.
+#
+# Nothing noticed for two releases because /playback/* was wrongly
+# classified as never-reported, so losing it was not counted as a
+# problem. Fixing that classification is what made this visible.
+DUMP_LISTEN_SETTLE = float(os.environ.get("OSCMIX_DUMP_SETTLE", "0.1"))
+
 VERIFY_TIMEOUT = 10.0
 VERIFY_SETTLE = 0.5
 # oscmix only learns that an output pair is stereo-linked when the *device*

@@ -394,7 +394,10 @@ def test_every_machine_level_field_on_config_is_inherited(tmp_path):
 
     from oscmix_autostart.config import Config
 
-    desk = {"routes", "channels"}
+    # `policies` is the desk's, not the machine's: "should my monitor
+    # faders come back after a restart" is a statement about how this
+    # set of routing is meant to behave, so a profile brings its own.
+    desk = {"routes", "channels", "policies"}
     machine = {f.name for f in dataclasses.fields(Config)} - desk
     covered = {attr for _section, _option, attr in profiles.MACHINE_SETTINGS}
     assert machine == covered, (

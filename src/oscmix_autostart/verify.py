@@ -8,10 +8,11 @@ from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from .backend import Backend, loopback
 from .config import Config
-from .constants import VERIFY_SETTLE, VERIFY_TIMEOUT
+from .constants import DUMP_LISTEN_SETTLE, VERIFY_SETTLE, VERIFY_TIMEOUT
 from .log import log
-from .reconcile import desired, matches
+from .reconcile import desired, matches, policy_for
 from .registers import (
+    PIN,
     WRITE_ONLY,
     Device,
     cold_plug_complete,
@@ -185,6 +186,27 @@ def _absorb(report: Tuple[str, str, Sequence[object]], registers: Registers,
         mismatched.add(path)
 
 
+def _observe(listener: object, registers: Registers, prompt: Set[str],
+             confirmed: Set[str], mismatched: Set[str],
+             on_observed: Optional[Callable[[str, Sequence[object]], None]],
+             should_stop: StopCheck, timeout: float) -> None:
+    """Read reports until the window closes, a stop is asked, or time runs out.
+
+    A stop request ends the window at the top of the loop, so the longest
+    this can hold a shutdown is one socket timeout (0.25 s). What has
+    been observed so far stays in the caller's sets rather than being
+    discarded -- the caller decides whether to act on it, and it will not.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if should_stop():
+            return
+        if _window_may_close(registers, prompt, confirmed, mismatched):
+            return
+        for report in listener.messages(0.25):  # type: ignore[attr-defined]
+            _absorb(report, registers, confirmed, mismatched, on_observed)
+
+
 def _window_may_close(registers: Registers, reportable: Set[str],
                       confirmed: Set[str], mismatched: Set[str]) -> bool:
     """Whether the observation window has learned everything it can.
@@ -233,9 +255,10 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
     with a different value -- a later matching report overrides), or
     unobserved (never reported within the window).
 
+    A short settle precedes the request; see ``DUMP_LISTEN_SETTLE``.
+
     ``on_observed`` is called with each register path and its reported
-    arguments the moment it is
-    first reported. That is how the mix re-apply hooks into this dump
+    arguments the moment it is first reported. That is how the mix re-apply hooks into this dump
     instead of requesting a second one: two overlapping dumps measurably
     starve each other and confirm fewer registers.
     """
@@ -262,20 +285,10 @@ def verify_routing(registers: Registers, send_port: int, recv_port: int,
     if listener is None:
         return None
     try:
+        time.sleep(DUMP_LISTEN_SETTLE)   # see the constant: ICMP backlog
         device.request_dump()
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            # A stop request ends the window at the top of the loop, so
-            # the longest this can hold the shutdown is one socket
-            # timeout (0.25 s). What has been observed so far is
-            # returned rather than discarded -- the caller decides
-            # whether to act on it, and it will not.
-            if should_stop():
-                break
-            if _window_may_close(registers, prompt, confirmed, mismatched):
-                break
-            for report in listener.messages(0.25):
-                _absorb(report, registers, confirmed, mismatched, on_observed)
+        _observe(listener, registers, prompt, confirmed, mismatched,
+                 on_observed, should_stop, timeout)
         unobserved = [path for path in registers
                       if path not in confirmed and path not in mismatched]
         return VerifyResult(sorted(confirmed), sorted(mismatched),
@@ -339,18 +352,60 @@ def _reapply_without_confirmation(config: Config,
     send_mix(config)
 
 
-def _unconfirmed(result: VerifyResult,
-                 device: Optional[Device] = None) -> List[str]:
+def _report(result: VerifyResult, config: Config, device: Optional[Device],
+            attempt: int) -> List[str]:
+    """Say what the read-back found, and return what still needs re-sending.
+
+    Split out of ``verify_and_repair`` when it crossed the length
+    ceiling, and the split is where the seam already was: this is the
+    judgement, the caller is the retry loop.
+    """
+    kept = _kept_by_the_device(result, device, config.policies)
+    if kept:
+        # Information, not a warning: the config asked for one value,
+        # somebody set another, and this session is not going to argue.
+        # Logged by name so "why is my fader not what the config says"
+        # has an answer in the journal.
+        log.info("device value kept for %s (remembered, not pinned)",
+                 ", ".join(kept))
+    problems = _unconfirmed(result, device, config.policies)
+    if not problems:
+        log.info("routing verified against device state "
+                 "(%d confirmed; %d not reported by the device dump)%s",
+                 len(result.confirmed), len(result.unobserved),
+                 "" if attempt == 1 else " -- after retry")
+    return problems
+
+
+def _unconfirmed(result: VerifyResult, device: Optional[Device] = None,
+                 overrides: Optional[Dict[Tuple[str, str], str]] = None
+                 ) -> List[str]:
     """The registers that count as a problem worth re-sending for.
 
-    Mismatched always counts. Absent counts only for the families the
-    dump reports promptly -- ``/mix/*/playback/*`` never appears at all,
-    so treating its absence as a problem would put every run into a
-    retry it cannot win.
+    Absent counts only for the families the dump reports promptly --
+    ``/mix/*/playback/*`` never appears at all, so treating its absence
+    as a problem would put every run into a retry it cannot win.
+
+    A mismatch counts only for PIN registers. On a REMEMBER register a
+    mismatch is the *user*, not a fault: they turned something between
+    the apply and the dump, and re-sending would undo it while they
+    watched. That is the whole pin/remember distinction, and this is the
+    one place it changes behaviour.
     """
     lost = [path for path in result.unobserved
             if register_promptly_reported(path, device)]
-    return sorted(result.mismatched + lost)
+    insisted = [path for path in result.mismatched
+                if policy_for(path, device, overrides) == PIN]
+    return sorted(insisted + lost)
+
+
+def _kept_by_the_device(result: VerifyResult,
+                        device: Optional[Device] = None,
+                        overrides: Optional[Dict[Tuple[str, str], str]] = None
+                        ) -> List[str]:
+    """Mismatches this session is deliberately letting the device keep."""
+    return sorted(path for path in result.mismatched
+                  if policy_for(path, device, overrides) != PIN)
 
 
 def verify_and_repair(config: Config,
@@ -402,12 +457,8 @@ def verify_and_repair(config: Config,
             return
         if not reapplied["done"]:
             _reapply_without_confirmation(config, pending_links, reapplied)
-        problems = _unconfirmed(result, device)
+        problems = _report(result, config, device, attempt)
         if not problems:
-            log.info("routing verified against device state "
-                     "(%d confirmed; %d not reported by the device dump)%s",
-                     len(result.confirmed), len(result.unobserved),
-                     "" if attempt == 1 else " -- after retry")
             return
         if attempt == 1:
             # Write 3 of 3, and the only full re-apply. Both phases of it
@@ -416,8 +467,14 @@ def verify_and_repair(config: Config,
                 return
             log.warning("%d register(s) unconfirmed (%s); re-sending routing",
                         len(problems), ", ".join(problems))
-            apply_routing(config, config.osc_port,
-                          config.osc_recv_port)
+            # Everything except what the device is allowed to keep. A
+            # re-apply is a whole-routing write, so without this a single
+            # lost link register drags every remembered fader back to the
+            # config value -- the policy would be real in the log and
+            # absent at the device.
+            apply_routing(config, config.osc_port, config.osc_recv_port,
+                          leave_alone=_kept_by_the_device(
+                              result, device, config.policies))
             if wait_unless_stopped(VERIFY_SETTLE, should_stop):
                 return
     log.warning("unconfirmed after retry: %s", ", ".join(problems))

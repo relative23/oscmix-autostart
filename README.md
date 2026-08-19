@@ -158,6 +158,44 @@ nothing at all can be confirmed. Both cases say so instead of claiming
 success. The reasoning is in
 [ADR 0011](docs/decisions/0011-a-profile-switch-states-its-outcome.md).
 
+## What comes back after a restart, and what does not
+
+Every setting this project writes is either **pinned** -- the config wins
+and is re-sent if the device disagrees -- or **remembered** -- the config
+sets it once and then the mixer wins.
+
+The defaults follow what a setting *is*:
+
+| pinned | remembered |
+|---|---|
+| the routing itself, channel links | `volume` |
+| `reflevel`, `gain`, `hi-z`, `48v` | `mute`, `phase` |
+
+Pinned settings describe your installation: a reference level or a hi-Z
+switch has to match the cable that is plugged in, and a wrong value there
+is a signal problem. Remembered settings are the ones you reach for
+during a session -- turn a monitor fader and it stays turned.
+
+Override it per option when your setup disagrees:
+
+```ini
+[pin]
+output.volume = pin      # a fixed install: levels are set once
+input.gain = remember    # a studio that rides gain by hand
+```
+
+**What pinning does not mean.** It does not snap back the moment you
+change something in the mixer GUI. It cannot: of everything a config
+sets, the device announces only channel links when they change --
+measured. Everything else is silent until something asks for a full state
+dump. So pinning means *this session insists*, through the read-back
+after start; it does not mean a background process fighting you all day.
+[ADR 0012](docs/decisions/0012-pin-and-remember.md) has the measurements.
+
+`--dump-config` uses the same rule: it writes pinned values as config and
+remembered ones as comments, because a dump cannot tell "I meant this"
+from "this is where I left it".
+
 ## Named outputs in your sound settings (PipeWire)
 
 PipeWire presents the Fireface's analog outputs as a single "7.1

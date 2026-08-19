@@ -22,7 +22,12 @@ from .errors import ConfigError
 from .log import log
 from .pipewire import generate_pipewire_conf, pw_sink_info
 from .profiles import REFUSED, describe_profiles, switch_profile
-from .reconcile import observed, render_config, routes_from_observed
+from .reconcile import (
+    channels_from_observed,
+    observed,
+    render_config,
+    routes_from_observed,
+)
 from .registers import device_for_name
 from .session import run_session
 
@@ -190,11 +195,14 @@ def _dump_config(config: Config) -> int:
                   config.osc_recv_port)
         return EXIT_FAILURE
 
+    model = device_for_name(config.device_name)
     dumped = Config(device_name=config.device_name, usb_id=config.usb_id,
                     osc_port=config.osc_port,
                     osc_recv_port=config.osc_recv_port,
-                    routes=list(routes_from_observed(observed(seen))))
-    log.info("read %d registers; %d input route(s) reconstructed",
-             len(seen), len(dumped.routes))
-    sys.stdout.write(render_config(dumped, device_for_name(config.device_name)))
+                    routes=list(routes_from_observed(observed(seen))),
+                    channels=list(channels_from_observed(seen, model)))
+    log.info("read %d registers; %d input route(s) and %d channel "
+             "setting(s) reconstructed",
+             len(seen), len(dumped.routes), len(dumped.channels))
+    sys.stdout.write(render_config(dumped, model))
     return EXIT_OK
