@@ -113,6 +113,51 @@ background and re-sends once on mismatch -- the journal line `routing
 verified against device state` is your proof that the hardware is
 actually configured.
 
+## Profiles
+
+Several routings, and a command to switch between them -- TotalMix's
+snapshots, but as text files you can diff and keep in version control.
+
+A profile is a whole `routing.conf`, in a `profiles` directory beside
+your main one:
+
+```
+~/.config/oscmix/routing.conf
+~/.config/oscmix/profiles/tracking.conf
+~/.config/oscmix/profiles/mixdown.conf
+```
+
+```sh
+oscmix-session --list-profiles
+oscmix-session --profile tracking
+```
+
+Leave `[osc]` and `[device]` out of a profile. Those describe the
+machine, not the desk, and are taken from your main config unless a
+profile states them itself.
+
+A switch reports exactly one of three things, and never half-applies:
+
+```
+applied 'tracking' and verified it at the device
+applied 'tracking'; 1 register(s) this backend cannot report: /mix/1/playback/1
+refused 'tracking', nothing written: [route:x] output: channel 99 out of range 1..64
+```
+
+**A refusal costs nothing.** The profile is parsed and validated in
+full before the first byte goes out, so a typo costs you an error
+message rather than your monitoring. That matters because there is no
+undo on a mixer: once a fader value is on the wire, the speakers already
+have it.
+
+The middle line is the normal outcome on a desktop, and it is not a
+problem. The playback mix matrix is one of the few things oscmix never
+reports back, so a perfectly good switch still cannot confirm it -- and
+if you have the mixer GUI open it holds the port the read-back needs, so
+nothing at all can be confirmed. Both cases say so instead of claiming
+success. The reasoning is in
+[ADR 0011](docs/decisions/0011-a-profile-switch-states-its-outcome.md).
+
 ## Named outputs in your sound settings (PipeWire)
 
 PipeWire presents the Fireface's analog outputs as a single "7.1
@@ -160,8 +205,6 @@ is in [docs/ROADMAP.md](docs/ROADMAP.md).
 systemctl --user status oscmix.service      # is the backend running?
 journalctl --user -u oscmix.service -e      # backend logs
 oscmix-session --dry-run                    # what would be started/sent?
-oscmix-session --list-profiles              # profiles found beside routing.conf
-oscmix-session --profile tracking           # switch the desk to profiles/tracking.conf
 ```
 
 More in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).

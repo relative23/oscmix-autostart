@@ -110,13 +110,36 @@ jobs:
 
   mutation:
     name: Mutation Score
-    # Not a blocking gate: ~15 minutes, and its number moves for reasons
-    # other than test quality (new code brings new mutants). It reports;
-    # the policy script fails only when the *score* drops.
+    # Not a blocking gate: its number moves for reasons other than test
+    # quality (new code brings new mutants). It reports; the policy
+    # script fails only when the *score* drops.
+    #
+    # The timeout comes from the job's own history, not from a guess.
+    # Measured across twelve consecutive runs on main:
+    #
+    #   c8ae1c3 34   860f42f 34   0750a0f 37   afed144 37
+    #   988c5ac 38   1828dc4 37   eb2ba3d 38   267febe 38
+    #   70b1efd 39   997ff89 44   1da6439 42   c8f05e6 45 (cancelled)
+    #
+    # That is +10 minutes over twelve commits, and c8f05e6 hit the old
+    # 45-minute ceiling and was killed mid-run -- reported as
+    # "cancelled", which reads like somebody stopped it rather than like
+    # a gate that ran out of room. The comment here also claimed
+    # "~15 minutes", which had not been true for a long time.
+    #
+    # A local run on the 0.3.0 tree took 56 minutes on a warm cache,
+    # which is a different machine and not a substitute for the runner
+    # numbers above -- but it points the same way, and it is already
+    # past the old ceiling.
+    #
+    # 90 gives roughly 2x the measured maximum: about fifty commits of
+    # headroom at the observed growth rate, and still short enough that
+    # a genuinely hung run does not burn an hour unnoticed. Re-measure
+    # when a run passes 60.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     continue-on-error: true
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6

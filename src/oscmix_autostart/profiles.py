@@ -62,6 +62,12 @@ APPLIED_UNVERIFIED = "applied-unverified"
 #: Nothing was written. ``reason`` says why.
 REFUSED = "refused"
 
+#: The ``reason`` on an outcome where the read-back was never attempted,
+#: because the caller asked for none. Distinct wording from a read-back
+#: that ran and came up short: the register list means "unknown" here
+#: and "looked for and absent" there, and the state cannot say so.
+NOT_CHECKED = "verification not requested"
+
 #: The complete set. A fourth member is a design change, and
 #: ``tests/test_profiles.py`` asserts this is exhaustive so it cannot
 #: arrive by accretion.
@@ -101,6 +107,9 @@ class Outcome:
             return "refused %r, nothing written: %s" % (self.name, self.reason)
         if self.state == APPLIED_VERIFIED:
             return "applied %r and verified it at the device" % self.name
+        if self.reason == NOT_CHECKED:
+            return ("applied %r; not checked, so none of its %d register(s) "
+                    "is confirmed" % (self.name, len(self.unverified)))
         missed = [p for p in self.unverified if p not in self.unverifiable]
         if not missed:
             return ("applied %r; %d register(s) this backend cannot report: %s"
@@ -142,14 +151,30 @@ def load_profile(name: str, config_path: Optional[Path] = None) -> Config:
     return profile
 
 
+#: Everything in a config that describes the *machine* rather than the
+#: desk, as (section, option, Config attribute). A profile inherits each
+#: of these unless it states it itself.
+#:
+#: A table rather than a list of ifs, because the failure mode is
+#: forgetting one: `usb-id` was left out of the first version and would
+#: have silently reverted to the compiled-in default on any machine that
+#: sets it. `tests/test_profiles.py` holds this table against the set of
+#: fields on Config that no `[route]` or channel section can write, so a
+#: new machine-level setting cannot be added without landing here too.
+MACHINE_SETTINGS = (
+    ("osc", "port", "osc_port"),
+    ("osc", "recv-port", "osc_recv_port"),
+    ("device", "name", "device_name"),
+    ("device", "usb-id", "usb_id"),
+)
+
+
 def _inherit_transport(profile: Config, main: Config, path: Path) -> None:
     """Fill the machine-level settings a profile did not state itself."""
     text = path.read_text()
-    for attr, stated in (("osc_port", "port"), ("osc_recv_port", "recv-port")):
-        if not _states(text, "osc", stated):
+    for section, option, attr in MACHINE_SETTINGS:
+        if not _states(text, section, option):
             setattr(profile, attr, getattr(main, attr))
-    if not _states(text, "device", "name"):
-        profile.device_name = main.device_name
 
 
 def _states(text: str, section: str, option: str) -> bool:
@@ -159,7 +184,11 @@ def _states(text: str, section: str, option: str) -> bool:
     profile that deliberately sets the default is stating it, and
     "equals the default" cannot tell those apart.
     """
-    parser = configparser.ConfigParser()
+    # Same parser settings as load_config. A second parser with
+    # different rules reading the same file is the shape of three
+    # separate defects in this release; matching them costs one line.
+    parser = configparser.ConfigParser(
+        interpolation=None, inline_comment_prefixes=("#", ";"))
     try:
         parser.read_string(text)
     except configparser.Error:
@@ -168,8 +197,8 @@ def _states(text: str, section: str, option: str) -> bool:
 
 
 def switch_profile(name: str, config_path: Optional[Path] = None,
-           backend: Optional[Backend] = None,
-           verify: bool = True) -> Outcome:
+                   backend: Optional[Backend] = None,
+                   verify: bool = True) -> Outcome:
     """Switch the desk to a profile and say what happened.
 
     Never raises for a bad config: an unparseable profile is an
@@ -191,8 +220,11 @@ def switch_profile(name: str, config_path: Optional[Path] = None,
     _write(config, device)
 
     if not verify:
+        # Not confirmed, because nobody looked -- which is a different
+        # fact from "looked and did not see it", and the state is the
+        # same either way. Everything expected goes in the list.
         return Outcome(state=APPLIED_UNVERIFIED, name=name,
-                       reason="verification not requested",
+                       reason=NOT_CHECKED,
                        unverified=sorted(expected_registers(config)))
     return _check(name, config, device)
 

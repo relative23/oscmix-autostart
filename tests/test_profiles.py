@@ -365,3 +365,51 @@ def test_a_genuine_miss_reads_differently_from_an_uncheckable_one(tmp_path):
     assert "1 register(s) unconfirmed" in both.describe()
     assert "/output/1/volume" in both.describe()
     assert "plus 1 this backend cannot report" in both.describe()
+
+
+def test_every_machine_level_field_on_config_is_inherited(tmp_path):
+    """The table cannot silently miss one.
+
+    A `Config` field is machine-level when no `[route]` and no channel
+    section can write it -- those are the desk. Everything else
+    describes the box the desk is plugged into, and a profile that
+    reverted it to the compiled-in default would be wrong on any machine
+    that had set it. `usb-id` was missing from the first version of the
+    table for exactly that reason: nothing pointed at it.
+    """
+    import dataclasses
+
+    from oscmix_autostart.config import Config
+
+    desk = {"routes", "channels"}
+    machine = {f.name for f in dataclasses.fields(Config)} - desk
+    covered = {attr for _section, _option, attr in profiles.MACHINE_SETTINGS}
+    assert machine == covered, (
+        "not inherited by a profile switch: %s" % sorted(machine - covered))
+
+
+def test_usb_id_is_inherited_like_the_ports(tmp_path):
+    write_config(tmp_path / "routing.conf",
+                 "[device]\nname = Fireface UCX II\nusb-id = 2a39:3fd9\n")
+    write_config(tmp_path / "profiles" / "tracking.conf", GOOD)
+    assert profiles.load_profile("tracking", tmp_path / "routing.conf"
+                                 ).usb_id == "2a39:3fd9"
+
+
+def test_not_checking_reads_differently_from_checking_and_missing(
+        tmp_path, recording_backend):
+    """Same state, different fact, and the line has to say which.
+
+    `unverified` holds every expected register in both cases. In one it
+    means "looked for and absent"; in the other it means "nobody
+    looked". APPLIED_UNVERIFIED is correct for both -- the registers did
+    go out either way -- so the wording is the only place the difference
+    can live.
+    """
+    write_config(tmp_path / "profiles" / "tracking.conf", GOOD)
+    outcome = profiles.switch_profile("tracking",
+                                      config_path=tmp_path / "routing.conf",
+                                      backend=recording_backend, verify=False)
+    assert outcome.state == profiles.APPLIED_UNVERIFIED
+    assert "not checked" in outcome.describe()
+    assert "unconfirmed" not in outcome.describe()
