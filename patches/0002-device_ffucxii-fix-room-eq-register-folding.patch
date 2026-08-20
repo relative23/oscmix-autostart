@@ -1,0 +1,28 @@
+From: oscmix-autostart
+Subject: [PATCH] device_ffucxii: take the Room EQ offset relative to the base
+
+The Room EQ block starts at 0x35D0, which is not 32-aligned -- its low
+five bits are 0x10. Recombining the per-output offset with `|` therefore
+collides for offsets 16..31, folding the upper half of each output's
+block onto its lower half: 0x35E0 (BAND5FREQ) decodes as 0x35D0 (DELAY),
+0x35E3 (BAND6FREQ) as 0x35D3 (BAND1GAIN), and so on.
+
+On a Fireface UCX II this makes 320 registers unreachable and reports
+260 of them under another name, so a single /refresh carries two
+conflicting values for the same OSC path.
+
+Measured before and after on hardware (serial 24216011): the dump goes
+from 1932 registers with 260 conflicting paths to 2252 with none, and
+bands 6 to 9 become visible with plausible values.
+
+See michaelforney/oscmix#32.
+---
+--- a/device_ffucxii.c
++++ b/device_ffucxii.c
+@@ -121,7 +121,7 @@
+ 	} else if (reg - 0x35D0U < 0x280) {
+ 		p->out = (reg - 0x35D0) >> 5;
+-		reg = 0x35D0 | (reg & 0x1F);
++		reg = 0x35D0 + ((reg - 0x35D0) & 0x1F);
+ 	}
+ 	switch (reg) {

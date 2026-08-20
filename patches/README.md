@@ -75,3 +75,38 @@ the other way round would delete the workaround for a fix this project
 has not yet shipped against.
 
 [oscmix]: https://github.com/michaelforney/oscmix
+
+## 0002 -- Room EQ register folding
+
+`device_ffucxii.c` recombines the per-output Room EQ offset with `|`
+against a base (`0x35D0`) whose low five bits are already `0x10`. For
+offsets 16..31 the bit collides and the address lands 16 registers
+lower, folding the upper half of each output's block onto its own lower
+half.
+
+Reported as [michaelforney/oscmix#32][32]. Filed with a measurement
+rather than a description, because this symptom has already been
+mistaken once: a client that keeps the *first* reported value sees every
+Room EQ gain at 0.0 dB, one that keeps the *last* sees +30 and +40 dB at
+50 Hz. Both readings are half of a double report, and
+`docs/upstream-issues.md` records the earlier withdrawal that came of
+reading only one half.
+
+Measured on a UCX II (serial 24216011) against the pinned revision, one
+`/refresh` before and after:
+
+| | unpatched | patched |
+|---|---|---|
+| registers in the dump | 1932 | 2252 |
+| paths reported twice with conflicting values | 260 | 0 |
+| band 6-9 registers visible | 0 | 140 |
+
+`2252 - 1932 = 320` -- exactly the 16 aliased offsets on each of the 20
+outputs.
+
+**Not applied here.** Nothing in this project reads or writes `roomeq`;
+it is not in the register model. The patch exists so the measurement is
+reproducible and so 0.4.0, which plans to declare the family, does not
+start from a folded address space.
+
+[32]: https://github.com/michaelforney/oscmix/issues/32

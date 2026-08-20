@@ -974,7 +974,10 @@ So, as work items rather than complaints:
   the diagnostic does not print the address, so it says only `unexpected
   enum value -1` and cannot be acted on. Drafted in
   [docs/upstream-issues.md](upstream-issues.md).
-- **The Room EQ issue, reopened with a real characterisation.** It was
+- ~~The Room EQ issue.~~ **Filed as
+  [michaelforney/oscmix#32](https://github.com/michaelforney/oscmix/issues/32)
+  on 2026-08-20, with the mechanism and a before/after measurement;
+  `patches/0002` carries the one-line fix.** It was
   filed as "all 220 gain registers read 0.0 dB", withdrawn as not
   reproducing, and that was the right call on the evidence at the time.
   Measured properly on 2026-08-20, after the release:
