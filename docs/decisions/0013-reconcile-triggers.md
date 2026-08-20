@@ -86,12 +86,41 @@ reload`. It is installed by the same root step as the udev rule and
 removed by `uninstall.sh`, because a hook left behind fires on every wake
 for a service that is gone.
 
-**Whether this device needs it is not established.** Answering it means a
-real suspend/resume cycle, and a resume that fails leaves someone locked
-out of a machine nobody is sitting at -- not a reasonable thing to risk
-for a measurement. What is known: the reconcile is cheap and idempotent,
-so running it on a wake where nothing was lost costs one dump; and the
-*other* way this device loses state, a replug, is already covered above.
+**Measured 2026-08-20, and this device does not need it.** Two
+suspend/resume cycles on the UCX II, woken by an RTC alarm so nothing
+depended on somebody pressing a key.
+
+*Without the hook*, across a real S3 cycle: the interface never left the
+USB bus -- no USB events for it, same ALSA card, same sequencer client --
+the backend was not restarted, and all 1932 reported registers were
+identical except the four this test deliberately changed beforehand.
+
+*With the hook*, the trigger fires and does what it is for: the journal
+shows `SIGHUP: reloaded routing.conf` and
+`reconcile (SIGHUP): 6 confirmed, 2 drifted; re-applying`, and a fader
+moved by hand to -22.0 dB before the suspend came back to the config's
+0.0 dB, because this desk pins `output.volume`.
+
+So the hook works and, on this machine, has nothing to repair. It is
+kept: it is one dump when nothing was lost, and the case it guards --
+the interface losing power across a suspend -- is a property of the
+platform and the port, not of this device. Note that the udev rule here
+sets `power/control = on` for the interface, which is a plausible reason
+it stays on the bus at all; a machine without that rule is a different
+measurement.
+
+**How to reproduce it, because the obvious way does not work.**
+`rtcwake -m mem` writes `/sys/power/state` directly and bypasses systemd
+entirely. It therefore runs neither `nvidia-suspend.service` -- on this
+machine the GPU then refuses, the suspend is aborted after 6.5 s and S3
+is never reached -- nor any `system-sleep` hook, which is to say it
+cannot test this feature at all. Arm the alarm and suspend through
+systemd instead:
+
+```sh
+sudo rtcwake -m no -s 45     # arm only
+sudo systemctl suspend
+```
 
 ## Consequences
 

@@ -800,7 +800,12 @@ once, then hope" -- which is not what the word says, and is not more than
 TotalMix already offers.
 
 *Position two, taken in 0.3.0.* SIGHUP (`systemctl --user reload`) and a
-system-sleep hook for resume; hotplug needed nothing, because udev
+system-sleep hook for resume -- **measured 2026-08-20**: across a real S3
+cycle the interface never leaves the USB bus and all 1932 reported
+registers survive, so the hook has nothing to repair on this machine, and
+it does fire correctly, reconciling a pinned fader back from -22.0 dB.
+ADR 0013 has the numbers, and why `rtcwake -m mem` cannot test it.
+Hotplug needed nothing, because udev
 already restarts the unit and the cold-plug recording says so. No timer,
 asserted by test. [ADR 0013](decisions/0013-reconcile-triggers.md).
 
