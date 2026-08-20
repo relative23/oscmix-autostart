@@ -107,9 +107,10 @@ mutation survivors instead of accepting the score.
 
 ### Quality
 
-- 663 tests from 470 functions (392/281 in 0.2.0); coverage 95%.
-- Mutation score 0.687, floor 0.67, `not_covered` unchanged at 82 while
-  the mutant count grew from 2726 to 4184. Reading the survivors in the
+- 665 tests from 472 functions (392 from 281 in 0.2.0); coverage 95.13%,
+  and the gate raised 94 -> 95 to close the slack rather than carry it.
+- Mutation score 0.688, floor 0.67, `not_covered` unchanged at 82 while
+  the mutant count grew from 2501 to 4180. Reading the survivors in the
   new code found three more real defects, including one where the
   register model was never consulted, so pinning worked only through an
   explicit `[pin]` override.
