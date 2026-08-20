@@ -185,3 +185,61 @@ def test_write_only_registers_are_never_expected_back():
                                                  registers.UCX2)
     assert not verify.register_promptly_reported("/output/1/loopback",
                                                  registers.UCX2)
+
+
+# --------------------------------------------------------------------------
+# One domain for quantities, with the bounds on the register.
+# --------------------------------------------------------------------------
+
+def test_a_quantity_carries_its_own_bounds_and_unit(session_mod):
+    """`GAIN` and `DB` were the same shape with different numbers.
+
+    Two domains, two hand-written range checks and two hand-written
+    messages, for "a number between these bounds". That is the pattern
+    that lets a validator and a register table disagree about what is
+    legal -- and 0.4.0 adds families whose quantities are seconds and
+    ratios, which would have been two more.
+
+    The bounds come from upstream's node table, so a value this rejects
+    is one the device would reject too.
+    """
+    from oscmix_autostart.registers import NUMBER, device_for_name
+
+    device = device_for_name("Fireface UCX II")
+    by_path = {r.template: r for r in device.registers}
+
+    volume = by_path["/output/{ch}/volume"]
+    assert volume.domain == NUMBER
+    assert (volume.lo, volume.hi, volume.unit) == (
+        session_mod.LEVEL_MIN, session_mod.LEVEL_MAX, "dB")
+
+    gain = by_path["/input/{ch}/gain"]
+    assert gain.domain == NUMBER
+    assert (gain.lo, gain.hi, gain.unit) == (0.0, 75.0, "dB")
+
+
+def test_a_quantity_out_of_range_names_the_range(tmp_path):
+    import pytest
+
+    from oscmix_autostart import ConfigError
+    from oscmix_autostart.config import load_config
+
+    path = tmp_path / "routing.conf"
+    path.write_text("[input:3]\ngain = 80.0\n")
+    with pytest.raises(ConfigError, match=r"80\.0 dB out of range 0\.0\.\.75\.0"):
+        load_config(path)
+
+
+def test_an_unbounded_quantity_is_only_checked_for_being_a_number():
+    """Where upstream declares no bound, neither does the model.
+
+    A range invented here would reject values the device accepts, and a
+    config that will not load is worse than an error the device reports.
+    """
+    from oscmix_autostart.config import _parse_number
+    from oscmix_autostart.registers import NUMBER, Register
+
+    free = Register("/x", "i", "verifiable", "global", NUMBER)
+    assert free.lo is None
+    assert free.hi is None
+    assert _parse_number("1234.5", "x", "y", free) == 1234.5

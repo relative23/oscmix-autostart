@@ -31,6 +31,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Mapping, Optional, Sequence, Tuple
 
+from .constants import LEVEL_MAX, LEVEL_MIN
+
 # --------------------------------------------------------------------------
 # Verification classes.
 #
@@ -98,8 +100,18 @@ POLICIES = (PIN, REMEMBER)
 #: Value domains, as a config author has to satisfy them.
 BOOL = "bool"
 ENUM = "enum"
-GAIN = "gain"        # dB, per-channel range from the device table
-DB = "db"            # dB within LEVEL_MIN..LEVEL_MAX
+#: A quantity with a declared range and unit. Replaces the separate
+#: GAIN (0..75 dB) and DB (LEVEL_MIN..LEVEL_MAX) domains, which were the
+#: same shape with different bounds and a hand-written message each --
+#: two ways to say one thing, which is how a validator and a register
+#: table come to disagree about what is legal.
+#:
+#: ``lo``/``hi`` are ``None`` where upstream's node table declares no
+#: bound. A range this project invented would reject values the device
+#: accepts, and that is worse than accepting one it does not: the first
+#: is a config that will not load, the second is an error the device
+#: reports.
+NUMBER = "number"
 
 
 @dataclass(frozen=True)
@@ -125,6 +137,13 @@ class Register:
     #: own vocabulary lives -- inventing synonyms here would mean a
     #: config that reads well and sets nothing.
     choices: Tuple[str, ...] = ()
+    #: For NUMBER: the inclusive bounds and the unit, taken from
+    #: upstream's node table (``min``/``max``/``scale``) rather than
+    #: from what a device happened to report. ``None`` means upstream
+    #: declares no bound.
+    lo: Optional[float] = None
+    hi: Optional[float] = None
+    unit: str = ""
     #: Who wins after the initial write, PIN or REMEMBER. The default is
     #: REMEMBER because that is ADR 0003's rule -- do not wipe what the
     #: user left in the mixer -- and a register that forgot to declare a
@@ -223,7 +242,8 @@ UCX2 = Device(
                  policy=PIN),
         Register("/output/{ch}/stereo", "i", VERIFIABLE, "output",
                  policy=PIN),
-        Register("/output/{ch}/volume", "f", VERIFIABLE, "output", DB),
+        Register("/output/{ch}/volume", "f", VERIFIABLE, "output", NUMBER,
+                 lo=LEVEL_MIN, hi=LEVEL_MAX, unit="dB"),
         # The playback matrix: a /mix write draws no reply and the dump
         # omits it entirely. Re-established from a known link state.
         Register("/mix/{out}/playback/{pb}", "fi", REESTABLISHED, "output",
@@ -242,8 +262,8 @@ UCX2 = Device(
         Register("/input/{ch}/48v", "i", VERIFIABLE, "48v", policy=PIN),
         Register("/input/{ch}/hi-z", "i", VERIFIABLE, "hi-z", BOOL,
                  policy=PIN),
-        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain", GAIN,
-                 policy=PIN),
+        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain", NUMBER,
+                 lo=0.0, hi=75.0, unit="dB", policy=PIN),
         Register("/input/{ch}/reflevel", "is", VERIFIABLE, "input-reflevel", ENUM,
                  ("+13dBu", "+19dBu"), policy=PIN),
         Register("/input/{ch}/mute", "i", VERIFIABLE, "input", BOOL),

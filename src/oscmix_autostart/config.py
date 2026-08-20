@@ -26,9 +26,8 @@ from .errors import ConfigError
 from .log import log
 from .registers import (
     BOOL,
-    DB,
     ENUM,
-    GAIN,
+    NUMBER,
     POLICIES,
     device_for_name,
     settable_options,
@@ -486,20 +485,38 @@ def _parse_domain(raw: str, section: str, option: str,
                 "names, not ours" % (section, option, value,
                                      ", ".join(choices)))
         return value
-    if domain == GAIN:
-        try:
-            gain = float(raw)
-        except ValueError:
-            raise ConfigError(
-                "[%s] %s: %r is not a gain in dB" % (section, option, raw)
-            ) from None
-        if not 0.0 <= gain <= 75.0:
-            raise ConfigError(
-                "[%s] %s: %.1f dB out of range 0..75" % (section, option, gain))
-        return gain
-    if domain == DB:
-        return _parse_db(raw, section, option)
+    if domain == NUMBER:
+        return _parse_number(raw, section, option, register)
     raise ConfigError("[%s] %s: no value domain declared" % (section, option))
+
+
+def _parse_number(raw: str, section: str, option: str,
+                  register: object) -> float:
+    """A quantity, checked against the bounds the register declares.
+
+    The bounds come from upstream's node table, so a value this rejects
+    is one the device would reject too. Where upstream declares no bound
+    neither does the model, and this only checks that the text is a
+    number -- inventing a range would reject values the device accepts,
+    which is a config that will not load rather than an error the device
+    reports.
+    """
+    unit = getattr(register, "unit", "") or ""
+    suffix = (" in %s" % unit) if unit else ""
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ConfigError("[%s] %s: %r is not a number%s"
+                          % (section, option, raw, suffix)) from None
+    lo = getattr(register, "lo", None)
+    hi = getattr(register, "hi", None)
+    if (lo is not None and value < lo) or (hi is not None and value > hi):
+        raise ConfigError(
+            "[%s] %s: %.1f%s out of range %s..%s"
+            % (section, option, value, (" " + unit) if unit else "",
+               "-inf" if lo is None else ("%.1f" % lo),
+               "inf" if hi is None else ("%.1f" % hi)))
+    return value
 
 
 def profiles_dir(config_path: Optional[Path] = None) -> Optional[Path]:

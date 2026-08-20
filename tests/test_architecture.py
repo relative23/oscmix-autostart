@@ -65,7 +65,12 @@ ALLOWED_IMPORTS = {
     "profiles": {"backend", "config", "constants", "errors", "log",
                  "registers", "routing", "verify"},
     "launcher": {"constants", "discovery"},
-    "registers": set(),
+    # constants only, and only for the fader range: the register table
+    # declares the device's bounds, and writing -65.0/6.0 here as well
+    # would be the same fact in two files -- which is how a validator and
+    # a register table come to disagree. constants imports nothing
+    # itself, so the graph stays acyclic.
+    "registers": {"constants"},
     # The one place that opens a socket to the device. Its Traits name
     # the upstream behaviour the timing constants work around.
     "backend": {"osc"},
