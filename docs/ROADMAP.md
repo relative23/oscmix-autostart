@@ -974,8 +974,28 @@ So, as work items rather than complaints:
   the diagnostic does not print the address, so it says only `unexpected
   enum value -1` and cannot be acted on. Drafted in
   [docs/upstream-issues.md](upstream-issues.md).
-- ~~File the Room EQ issue.~~ **Withdrawn, does not reproduce.** See the
-  same document.
+- **The Room EQ issue, reopened with a real characterisation.** It was
+  filed as "all 220 gain registers read 0.0 dB", withdrawn as not
+  reproducing, and that was the right call on the evidence at the time.
+  Measured properly on 2026-08-20, after the release:
+
+  A single `/refresh` reports **460 registers more than once, and 260 of
+  those with conflicting values -- every one of them `roomeq`.** Nothing
+  else in the dump does it. `/output/1/roomeq/band1gain` arrives as both
+  `0.0` and `30.0`; `band1type` as both `Low Shelf` and `Peak`. Reading
+  the same register four times in a row gives 0.0 once and 0.7 three
+  times.
+
+  So the family is double-reported and whichever value a reader sees is
+  down to arrival order. "All zero" was one of the two answers, not a
+  wrong reading -- which is why it did not reproduce.
+
+  *Not urgent for this project:* `roomeq` is not in the register model
+  and nothing here sets it. It matters for 0.4.0, which plans to declare
+  it, and it matters now as a *method* note -- `--dump-config` keeps the
+  first value it sees for a path, which is correct only as long as no
+  settable register behaves this way. None does today, and that is
+  measured rather than assumed.
 - **Ask for a targeted register query.** `/refresh` dumps 2002 registers
   when what this project needs is a handful of `/output/<n>/stereo`.
   That is a feature request, not a benchmark -- see the reframing of
