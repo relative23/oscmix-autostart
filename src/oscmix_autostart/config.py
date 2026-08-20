@@ -26,10 +26,13 @@ from .errors import ConfigError
 from .log import log
 from .registers import (
     BOOL,
+    ENABLE_OPTION,
     ENUM,
     NUMBER,
     POLICIES,
     device_for_name,
+    global_families,
+    settable_globals,
     settable_options,
 )
 
@@ -83,6 +86,33 @@ class ChannelSetting:
     value: object
 
 
+@dataclass(frozen=True)
+class GlobalSetting:
+    """One option a ``[<family>]`` section pins, for a family with no
+    channel dimension -- `[echo]`, and the four that follow it.
+
+    Separate from ``ChannelSetting`` rather than that class with a
+    ``None`` channel: "the channel is None" is a state every consumer
+    then has to remember to handle, and forgetting is silent. A distinct
+    type makes the plan's two loops obviously two.
+    """
+
+    family: str
+    option: str
+    value: object
+
+    @property
+    def path(self) -> str:
+        """The OSC path this writes.
+
+        The family's own register has no segment of its own, which is
+        what ``ENABLE_OPTION`` exists for.
+        """
+        if self.option == ENABLE_OPTION:
+            return "/%s" % self.family
+        return "/%s/%s" % (self.family, self.option)
+
+
 @dataclass
 class Config:
     device_name: str = DEFAULT_DEVICE_NAME
@@ -91,6 +121,8 @@ class Config:
     osc_recv_port: int = DEFAULT_OSC_RECV_PORT
     routes: List[Route] = field(default_factory=list)
     channels: List[ChannelSetting] = field(default_factory=list)
+    #: Settings from `[<family>]` sections -- families with no channel.
+    globals: List[GlobalSetting] = field(default_factory=list)
     #: ``(family, option) -> "pin" | "remember"`` from a ``[pin]``
     #: section, overriding the register table's default for that option.
     policies: Dict[Tuple[str, str], str] = field(default_factory=dict)
@@ -300,6 +332,7 @@ def load_config(path: Optional[Path]) -> Config:
         raise ConfigError("cannot read %s: %s" % (path, exc)) from None
 
     pending: List[str] = []
+    pending_globals: List[str] = []
     for section in parser.sections():
         if section == "device":
             _check_options(section, "device", parser.options(section))
@@ -319,6 +352,8 @@ def load_config(path: Optional[Path]) -> Config:
             pending.append(section)
         elif section == "pin":
             _parse_pin(parser, section, config)
+        elif section in global_families(device_for_name(config.device_name)):
+            pending_globals.append(section)
         else:
             # A warning, not an error. See
             # docs/decisions/0006-routing-conf-compatibility.md: a section
@@ -338,6 +373,8 @@ def load_config(path: Optional[Path]) -> Config:
     # After the loop, because [device] may appear anywhere in the file
     # and every check below is device-specific.
     device = device_for_name(config.device_name)
+    for section in pending_globals:
+        config.globals.extend(_parse_global_section(parser, section, device))
     for section in pending:
         family = section.split(":", 1)[0]
         config.channels.extend(
@@ -418,6 +455,32 @@ def _check_link_agreement(routes: Sequence[Route]) -> None:
                    "/".join(map(str, route.output)),
                    str(previous.stereo).lower(), str(route.stereo).lower())
             )
+
+
+def _parse_global_section(parser: "configparser.ConfigParser", section: str,
+                          device: object) -> List[GlobalSetting]:
+    """Parse ``[echo]`` and the other channel-less families.
+
+    Same rule as a channel section and for the same reason: which
+    options exist and what values they take comes from the register
+    model, not from a list kept here. A second list is a second place to
+    disagree with the device.
+    """
+    known = settable_globals(device, section)  # type: ignore[arg-type]
+    if not known:
+        return []
+    unknown = set(parser.options(section)) - set(known)
+    if unknown:
+        raise ConfigError(
+            "[%s]: unknown option(s) %s (valid: %s)"
+            % (section, ", ".join(sorted(unknown)), ", ".join(sorted(known))))
+    found = []
+    for option in parser.options(section):
+        register = known[option]
+        value = _parse_domain(parser.get(section, option), section, option,
+                              register)
+        found.append(GlobalSetting(section, option, value))
+    return found
 
 
 def _parse_channel_section(parser: "configparser.ConfigParser", section: str,

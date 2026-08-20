@@ -60,6 +60,7 @@ from .registers import (
     Register,
     device_for_name,
     register_policy,
+    settable_globals,
     settable_options,
     verify_class,
 )
@@ -229,7 +230,7 @@ def desired(config: Config) -> Tuple[Entry, ...]:
             for path, tags, args in produce(route):
                 entries[path] = Entry(path, tags, tuple(args), phase)
     ordered = sorted(entries.values(), key=_send_order(config))
-    return tuple(ordered) + channel_entries(config)
+    return tuple(ordered) + channel_entries(config) + global_entries(config)
 
 
 def channel_entries(config: Config) -> Tuple[Entry, ...]:
@@ -256,16 +257,44 @@ def channel_entries(config: Config) -> Tuple[Entry, ...]:
         if register is None:
             continue
         path = "/%s/%d/%s" % (setting.family, setting.channel, setting.option)
-        if register.domain == ENUM:
-            value = register.choices.index(str(setting.value))
-            out.append(Entry(path, "i", (value,), PHASE_CHANNEL))
-        elif isinstance(setting.value, float):
-            out.append(Entry(path, "f", (setting.value,), PHASE_CHANNEL))
-        else:
-            out.append(Entry(path, "i",
-                             (int(setting.value),),  # type: ignore[call-overload]
-                             PHASE_CHANNEL))
+        out.append(_encode(path, register, setting.value))
     return tuple(out)
+
+
+def global_entries(config: Config) -> Tuple[Entry, ...]:
+    """The `[echo]`-style settings, as registers to write.
+
+    Same encoding rules as `channel_entries`, and deliberately the same
+    phase: a family with no channel is still channel state as far as the
+    ordering is concerned -- it depends on no link and must not land
+    before the routing exists.
+
+    The value encoding is shared with `channel_entries` rather than
+    written twice. A second copy of "an enum goes out as its index" is
+    how the two come to disagree, and the reflevel asymmetry that rule
+    exists for is invisible until a write is silently ignored.
+    """
+    device = device_for_name(config.device_name)
+    if device is None:
+        return ()
+    out = []
+    for setting in config.globals:
+        known = settable_globals(device, setting.family)
+        register = known.get(setting.option)
+        if register is None:
+            continue
+        out.append(_encode(setting.path, register, setting.value))
+    return tuple(out)
+
+
+def _encode(path: str, register: "Register", value: object) -> Entry:
+    """One setting as the entry that writes it."""
+    if register.domain == ENUM:
+        return Entry(path, "i", (register.choices.index(str(value)),),
+                     PHASE_CHANNEL)
+    if isinstance(value, float):
+        return Entry(path, "f", (value,), PHASE_CHANNEL)
+    return Entry(path, "i", (int(value),), PHASE_CHANNEL)  # type: ignore[call-overload]
 
 
 def _send_order(config: Config) -> Callable[[Entry], int]:

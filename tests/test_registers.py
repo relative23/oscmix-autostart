@@ -246,3 +246,91 @@ def test_an_unmeasured_register_is_never_called_complete():
     assert not registers.cold_plug_complete(registers.UCX2, "/reverb/type")
     assert not registers.cold_plug_complete(registers.UCX2, "/output/1/mute")
     assert not registers.cold_plug_complete(None, "/output/1/stereo")
+
+
+# --------------------------------------------------------------------------
+# Global registers: the families with no channel dimension.
+# --------------------------------------------------------------------------
+
+def test_the_global_registers_are_declared_once_not_per_channel():
+    """A register with no `{ch}` is one path, not none.
+
+    `declared_paths` expands every row over a channel list. A row with
+    no placeholder expands to nothing there, which would let a family be
+    declared in the table and never checked against a recording -- the
+    quietest way to be wrong about a device.
+    """
+    from oscmix_autostart.registers import (
+        GLOBAL,
+        declared_paths,
+        device_for_name,
+    )
+
+    device = device_for_name("Fireface UCX II")
+    globals_ = [r for r in device.registers if r.channels == GLOBAL]
+    assert globals_, "no global family declared"
+    for register in globals_:
+        assert not register.per_channel
+        assert "{" not in register.template
+
+    paths = declared_paths(device)
+    for register in globals_:
+        assert paths.count(register.template) == 1, register.template
+
+
+def test_every_declared_echo_register_is_in_the_recording(warm):
+    """The table against the device, not against the datasheet.
+
+    The whole point of the register model is that a claim the device
+    does not support is a failing test rather than a surprise on
+    somebody's desk. `/echo` is the first family declared without a
+    channel, so it is the first chance for that check to pass vacuously.
+    """
+    from oscmix_autostart.registers import GLOBAL, device_for_name
+
+    device = device_for_name("Fireface UCX II")
+    declared = {r.template for r in device.registers
+                if r.channels == GLOBAL and r.template.startswith("/echo")}
+    assert len(declared) == 7
+    missing = sorted(declared - set(warm["registers"]))
+    assert missing == [], (
+        "declared but never reported by the device: %s" % missing)
+
+
+def test_the_echo_family_is_complete_against_the_recording(warm):
+    """And the other direction: nothing in the dump left undeclared.
+
+    A family half-declared is worse than one not declared at all --
+    `--dump-config` would emit the half it knows and silently drop the
+    rest, which reads as "the device has no echo settings".
+    """
+    from oscmix_autostart.registers import device_for_name
+
+    device = device_for_name("Fireface UCX II")
+    declared = {r.template for r in device.registers}
+    reported = {p for p in warm["registers"] if p.startswith("/echo")}
+    assert sorted(reported - declared) == []
+
+
+def test_the_echo_bounds_are_upstreams_and_not_invented():
+    """Bounds come from oscmix.c's node table, checked by their arithmetic.
+
+    `delay` is `.scale=0.001, .min=0, .max=2000` -- 0 to 2 seconds.
+    `volume` is `.scale=0.1, .min=-650, .max=60`, which is exactly
+    LEVEL_MIN..LEVEL_MAX, the range a fader already has.
+
+    `feedback` and `width` declare no bounds upstream, so they declare
+    none here. Asserting that is the point: a range invented to look
+    tidy would reject values the device accepts.
+    """
+    from oscmix_autostart.constants import LEVEL_MAX, LEVEL_MIN
+    from oscmix_autostart.registers import device_for_name
+
+    by_path = {r.template: r for r in device_for_name("Fireface UCX II").registers}
+    assert (by_path["/echo/delay"].lo, by_path["/echo/delay"].hi) == (0.0, 2.0)
+    assert by_path["/echo/delay"].unit == "s"
+    assert (by_path["/echo/volume"].lo, by_path["/echo/volume"].hi) == (
+        LEVEL_MIN, LEVEL_MAX)
+    for open_ended in ("/echo/feedback", "/echo/width"):
+        assert by_path[open_ended].lo is None, open_ended
+        assert by_path[open_ended].hi is None, open_ended

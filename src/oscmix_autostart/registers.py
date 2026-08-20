@@ -100,6 +100,17 @@ POLICIES = (PIN, REMEMBER)
 #: Value domains, as a config author has to satisfy them.
 BOOL = "bool"
 ENUM = "enum"
+#: The capability a register names when it has no channel dimension at
+#: all -- `/echo/delay`, `/clock/source`, `/controlroom/dim`. There are
+#: 42 of these on a UCX II across five families, and they are the half
+#: of 0.4.0 that needs no config-format decision (docs/ROADMAP.md).
+#:
+#: Not a channel list of length one: a global register has no channel,
+#: and giving it a fake one would put `/echo/delay/1` within reach of
+#: every loop that expands templates.
+GLOBAL = "global"
+
+
 #: A quantity with a declared range and unit. Replaces the separate
 #: GAIN (0..75 dB) and DB (LEVEL_MIN..LEVEL_MAX) domains, which were the
 #: same shape with different bounds and a hand-written message each --
@@ -276,6 +287,31 @@ UCX2 = Device(
         Register("/output/{ch}/reflevel", "is", VERIFIABLE, "output-reflevel", ENUM,
                  ("+4dBu", "+13dBu", "+19dBu"), policy=PIN),
 
+        # --- global: no channel dimension (0.4.0) ----------------------
+        # The echo send. Bounds and names are upstream's node table
+        # verbatim (oscmix.c, the "echo" tree): delay is `.scale=0.001,
+        # .min=0, .max=2000`, volume `.scale=0.1, .min=-650, .max=60`
+        # -- which is LEVEL_MIN..LEVEL_MAX, the same range a fader has.
+        #
+        # `feedback` is `setint` with no min or max upstream, so this
+        # declares none either. `width` is `.scale=0.01` with no bounds;
+        # 0..1 is what the scale implies and what the device reports,
+        # but implied is not declared, so it is left open too.
+        #
+        # All REMEMBER: an echo send is what somebody dials in while
+        # working, not what describes the installation (ADR 0012).
+        Register("/echo", "i", VERIFIABLE, GLOBAL, BOOL),
+        Register("/echo/type", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("Stereo Echo", "Stereo Cross", "Pong Echo")),
+        Register("/echo/delay", "f", VERIFIABLE, GLOBAL, NUMBER,
+                 lo=0.0, hi=2.0, unit="s"),
+        Register("/echo/feedback", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/echo/highcut", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("Off", "16kHz", "12kHz", "8kHz", "4kHz", "2kHz")),
+        Register("/echo/volume", "f", VERIFIABLE, GLOBAL, NUMBER,
+                 lo=LEVEL_MIN, hi=LEVEL_MAX, unit="dB"),
+        Register("/echo/width", "f", VERIFIABLE, GLOBAL, NUMBER),
+
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),
         Register("/output/{ch}/name", "s", WRITE_ONLY, "output"),
@@ -407,11 +443,60 @@ def declared_paths(device: Device, capability_channels: Optional[
     for register in device.registers:
         if "{out}" in register.template:
             continue
+        if not register.per_channel:
+            # No placeholder, so the template *is* the path. Expanding it
+            # over a channel list would produce nothing at all, which is
+            # how a family can be declared and never checked.
+            paths.append(register.template)
+            continue
         channels = (capability_channels or {}).get(
             register.channels, device.channels_for(register.channels))
         for channel in channels:
             paths.append(register.path(ch=channel))
     return tuple(paths)
+
+
+#: What a `[<family>]` section calls the family's own on/off register.
+#:
+#: `/echo` is a node that carries a value *and* a subtree, so the switch
+#: has no path segment of its own and therefore no name in the device's
+#: vocabulary. This one is ours. Every other option name is the last
+#: segment of a real path, which is why this is the only invented word in
+#: the model and why it is written down here rather than in the parser.
+ENABLE_OPTION = "enabled"
+
+
+def settable_globals(device: Optional[Device],
+                     family: str) -> Dict[str, Register]:
+    """Options a ``[<family>]`` section may set, for a global family.
+
+    Keyed the way a config writes them: the last path segment, or
+    ``ENABLE_OPTION`` for the family's own register. Derived from the
+    templates rather than listed separately, so a row added to the table
+    is settable without touching the parser -- and one removed stops
+    being settable without a second edit to forget.
+    """
+    if device is None:
+        return {}
+    prefix = "/" + family
+    found: Dict[str, Register] = {}
+    for register in device.registers:
+        if register.channels != GLOBAL or register.domain is None:
+            continue
+        if register.template == prefix:
+            found[ENABLE_OPTION] = register
+        elif register.template.startswith(prefix + "/"):
+            found[register.template[len(prefix) + 1:]] = register
+    return found
+
+
+def global_families(device: Optional[Device]) -> Tuple[str, ...]:
+    """Every family name a `[<family>]` section may use."""
+    if device is None:
+        return ()
+    names = {r.template.strip("/").split("/")[0]
+             for r in device.registers if r.channels == GLOBAL}
+    return tuple(sorted(names))
 
 
 def settable_options(device: Optional[Device], family: str) -> Dict[str, Register]:
