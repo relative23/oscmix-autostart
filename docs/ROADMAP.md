@@ -62,7 +62,7 @@ GUI expose it at all?
 | Output strip: volume, pan, mute, phase, reflevel, stereo | all six reported | today: volume, stereo. 0.3.0: the rest |
 | EQ (3 band) and low cut, in and out | `eq/band1..3{freq,gain,q}`, `type` on bands 1 and 3 only, `lowcut/{freq,slope}` | 0.4.0 |
 | Dynamics, auto level | `dynamics/{attack,release,comp*,exp*,gain}`, `autolevel/{headroom,maxgain,risetime}` | 0.4.0 |
-| Room EQ (outputs) | `roomeq/band1..4{freq,gain,q}`, `band5gain`, `delay` | 0.4.0 |
+| Room EQ (outputs) | `roomeq/band1..9{freq,gain,q}`, `type` on bands 1, 8 and 9, `delay` -- upstream reports only half of this, see #32 | 0.4.0, blocked on the pin |
 | Reverb and echo FX | `/reverb/*` (14), `/echo/*` (7) | 0.4.0 |
 | Control room: main out, dim, mono, recall volume | `/controlroom/*` (6) | 0.4.0 |
 | Crossfeed | `/output/<n>/crossfeed` | 0.4.0 |
@@ -1470,12 +1470,146 @@ recorded, and one hardware evidence artifact exists for it. Below that
 line it is "may work", stated in the README -- and no register table is
 merged that silently assumes UCX II channel counts.
 
-## 0.4.0 and later
+## 0.4.0 -- the rest of the strip, and what it costs
 
-EQ, dynamics, low cut and room EQ per channel; channel names; reverb and
-echo; clock source and optical/SPDIF mode; standalone behaviour; loopback
-routing; a `--diff` mode reporting what the device has that the config
-does not mention.
+**The families still marked 0.4.0 in the table above are 1466
+registers.** Raw counts flatter this release and mislead about the work:
+0.3.0's model already declares 1046 concrete registers, but 800 of those
+are the two mix matrices -- two rows in the table, expanded
+mechanically. The numbers that predict effort are the other two:
+
+| | 0.3.0 | 0.4.0 adds |
+|---|---|---|
+| register families (rows in the model) | 18 | 11 |
+| per-channel option names a config can set | 6 | 50 |
+| global registers with no channel | 0 | 42 |
+
+**Six per-channel option names to fifty-six**, and a whole dimension --
+global settings -- that the config has no section for at all. That is the
+release, and it is the config format rather than the register table that
+has never carried it.
+
+Counted from `tests/data/refresh-dump.json`, not estimated:
+
+| family | registers | shape |
+|---|---|---|
+| EQ (in and out) | 480 | 24 options × 20 channels |
+| Room EQ (outputs) | 320 reported, **640 real** | 32 × 20 -- **blocked, see below** |
+| Dynamics | 322 | 16 × 20 |
+| Auto level | 162 | 8 × 20 |
+| Low cut | 120 | 6 × 20 |
+| Crossfeed | 20 | 1 × 20 |
+| Reverb | 14 | global |
+| Hardware | 10 | global |
+| Echo | 7 | global |
+| Control room | 6 | global |
+| Clock | 5 | global |
+
+`/reverb/lowcut` is counted under Reverb rather than Low cut; it is the
+one register the two filters both match, and 1466 is the count with it
+attributed once.
+
+Room EQ is the exception in that table and the reason the total is soft:
+the recording shows 320 because upstream folds the block, and the real
+surface is 640 -- confirmed by building the fix, where the dump went from
+1932 registers to 2252. **So 0.4.0 is 1466 registers as the device is
+readable today, and 1786 once the pin moves.**
+
+That table is the plan, because it splits itself in two.
+
+### The 42 global registers are the cheap half
+
+Reverb, echo, control room, clock and hardware are 42 registers with no
+channel dimension. They need a new section each and nothing else: no
+format change, no new shape in the register model, and `[reverb]` or
+`[controlroom]` is a section, which ADR 0006 makes safe to add.
+
+**They should go first**, and not because they are easy. Two of them
+answer questions this project has already had to work around --
+`/controlroom/mainout` is the register that produced upstream #30, and
+`/clock/*` is the one the sample-rate measurement kept running into. A
+family this project has already measured is a family whose row can be
+written from a recording rather than from a datasheet.
+
+### The 1424 per-channel registers need a format decision first
+
+Every current channel option is one flat word: `volume`, `reflevel`,
+`hi-z`. Everything left is nested -- `/input/3/eq/band1freq`,
+`/output/5/dynamics/compthres` -- and there are **50 distinct option
+names** below `/<family>/<channel>/`.
+
+`[input:3]` with `volume = -6.0` does not extend to that without a
+decision, and the decision is not obvious:
+
+```ini
+[input:3]                    [input:3.eq]              [eq:input:3]
+eq.band1freq = 100           band1freq = 100           band1freq = 100
+```
+
+The first keeps one section per channel and grows a dotted namespace;
+the second and third multiply sections. ADR 0006 matters here: a new
+*section* is safe on an older install and a new *option* in a known
+section is an error, so the dotted form is the one that breaks 0.3.x
+configs and the sub-section forms are the ones that degrade. **That is
+an argument, not a conclusion, and it wants an ADR before any of it is
+built.**
+
+### Room EQ is blocked on upstream
+
+The 320 Room EQ registers in the recording are a *folded* address space:
+`device_ffucxii.c` maps the upper half of each output's block onto its
+own lower half, so 16 of 32 offsets per output are unreachable and the
+other 16 carry two values (michaelforney/oscmix#32, `patches/0002`).
+
+Declaring it before the pin moves past a fix would mean writing a
+register model against an address space that is known wrong. It is the
+one family here with a hard external dependency, and it is also the
+largest after EQ -- so it is worth saying plainly rather than
+discovering halfway.
+
+### What has to be decided, not measured
+
+- **The nested-option format.** Above. First ADR of the release.
+- **Which of these are dangerous.** `48v` has a rule (never implied,
+  applied last, proven by a hardware case). `/clock/source` belongs in
+  the same class for a different reason: switching a studio's clock is
+  not damage, but it is every downstream device losing lock at once.
+  `/hardware/{opticalout,spdifout,standalonearc}` change what the box
+  does when the computer is not there.
+- **Whether clock is state or an event.** The table lists `/clock/*` as
+  declarable. The sample-rate measurement says the device changes it on
+  its own, reports it, and loses nothing. A config that *declares* a
+  sample rate is a config that fights PipeWire for it. Declaring the
+  *source* is a different question from declaring the *rate*, and they
+  should not be one row.
+- **Which rows this project should own at all.** The table's own note
+  stands: every 0.4.0 row is one where the honest answer today is "turn
+  it in the GUI and hope". Reverb and echo in particular are creative
+  settings, not installation state -- the pin/remember default of
+  REMEMBER covers them, but it is worth asking whether a *config file*
+  is the right place for a reverb tail at all.
+
+### What does not change
+
+The bar in *What a new register family costs* applies per family, not
+per release: a row in the model checked against a recording, a contract
+test that written ⊆ declared, a `--dump-config` round trip, a
+`verify-hardware` case if it is audible, and an ADR where a decision was
+made. Five families of 42 registers can carry that easily. **EQ alone,
+at 480, is the first thing in this project's history where the bar is a
+real cost rather than a formality** -- and that is the argument for
+doing the global five first and learning what a family costs before
+committing to the big ones.
+
+### Also in the release
+
+- `--diff`: `plan()` printed instead of sent. It falls out of the
+  reconciler that already exists and is the smallest useful thing here.
+- The 802: a device is supported when its register table is declared,
+  its channel capabilities recorded, and one evidence artifact exists.
+  It has none of the three, and 0.4.0 is when a second device stops
+  being hypothetical -- the register model is device-indexed precisely
+  for this.
 
 ## Explicit non-goals
 
