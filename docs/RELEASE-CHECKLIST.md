@@ -94,7 +94,19 @@ one that found all three defects in 0.1.3.
       places; nothing ran the installer end to end at the time.
 - [ ] `systemctl --user daemon-reload && systemctl --user start
       oscmix.service` reaches `READY=1`.
-- [ ] `./uninstall.sh` leaves nothing behind.
+- [ ] `./uninstall.sh` leaves nothing behind. Two empty caches remain --
+      `mimeinfo.cache` and `icon-theme.cache`, created by
+      `update-desktop-database` and `gtk-update-icon-cache` in an
+      otherwise empty scratch home. Neither mentions this project;
+      removing them would be wrong on a real home, where other
+      applications share them.
+
+      **Run this without sudo available.** `uninstall.sh` removes the
+      udev rule and the resume hook, and those live in `/etc` and
+      `/usr/lib` -- a scratch `HOME` does not move them. A scratch-home
+      uninstall with a live sudo ticket therefore deletes the *real*
+      system's hotplug rule. It failed safely here only because sudo had
+      no terminal.
 
 ## 6. The tag
 
