@@ -112,12 +112,49 @@ def run_apply(session_mod, routes, **kwargs):
     device = FakeOscmix(session_mod, send_port, recv_port, **kwargs)
     device.start()
     try:
-        session_mod.apply_routing(session_mod.Config(routes=list(routes)), send_port, recv_port)
+        session_mod.apply_routing(session_mod.Config(routes=list(routes)),
+                                  send_port, recv_port)
+        _drain(device)
     finally:
         device.stop()
         device.join(timeout=3)
         device.sock.close()
     return device
+
+
+def _drain(device, quiet=0.25, limit=3.0):
+    """Wait until the fake has stopped receiving, before stopping it.
+
+    `apply_routing` sends the mix as its last act and returns; the fake's
+    thread checks `stopping` at the top of its loop, so calling stop()
+    immediately can end it with that datagram still unread. The
+    assertions then look at a device that never saw the write.
+
+    The race is real and is removed here regardless of what it has
+    caused. What is **not** established is that it caused the one
+    failure that prompted this:
+    `test_routing_is_applied_even_when_the_echo_never_arrives` failed
+    once during a full `make coverage`, and did not come back in 6
+    further full coverage runs, 40 plain repeats of this file without
+    the drain, or 30 instrumented repeats of it without the drain. Each
+    of those reproductions ran a lighter load than the full suite under
+    instrumentation, which is the condition that produced it, so they
+    narrow the possibilities without settling them.
+
+    Kept because waiting for quiet is what the *product* code does for
+    the same reason, and it costs a quarter of a second only while
+    something is still arriving -- not because it is known to be the
+    fix.
+    """
+    deadline = time.monotonic() + limit
+    seen = len(device.order)
+    last = time.monotonic()
+    while time.monotonic() < deadline:
+        time.sleep(0.02)
+        if len(device.order) != seen:
+            seen, last = len(device.order), time.monotonic()
+        elif time.monotonic() - last >= quiet:
+            return
 
 
 def test_device_fakes_avoid_private_thread_names(session_mod):

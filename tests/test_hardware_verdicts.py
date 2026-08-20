@@ -317,3 +317,61 @@ def test_a_verdict_records_the_source_it_was_measured_from(harness):
     source = inspect.getsource(harness.main)
     assert '"playback"' in source
     assert 'finding["sink"]' in source
+
+
+# --------------------------------------------------------------------------
+# The artifact has to carry what the release checklist checks.
+# --------------------------------------------------------------------------
+
+def test_the_evidence_carries_every_field_the_checklist_names():
+    """A checklist item nobody can perform is not a check.
+
+    `docs/RELEASE-CHECKLIST.md` requires the artifact's `sink_channels`
+    to read `["FL", "FR"]` -- the guard against measuring a stereo tone
+    into the interface's raw 20-channel `Direct` sink, which produced
+    three convincing FAILs during the 0.2.0 release run with nothing
+    wrong at all.
+
+    A refactor during 0.3.0 dropped that field from the artifact while
+    the checklist went on requiring it. Nothing noticed, because the
+    checklist is only exercised at release time -- which is exactly when
+    a missing guard is most expensive. This test moves the noticing
+    forward.
+
+    Parsed from the checklist itself rather than hard-coded, so adding
+    a required field there fails here until the tool writes it.
+    """
+    import ast
+    import re
+
+    checklist = repo_file("docs", "RELEASE-CHECKLIST.md").read_text()
+    required = set(re.findall(r"artifact's `(\w+)`", checklist))
+    required |= {"complete", "unmeasured", "oscmix_revision", "routes"}
+    assert "sink_channels" in required, (
+        "the checklist no longer names sink_channels -- if that is "
+        "deliberate, say why there rather than here")
+
+    source = repo_file("scripts", "verify-hardware.py").read_text()
+    written = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Dict):
+            written |= {k.value for k in node.keys
+                        if isinstance(k, ast.Constant)
+                        and isinstance(k.value, str)}
+    missing = sorted(required - written)
+    assert missing == [], (
+        "the release checklist checks these and the tool never writes "
+        "them: %s" % missing)
+
+
+def test_the_evidence_names_the_particular_device():
+    """Evidence that does not say which box it measured is weaker evidence.
+
+    The roadmap intends to support two Fireface units on one desk. The
+    serial is read from `/proc/asound/cards`, where the driver puts the
+    device's own product string -- not the USB `iSerial`, which is a
+    different number and not the one printed on the hardware.
+    """
+    source = repo_file("scripts", "verify-hardware.py").read_text()
+    assert '"serial"' in source
+    assert "/proc/asound/cards" in source

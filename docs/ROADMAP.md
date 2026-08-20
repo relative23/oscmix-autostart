@@ -88,42 +88,54 @@ a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
 the honest answer today is "turn it in the GUI, and hope nothing resets
 it" -- which is the same answer TotalMix gives, minus the snapshot.
 
-## Where we are (0.2.0, unreleased)
+## Where we are (0.3.0, unreleased)
 
-Working and verified: playback→output routing for mono and stereo pairs,
-stereo linking with the ordering that requires, output faders, PipeWire
-named sinks, hotplug autostart, readiness signalling, routing read-back.
+Working and verified: playback→output and **hardware input** routing for
+mono and stereo pairs, stereo linking with the ordering that requires,
+output faders, per-channel state (`gain`, `reflevel`, `hi-z`, `mute`,
+`phase`, `volume`), profiles, PipeWire named sinks, hotplug autostart,
+readiness signalling, routing read-back, and reconcile on SIGHUP.
 
 Three release-blocking defects in 0.1.3 were found by measuring output
 levels off the wire, not by reading code. Two of them were invisible at
-message level. That set the standard for the release below.
+message level. That set the standard every release since has been held
+to, and it is why the table below is measurements rather than claims.
 
-What 0.2.0 moved, measured rather than claimed (2026-08-16):
+What 0.3.0 moved (2026-08-20):
 
-| | 0.1.3 | 0.2.0 |
+| | 0.2.0 | 0.3.0 |
 |---|---|---|
-| runtime layout | 1386 lines, one file | 15 modules, 2119 lines, two shims of 52 and 42 lines |
-| longest function | 106 lines | 66 (`verify_and_repair`), under the 70 ceiling |
-| tests | 118 | 392 cases from 281 test functions |
-| coverage | 65% (subprocess unmeasured) | 94% measured, gate at 94 |
-| `mypy --strict` | 12 errors | clean, 15 files |
-| mutation score | not runnable | 0.643 over the whole runtime, floor 0.63 |
-| upstream backend | `master`, unpinned | pinned commit, verified at checkout |
-| hardware evidence | done by hand, once | two committed tools, a recorded dump, and a passing artifact -- all 3 routes, 119.2 dB each |
-| structural guarantees | comments | 60+ assertions, plus `systemd-analyze verify` and an install smoke test |
+| runtime | 15 modules, 2119 lines | 19 modules, 4480 lines |
+| longest function | 66 lines | 68, under the 70 ceiling |
+| tests | 392 cases from 281 functions | 663 cases from 470 functions |
+| coverage | 94%, gate at 94 | 95%, gate at 94 |
+| mutation score | 0.643, floor 0.63 | 0.687, floor 0.67 (`not_covered` 82, unchanged) |
+| config surface | routes and faders | + `[input:N]`, `[output:N]`, `[pin]`, `profiles/` |
+| register model | none | 18 families, 9 settable, per-device channel maps |
+| decisions recorded | ADR 0001-0010 | ADR 0001-0013 |
+| upstream pin | 2411b12d | unchanged -- no bump, so no new evidence owed |
 
-Every number above now describes this suite. The mutation score is the
-one that reads worse and means better: it fell from 0.728 to 0.643
-because `not_covered` fell from 677 to 81, and a mutant that stops being
-uncovered starts being judged. 0.728 measured the third of the runtime
-in-process tests reached at the time; 0.643 measures all of it.
+**What the release is, in one line:** 0.2.0 made the existing behaviour
+provable; 0.3.0 spends that on surface, and every piece of it was
+decided by a measurement rather than by a plan.
 
-The hardware evidence has a tool, a dump fixture, a place in
-`docs/RELEASE-CHECKLIST.md`, and now a passing measurement: all three
-routes, 119.2 dB per output, exit 0. Getting there took two runs -- the
-first failed `main-out` on a fader the owner had shut, which is the
-kind of thing only a measurement finds. What it does not have is a
-release to be attached to.
+Four of those measurements changed what got built:
+
+- Of every register a config can set, only `/output/{ch}/stereo` is
+  pushed when it changes. That killed continuous reconciliation and
+  turned "pin" into a promise this project can actually keep.
+- A cold plug delivers 1234 of 1932 registers and then stops. That
+  shaped which absences count as faults.
+- A sample rate change destroys nothing here -- 1931 of 1932 registers
+  identical, matrix intact by signal. A planned trigger was **dropped**
+  on the strength of it.
+- Hotplug was already covered by udev restarting the unit, so the
+  second mechanism for it was never written.
+
+And three defects were found in the path every boot already ran, none of
+them by a failing gate: channel state written and then left out of the
+read-back, `/playback/*` misclassified as never-reported, and an
+observation window that closed before channel state could arrive.
 
 ## 0.2.0 -- maturity
 

@@ -100,7 +100,7 @@ exclude_lines = [
 # the gate following, which is seven points of erosion nothing would have
 # noticed. The launcher moving into the package and gaining
 # tests/test_launcher.py took it from 61% to 100% and the total to 95%.
-fail_under = 94
+fail_under = 95
 
 [tool.mutmut]
 # Mutation testing answers the question coverage cannot: do the assertions

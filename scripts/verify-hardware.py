@@ -272,6 +272,36 @@ def playback_sinks() -> Dict[Tuple[int, ...], str]:
     return found
 
 
+def device_serial() -> Optional[str]:
+    """The interface's serial, as RME prints it on the box.
+
+    Read from `/proc/asound/cards`, where the USB-Audio driver puts the
+    device's own product string:
+
+        2 [II24216011  ]: USB-Audio - Fireface UCX II (24216011)
+
+    Not the USB `iSerial` (`3A179EA663AB340` here), which is a different
+    number and not the one anybody can check against the hardware -- and
+    not the one this repository's recorded dumps already carry.
+
+    Evidence names a *particular* box. Two Fireface units on one desk is
+    a configuration this roadmap intends to support, and an artifact that
+    does not say which one it measured stops being evidence the moment
+    there is a second.
+    """
+    try:
+        cards = Path("/proc/asound/cards").read_text()
+    except OSError:
+        return None
+    for line in cards.splitlines():
+        if "Fireface" not in line:
+            continue
+        found = re.search(r"\((\d{4,})\)", line)
+        if found:
+            return found.group(1)
+    return None
+
+
 def is_stereo(positions: Sequence[str]) -> bool:
     """Whether a tone written as stereo will land where it is meant to."""
     upper = [p.upper() for p in positions]
@@ -493,6 +523,21 @@ def main() -> int:
         # Per route now (see "routes"), because one run plays into
         # several sinks -- one per playback pair the config uses.
         "sinks": {"/".join(map(str, k)): v for k, v in sorted(sinks.items())},
+        # The channel layout of each sink the tone went through, which is
+        # the guard the release checklist turns on: a stereo tone into
+        # the interface's raw 20-channel Direct sink has nothing to land
+        # on, and the 0.2.0 release run produced three convincing FAILs
+        # that way with nothing wrong at all.
+        #
+        # The tool now *refuses* a non-stereo sink rather than measuring
+        # through one, so this cannot be wrong -- but it was dropped from
+        # the artifact by a refactor during 0.3.0 while the checklist
+        # still required it, and a check nobody can perform is not a
+        # check. Recorded again, per sink, because a run now uses one per
+        # playback pair.
+        "sink_channels": {name: (sink_layout(name) or (name, []))[1]
+                          for name in sorted(set(sinks.values()))},
+        "serial": device_serial(),
         "oscmix_revision": backend_revision(),
         "min_response_db": MIN_RESPONSE_DB,
         "min_above_background_db": MIN_ABOVE_BACKGROUND_DB,

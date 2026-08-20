@@ -1,5 +1,133 @@
 # Changelog
 
+## 0.3.0 (2026-08-20)
+
+The whole signal path, declared. 0.2.0 made the existing behaviour
+provable; this release spends that on surface -- and the notable thing
+about it is how much was decided by measuring the device rather than by
+planning against it. Four measurements changed what got built, and one
+of them removed a feature.
+
+### The config can describe the signal path
+
+- **Hardware input routing.** `input = 1/2` as a route source: direct
+  monitoring inside the device, no round trip through the computer.
+  Unlike the playback matrix, `/mix/<out>/input/<in>` *is* reported, so
+  an input route is verified after every start rather than only
+  re-applied.
+- **Per-channel state**, as `[input:N]` and `[output:N]`: `gain`,
+  `reflevel`, `hi-z`, `mute`, `phase`, `volume`. Every channel range is
+  read from a recorded device dump and independently confirmed against
+  upstream's device table, so a config naming a channel the interface
+  does not have is a parse error rather than a silent no-op.
+- **Phantom power is deliberately not settable.** `48v` is in the
+  register model and has no value domain, so no config can reach it. It
+  stays that way until a hardware case proves the channel it names is
+  the channel it powers.
+- **Profiles.** A profile is a whole `routing.conf` in `profiles/`
+  beside the main one -- not a new section type, so it is parsed by the
+  same code and `--dump-config > profiles/tracking.conf` composes.
+  `--profile NAME` switches, `--list-profiles` lists. A switch states one
+  of three outcomes and never half-applies; a config that does not parse
+  is refused before the first datagram. Measured: 0 datagrams for a
+  refusal, 5 for a good profile, through the same counter seconds apart.
+- **`--dump-config`** reads the device and writes a `routing.conf` from
+  it -- 124 channel settings on a UCX II, plus any input routes. It
+  refuses when the mixer GUI holds the read-back port, because half an
+  answer rendered as a config reads as authoritative.
+
+### Pin and remember
+
+Which settings the config keeps insisting on, and which the mixer wins,
+is now a column in the register model, overridable per option by a
+`[pin]` section.
+
+The design was forced by a measurement. Of every register a config can
+set, exactly **one** is pushed to listeners when it changes:
+`/output/{ch}/stereo`. `volume`, `mute`, `hi-z`, `gain`, `reflevel` and
+`/playback/{ch}/stereo` all change silently. So "pin" cannot mean "snaps
+back when you touch the mixer" at any sensible price, and this release
+does not pretend otherwise: it means the config wins while the session
+is still looking.
+
+What it replaced was an accident. A fader turned 0.5 s after a restart
+came back at the config's value; the same turn at 1.5, 3 and 6 seconds
+survived -- and the 0.5 s case was overwritten by the ordinary start-up
+apply, not by the verifier. The line between "the config wins" and "the
+user wins" was how long the apply happened to take.
+
+`--dump-config` uses the same column: pinned values are emitted as
+config, remembered ones as comments carrying the value, because a dump
+cannot tell "I meant this" from "this is where I left it".
+
+### Reconcile on events, never on a clock
+
+`systemctl --user reload oscmix.service` re-reads the config, reads the
+device back, re-applies what is pinned and leaves what is remembered.
+A system-sleep hook asks for the same thing after resume.
+
+Two of the three planned triggers were not built, and both times the
+measurement is the reason:
+
+- **Hotplug was already covered.** udev pulls the unit in on `add` and
+  `StopWhenUnneeded` drops it on `remove`, so a replug is a full restart
+  with a full apply. Both halves are now asserted by test instead.
+- **A sample rate change destroys nothing on this device.** Across
+  48 kHz -> 44.1 kHz, 1931 of 1932 reported registers were identical;
+  the one that differed was `/clock/samplerate`. The playback matrix
+  survived too -- shown by signal, since it is never reported. The
+  trigger would have been the cheapest of the three, and there is
+  nothing measured for it to repair.
+
+### Defects found in the path every boot already ran
+
+None of these were caught by a failing gate. All three were found by
+writing a contract as tests before the code existed, or by reading
+mutation survivors instead of accepting the score.
+
+- **Channel state was written to the device and then left out of the
+  read-back.** Runs logged "routing verified" without having looked at a
+  single `[input:N]` or `[output:N]` register. A structural test now
+  fails on any function that rebuilds a `Config` from a subset of its
+  fields -- the shape both this and its write-path twin had.
+- **`/playback/*` was classified as never-reported.** The recorded dump
+  carries 42 registers there, and a cold plug returns all 20
+  `/playback/<n>/stereo` at t=0.00 s. A lost input-side link write was
+  therefore never counted as a problem and never re-sent, on the one
+  register family the two-phase apply exists for.
+- **The read-back window closed before channel state could arrive.** The
+  stereo flags always come first and always match, so `/output/1/volume`
+  came back unconfirmed while sitting correct on the device.
+- **`DUMP_LISTEN_SETTLE`.** Upstream writes to a *connected* UDP socket
+  and ignores `ECONNREFUSED`, so while nothing is bound the meter stream
+  queues an ICMP error and the next write dies of it -- silently. Bind
+  and ask for a dump in the same breath and the casualty is the one
+  bundle `setrefresh()` flushes by hand: every `/playback/<n>/stereo`.
+  Measured 4/12 deliveries at no delay, 12/12 at 0.1 s.
+
+### Quality
+
+- 663 tests from 470 functions (392/281 in 0.2.0); coverage 95%.
+- Mutation score 0.687, floor 0.67, `not_covered` unchanged at 82 while
+  the mutant count grew from 2726 to 4184. Reading the survivors in the
+  new code found three more real defects, including one where the
+  register model was never consulted, so pinning worked only through an
+  explicit `[pin]` override.
+- ADR 0011-0013 record the profile-switch contract, the pin/remember
+  model and the trigger set, each with its measurements and the
+  alternatives that were rejected.
+- Every CI job now carries a timeout. One had none, hung in
+  `apt-get update` and burned GitHub's 360-minute default -- on a job
+  whose measured maximum is 6.7 minutes.
+
+### Compatibility
+
+`routing.conf` files from 0.2.x are read unchanged. The new settings are
+all new *sections*, which older versions warn about and skip (ADR 0006);
+an older install therefore ignores `[pin]` and channel sections rather
+than refusing the file. A profile inherits `[osc]` and `[device]` from
+the main config unless it states them itself.
+
 ## 0.2.0 (2026-08-17)
 
 A maturity release: no new device features. Everything here makes the
