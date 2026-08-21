@@ -38,7 +38,12 @@ def warm():
 # --------------------------------------------------------------------------
 
 def test_the_section_names_come_from_the_register_table():
-    assert global_families(UCX2) == ("echo",)
+    """Derived from the table, so declaring a family is what enables it.
+
+    Sorted, so the assertion reads as a set rather than as an order
+    somebody could change by moving a row.
+    """
+    assert global_families(UCX2) == ("controlroom", "echo", "reverb")
     assert global_families(None) == ()
 
 
@@ -186,3 +191,105 @@ def test_nothing_in_the_dump_is_left_undeclared(warm):
 def test_a_global_setting_knows_its_own_path():
     assert GlobalSetting("echo", ENABLE_OPTION, 1).path == "/echo"
     assert GlobalSetting("echo", "delay", 0.5).path == "/echo/delay"
+
+
+# --------------------------------------------------------------------------
+# The two families that followed, and what each of them settled.
+# --------------------------------------------------------------------------
+
+def test_reverb_declares_no_bounds_because_upstream_declares_none():
+    """The trap this family sets, and the reason to read the source.
+
+    `/echo/volume` is `.scale=0.1, .min=-650, .max=60`. `/reverb/volume`
+    is `.scale=0.1` with **no** min or max. The two look like the same
+    control and are not, and copying the echo's -65..+6 onto the reverb
+    would have looked consistent while rejecting values the device takes.
+
+    Every reverb number is unbounded upstream, so every one is unbounded
+    here.
+    """
+    from oscmix_autostart.registers import ENUM, NUMBER
+
+    numbers = [r for r in UCX2.registers
+               if r.template.startswith("/reverb/") and r.domain == NUMBER]
+    assert len(numbers) == 12
+    for register in numbers:
+        assert register.lo is None, register.template
+        assert register.hi is None, register.template
+    kind, = [r for r in UCX2.registers if r.template == "/reverb/type"]
+    assert kind.domain == ENUM
+    assert len(kind.choices) == 15
+
+
+def test_the_control_room_reductions_cannot_go_above_unity():
+    """`dimreduction` and `recallvolume` are `.min=-650, .max=0`.
+
+    Not the fader range: a *reduction* that could be positive would be a
+    boost, and the device does not offer one. The upper bound is the
+    part worth asserting, because -65 alone would look like a fader and
+    read as one.
+    """
+    from oscmix_autostart.constants import LEVEL_MIN
+
+    by_path = {r.template: r for r in UCX2.registers}
+    for path in ("/controlroom/dimreduction", "/controlroom/recallvolume"):
+        assert (by_path[path].lo, by_path[path].hi) == (LEVEL_MIN, 0.0), path
+        assert by_path[path].unit == "dB"
+
+
+def test_a_reduction_above_zero_is_refused(tmp_path):
+    from oscmix_autostart import ConfigError
+
+    with pytest.raises(ConfigError, match=r"out of range -65\.0\.\.0\.0"):
+        load_config(_conf(tmp_path, "[controlroom]\ndimreduction = 3.0\n"))
+
+
+def test_the_control_room_splits_setup_from_buttons():
+    """ADR 0012 applied to a family where both kinds sit together.
+
+    How far DIM reduces, what RECALL returns to and which pair the
+    section drives are set once for a room. DIM, MONO and mute-enable
+    are buttons somebody presses while working, and a session that put
+    them back would be arguing with the person at the desk.
+    """
+    from oscmix_autostart.registers import PIN, REMEMBER, register_policy
+
+    for path in ("/controlroom/mainout", "/controlroom/dimreduction",
+                 "/controlroom/recallvolume"):
+        assert register_policy(UCX2, path) == PIN, path
+    for path in ("/controlroom/dim", "/controlroom/mainmono",
+                 "/controlroom/muteenable"):
+        assert register_policy(UCX2, path) == REMEMBER, path
+
+
+def test_mainout_declares_the_ten_names_upstream_has(warm):
+    """And not the eleventh, which the pinned revision cannot produce.
+
+    The device reports -1 for "no main out". At the pinned revision
+    `oscsendenum` has no value list, so -1 matches no index and is sent
+    unnamed -- that is upstream #30, fixed on a branch and tested here.
+    Declaring "None" now would put a value in the config that this
+    backend maps to index 10, which is not -1 and not a main out either.
+    """
+    by_path = {r.template: r for r in UCX2.registers}
+    choices = by_path["/controlroom/mainout"].choices
+    assert choices[0] == "1/2"
+    assert choices[-1] == "19/20"
+    assert len(choices) == 10
+    assert "None" not in choices
+
+
+def test_the_three_families_are_complete_against_the_recording(warm):
+    """Nothing reported and left undeclared, for any family declared.
+
+    Checked per family rather than in total: a family half-declared is
+    worse than one not declared at all, because `--dump-config` emits
+    the half it knows and the file then reads as though the device had
+    no reverb settings.
+    """
+    declared = {r.template for r in UCX2.registers}
+    for family in global_families(UCX2):
+        reported = {p for p in warm["registers"]
+                    if p == "/" + family or p.startswith("/%s/" % family)}
+        assert reported, family
+        assert sorted(reported - declared) == [], family

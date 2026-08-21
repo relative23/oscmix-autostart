@@ -158,7 +158,13 @@ def test_the_input_matrix_is_verifiable_which_0_3_0_depends_on(warm):
 def test_the_class_of_an_unknown_path_is_unknown():
     # Not a default of "verifiable": a register nobody modelled must not
     # inherit a promise.
-    assert registers.verify_class(registers.UCX2, "/reverb/type") is None
+    #
+    # The examples have to be paths the model really does not carry.
+    # This used to name /reverb/type, which stopped being true the day
+    # reverb was declared -- so it now names the EQ family, which is
+    # 0.4.0's largest and is blocked behind a config-format decision.
+    assert registers.verify_class(registers.UCX2,
+                                  "/input/1/eq/band1gain") is None
     assert registers.verify_class(registers.UCX2, "/output/1/crossfeed") is None
 
 

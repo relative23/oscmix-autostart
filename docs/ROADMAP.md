@@ -1519,6 +1519,18 @@ That table is the plan, because it splits itself in two.
 
 ### The 42 global registers are the cheap half
 
+**27 of them are done** -- `[echo]` (7), `[controlroom]` (6) and
+`[reverb]` (14), each measured at the device. What is left is `[clock]`
+(5) and `[hardware]` (10), which are the two that carry the "which of
+these are dangerous" question below.
+
+The half turned out cheap as predicted, and the two surprises were both
+in the *data* rather than the structure: `/reverb/volume` has no bounds
+upstream while `/echo/volume` has the fader's, so copying one onto the
+other would have rejected values the device accepts; and
+`/controlroom/{dimreduction,recallvolume}` are `.max=0` -- reductions,
+not levels, and -65..0 rather than the fader's -65..+6.
+
 Reverb, echo, control room, clock and hardware are 42 registers with no
 channel dimension. They need a new section each and nothing else: no
 format change, no new shape in the register model, and `[reverb]` or

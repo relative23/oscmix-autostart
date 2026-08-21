@@ -312,6 +312,59 @@ UCX2 = Device(
                  lo=LEVEL_MIN, hi=LEVEL_MAX, unit="dB"),
         Register("/echo/width", "f", VERIFIABLE, GLOBAL, NUMBER),
 
+        # The control room section. `dimreduction` and `recallvolume` are
+        # `.scale=0.1, .min=-650, .max=0` -- dB down to the same floor a
+        # fader has, but never above unity, which is what makes them a
+        # reduction rather than a level.
+        #
+        # PIN on the three that describe the monitoring setup: how far
+        # DIM reduces, what RECALL returns to, and which pair the
+        # section controls are all set once for a room. REMEMBER on the
+        # three that are buttons somebody presses while working.
+        #
+        # `mainout` declares the ten pairs upstream names. The device
+        # also reports -1 for "no main out", which the pinned revision
+        # cannot name and a config cannot request -- that is upstream
+        # #30, fixed on a branch and tested here, and this row grows an
+        # eleventh name when the pin moves.
+        Register("/controlroom/mainout", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("1/2", "3/4", "5/6", "7/8", "9/10",
+                  "11/12", "13/14", "15/16", "17/18", "19/20"),
+                 policy=PIN),
+        Register("/controlroom/dimreduction", "f", VERIFIABLE, GLOBAL, NUMBER,
+                 lo=LEVEL_MIN, hi=0.0, unit="dB", policy=PIN),
+        Register("/controlroom/recallvolume", "f", VERIFIABLE, GLOBAL, NUMBER,
+                 lo=LEVEL_MIN, hi=0.0, unit="dB", policy=PIN),
+        Register("/controlroom/dim", "i", VERIFIABLE, GLOBAL, BOOL),
+        Register("/controlroom/mainmono", "i", VERIFIABLE, GLOBAL, BOOL),
+        Register("/controlroom/muteenable", "i", VERIFIABLE, GLOBAL, BOOL),
+
+        # The reverb send. Upstream declares bounds on *none* of these --
+        # every number is `setint` or `setfixed` with no min or max, and
+        # `/reverb/volume` in particular has no range at all, unlike
+        # `/echo/volume`. Copying the echo's -65..+6 onto it would have
+        # looked consistent and rejected values the device accepts.
+        #
+        # All REMEMBER: a reverb tail is dialled in while working.
+        Register("/reverb", "i", VERIFIABLE, GLOBAL, BOOL),
+        Register("/reverb/type", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("Small Room", "Medium Room", "Large Room", "Walls",
+                  "Shorty", "Attack", "Swagger", "Old School",
+                  "Echoistic", "8plus9", "Grand Wide", "Thicker",
+                  "Envelope", "Gated", "Space")),
+        Register("/reverb/predelay", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/lowcut", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/highcut", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/highdamp", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/attack", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/hold", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/release", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/smooth", "i", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/roomscale", "f", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/time", "f", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/volume", "f", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/width", "f", VERIFIABLE, GLOBAL, NUMBER),
+
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),
         Register("/output/{ch}/name", "s", WRITE_ONLY, "output"),
