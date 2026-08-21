@@ -365,6 +365,51 @@ UCX2 = Device(
         Register("/reverb/volume", "f", VERIFIABLE, GLOBAL, NUMBER),
         Register("/reverb/width", "f", VERIFIABLE, GLOBAL, NUMBER),
 
+        # The clock. All PIN: which clock a room runs on, and whether the
+        # word clock output is terminated, describe the installation.
+        #
+        # `samplerate` has **no domain**, and the reason is upstream's
+        # own: its node is `{"samplerate", CLOCK_SAMPLERATE,
+        # .new=newsamplerate}` -- a reporter with no `.set`. oscmix
+        # cannot write it, so neither can a config, and the roadmap's
+        # open question "is the rate state or an event" is answered by
+        # the node table rather than by argument. Measured separately:
+        # the device changes it on its own, pushes the change, and loses
+        # no mixer state doing so.
+        Register("/clock/source", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("Internal", "Word Clock", "SPDIF", "AES", "Optical"),
+                 policy=PIN),
+        Register("/clock/samplerate", "i", VERIFIABLE, GLOBAL),
+        Register("/clock/wckout", "i", VERIFIABLE, GLOBAL, BOOL, policy=PIN),
+        Register("/clock/wcksingle", "i", VERIFIABLE, GLOBAL, BOOL, policy=PIN),
+        Register("/clock/wckterm", "i", VERIFIABLE, GLOBAL, BOOL, policy=PIN),
+
+        # The box itself: what it does with its optical port, its front
+        # panel, and what it does when no computer is attached. All PIN
+        # -- none of it is a preference somebody dials during a session.
+        #
+        # Three have no domain for the same reason as `samplerate`:
+        # `ccmode` is `.new=newbool` with no setter, and `dspload` and
+        # `dspvers` come from nameless nodes that only report. A config
+        # cannot set what oscmix cannot write.
+        Register("/hardware/opticalout", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("ADAT", "SPDIF"), policy=PIN),
+        Register("/hardware/spdifout", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("Consumer", "Professional"), policy=PIN),
+        Register("/hardware/ccmix", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("TotalMix App", "6ch + phones", "8ch", "20ch"), policy=PIN),
+        Register("/hardware/standalonearc", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("Volume", "1s Op", "Normal"), policy=PIN),
+        Register("/hardware/standalonemidi", "i", VERIFIABLE, GLOBAL, BOOL,
+                 policy=PIN),
+        Register("/hardware/lockkeys", "is", VERIFIABLE, GLOBAL, ENUM,
+                 ("Off", "Keys", "All"), policy=PIN),
+        Register("/hardware/remapkeys", "i", VERIFIABLE, GLOBAL, BOOL,
+                 policy=PIN),
+        Register("/hardware/ccmode", "i", VERIFIABLE, GLOBAL),
+        Register("/hardware/dspload", "i", VERIFIABLE, GLOBAL),
+        Register("/hardware/dspvers", "i", VERIFIABLE, GLOBAL),
+
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),
         Register("/output/{ch}/name", "s", WRITE_ONLY, "output"),

@@ -624,8 +624,16 @@ def test_no_sample_rate_trigger_exists_and_that_is_deliberate():
     # measurement mentions the register by name, and a text search would
     # have banned the explanation along with the feature. An AST sees
     # string literals only.
+    #
+    # registers.py is excluded, and the distinction is the point: that
+    # file *declares* the register -- with no domain, because upstream's
+    # node has no setter -- so the read-back and --dump-config know it
+    # exists. Declaring is not reacting. Anywhere else, naming this path
+    # in code means something is watching it.
     handlers = []
     for path in sorted(repo_file("src", "oscmix_autostart").rglob("*.py")):
+        if path.name == "registers.py":
+            continue
         for node in ast.walk(ast.parse(path.read_text())):
             if (isinstance(node, ast.Constant) and isinstance(node.value, str)
                     and "clock/samplerate" in node.value):

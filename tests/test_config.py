@@ -282,8 +282,8 @@ routes = main
 band1freq = 80
 band1gain = -3.0
 
-[clock]
-source = Internal
+[durec]
+autoplay = true
 """
 
 
@@ -307,7 +307,12 @@ def test_a_config_from_a_newer_version_still_applies_what_we_understand(
     warnings = [record.getMessage() for record in caplog.records
                 if record.levelname == "WARNING"]
     assert len(warnings) == 3
-    for section in ("profile:tracking", "eq:output:5", "clock"):
+    # `[durec]` rather than `[clock]`: clock became a real section when
+    # the global families landed, and an example of "a section from a
+    # newer version" has to be one this version will not grow. The
+    # roadmap puts DUREC transport under "never -- interactive", so it
+    # will stay unknown.
+    for section in ("profile:tracking", "eq:output:5", "durec"):
         assert any("[%s]" % section in text for text in warnings), section
     assert any("newer version" in text for text in warnings)
 

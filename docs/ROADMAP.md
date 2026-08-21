@@ -1548,10 +1548,17 @@ That table is the plan, because it splits itself in two.
 
 ### The 42 global registers are the cheap half
 
-**27 of them are done** -- `[echo]` (7), `[controlroom]` (6) and
-`[reverb]` (14), each measured at the device. What is left is `[clock]`
-(5) and `[hardware]` (10), which are the two that carry the "which of
-these are dangerous" question below.
+**All 42 are done** -- `[echo]` (7), `[controlroom]` (6), `[reverb]`
+(14), `[clock]` (5) and `[hardware]` (10), each measured at the device.
+Four of the 42 are declared read-only, and that line was drawn by
+upstream rather than by judgement: `/clock/samplerate` is
+`{"samplerate", CLOCK_SAMPLERATE, .new=newsamplerate}`, a reporter with
+no `.set`, and `/hardware/{ccmode,dspload,dspvers}` are the same shape.
+A config cannot set what oscmix cannot write.
+
+**That answers the sample-rate question below without an argument.** It
+is not "state or event": oscmix has no setter for it, so it is not
+declarable at all.
 
 The half turned out cheap as predicted, and the two surprises were both
 in the *data* rather than the structure: `/reverb/volume` has no bounds
@@ -1611,12 +1618,37 @@ discovering halfway.
 ### What has to be decided, not measured
 
 - **The nested-option format.** Above. First ADR of the release.
-- **Which of these are dangerous.** `48v` has a rule (never implied,
-  applied last, proven by a hardware case). `/clock/source` belongs in
-  the same class for a different reason: switching a studio's clock is
-  not damage, but it is every downstream device losing lock at once.
-  `/hardware/{opticalout,spdifout,standalonearc}` change what the box
-  does when the computer is not there.
+- **Which of these are dangerous.** Still open, and deliberately not
+  answered by inventing a rule. `48v` has one (never implied, applied
+  last, proven by a hardware case) because an off-by-one there damages
+  equipment. The candidates here are milder and different in kind:
+  `/clock/source` costs every downstream device its lock at once,
+  `/hardware/lockkeys = All` locks somebody out of their own front
+  panel, and `/hardware/{opticalout,spdifout,standalonearc}` change what
+  the box does with no computer attached.
+
+  **One candidate was measured and dropped.** `/hardware/ccmix` looked
+  like the worst of them. A hand-written note in a working
+  `routing.conf` on the development machine says the matrix "only takes
+  effect when the device's CC Mix setting is TotalMix App -- in any
+  other CC Mix mode the Fireface hard-wires playback channels to outputs
+  and ignores the matrix". If that held, a config could silently disable
+  everything this project does.
+
+  It did not reproduce. With `ccmix = 8ch` a tone into playback 1/2
+  still came out at outputs 1, 5 and 7 at the same level, and a *new*
+  matrix write (playback 1/2 to outputs 3/4) took effect as well. So on
+  this device at the pinned revision, `ccmix` does not gate the matrix,
+  and it is declared as an ordinary setting. The note may well be
+  describing class-compliant mode, which is a different switch --
+  `/hardware/ccmode`, which reads 1 here and which oscmix cannot write.
+  Worth re-testing on a device actually in CC mode before anyone treats
+  the note as wrong rather than as unconfirmed.
+
+  The rest stay undeclared as hazards because none of them has been
+  measured. Locking the front panel of somebody's interface to find out
+  what it locks is not a measurement worth taking casually, and a rule
+  written without one is the folklore this project keeps deleting.
 - **Whether clock is state or an event.** The table lists `/clock/*` as
   declarable. The sample-rate measurement says the device changes it on
   its own, reports it, and loses nothing. A config that *declares* a

@@ -43,7 +43,8 @@ def test_the_section_names_come_from_the_register_table():
     Sorted, so the assertion reads as a set rather than as an order
     somebody could change by moving a row.
     """
-    assert global_families(UCX2) == ("controlroom", "echo", "reverb")
+    assert global_families(UCX2) == ("clock", "controlroom", "echo",
+                                     "hardware", "reverb")
     assert global_families(None) == ()
 
 
@@ -293,3 +294,77 @@ def test_the_three_families_are_complete_against_the_recording(warm):
                     if p == "/" + family or p.startswith("/%s/" % family)}
         assert reported, family
         assert sorted(reported - declared) == [], family
+
+
+# --------------------------------------------------------------------------
+# clock and hardware: where "settable" stopped being a judgement call.
+# --------------------------------------------------------------------------
+
+def test_all_forty_two_global_registers_are_declared():
+    """The global half of 0.4.0, complete.
+
+    Counted so that "declared" and "measured" cannot drift: the plan
+    sized this half at 42 from `tests/data/refresh-dump.json`, and the
+    table now carries the same number.
+    """
+    assert len([r for r in UCX2.registers if r.channels == GLOBAL]) == 42
+    assert global_families(UCX2) == ("clock", "controlroom", "echo",
+                                     "hardware", "reverb")
+
+
+@pytest.mark.parametrize("path", [
+    "/clock/samplerate", "/hardware/ccmode",
+    "/hardware/dspload", "/hardware/dspvers",
+])
+def test_a_register_upstream_cannot_write_is_not_settable(path):
+    """`domain is None` is decided by oscmix.c, not by taste.
+
+    `samplerate` is `{"samplerate", CLOCK_SAMPLERATE, .new=newsamplerate}`
+    -- a reporter with no `.set`. `ccmode` is `.new=newbool` with no
+    setter, and `dspload`/`dspvers` come from nameless nodes that only
+    report. A config cannot set what oscmix cannot write, and saying so
+    in the table beats discovering it as a write that draws no reply.
+
+    This also settles the roadmap's open question about the sample rate:
+    it is not "state or event", it is not writable at all.
+    """
+    by_path = {r.template: r for r in UCX2.registers}
+    assert by_path[path].domain is None
+
+
+def test_the_read_only_registers_are_absent_from_the_sections():
+    """Declared for reading, unreachable from a config -- the `48v` shape.
+
+    The register model carries them so the read-back and `--dump-config`
+    know they exist; `settable_globals` leaves them out so no section
+    can name them.
+    """
+    assert "samplerate" not in settable_globals(UCX2, "clock")
+    for absent in ("ccmode", "dspload", "dspvers"):
+        assert absent not in settable_globals(UCX2, "hardware"), absent
+    assert sorted(settable_globals(UCX2, "clock")) == [
+        "source", "wckout", "wcksingle", "wckterm"]
+
+
+def test_a_config_cannot_name_a_read_only_register(tmp_path):
+    from oscmix_autostart import ConfigError
+
+    with pytest.raises(ConfigError, match="unknown option"):
+        load_config(_conf(tmp_path, "[clock]\nsamplerate = 44100\n"))
+
+
+def test_the_box_and_the_clock_are_pinned():
+    """Neither family holds anything a person dials during a session.
+
+    Which clock a room runs on, whether the word clock output is
+    terminated, what the optical port carries and what the box does with
+    no computer attached are all installation, in ADR 0012's sense.
+    """
+    from oscmix_autostart.registers import PIN, register_policy
+
+    for register in UCX2.registers:
+        if register.channels != GLOBAL or register.domain is None:
+            continue
+        if register.template.startswith(("/clock/", "/hardware/")):
+            assert register_policy(UCX2, register.template) == PIN, \
+                register.template
