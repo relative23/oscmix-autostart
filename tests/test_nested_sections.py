@@ -203,3 +203,31 @@ def test_the_declared_eq_registers_are_all_in_the_recording():
     assert sorted(declared - set(warm["registers"])) == []
     reported = {p for p in warm["registers"] if "/eq/" in p or p.endswith("/eq")}
     assert sorted(reported - declared) == []
+
+
+def test_a_childless_option_is_not_a_sub_family():
+    """Found by reading a mutation survivor that was right to survive.
+
+    Dropping the flat lookup in `_register_for` changed nothing, because
+    the nested fallback answered instead: `settable_nested(device,
+    "gain", "input")` returned the *gain* register under
+    `ENABLE_OPTION`, its template matching the prefix exactly. The
+    behaviour was equivalent and the looseness was real -- only
+    `_is_nested_section` stopped `[gain:input:3]` being accepted, which
+    is two places having to agree about one fact.
+
+    `settable_nested` now answers for sub-families only, so the two
+    cannot drift apart.
+    """
+    assert settable_nested(UCX2, "gain", "input") == {}
+    assert settable_nested(UCX2, "reflevel", "output") == {}
+    assert len(settable_nested(UCX2, "eq", "input")) == 12
+
+
+def test_a_childless_option_cannot_be_written_as_a_section(tmp_path, caplog):
+    """`[gain:input:3]` is not a thing, and has to warn rather than parse."""
+    with caplog.at_level("WARNING"):
+        config = load_config(_conf(tmp_path, "[gain:input:3]\nenabled = 12\n"))
+    assert config.channels == []
+    assert any("ignoring unknown section" in record.getMessage()
+               for record in caplog.records)

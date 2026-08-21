@@ -702,8 +702,16 @@ def settable_nested(device: Optional[Device], sub: str,
     ``ENABLE_OPTION`` for the sub-family's own switch --
     `/input/{ch}/eq` carries a value as well as a subtree, the same
     shape `/echo` has.
+
+    Empty unless ``sub`` really is a sub-family, and that guard is not
+    decoration. Without it `settable_nested(device, "gain", "input")`
+    returns the *gain* register under ``ENABLE_OPTION``, because its
+    template matches the prefix exactly -- so a childless option would
+    answer to a section shape it has no business in. Only
+    ``_is_nested_section`` stood between that and `[gain:input:3]` being
+    accepted, which is two places having to agree about one fact.
     """
-    if device is None:
+    if device is None or sub not in nested_families(device, family):
         return {}
     prefix = "/%s/{ch}/%s" % (family, sub)
     found: Dict[str, Register] = {}
