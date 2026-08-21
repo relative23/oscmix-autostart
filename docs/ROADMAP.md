@@ -1579,28 +1579,41 @@ answer questions this project has already had to work around --
 family this project has already measured is a family whose row can be
 written from a recording rather than from a datasheet.
 
-### The 1424 per-channel registers need a format decision first
+### The 1424 per-channel registers -- format decided, work not started
 
 Every current channel option is one flat word: `volume`, `reflevel`,
 `hi-z`. Everything left is nested -- `/input/3/eq/band1freq`,
 `/output/5/dynamics/compthres` -- and there are **50 distinct option
 names** below `/<family>/<channel>/`.
 
-`[input:3]` with `volume = -6.0` does not extend to that without a
-decision, and the decision is not obvious:
+Settled by [ADR 0014](decisions/0014-nested-config-sections.md):
 
 ```ini
-[input:3]                    [input:3.eq]              [eq:input:3]
-eq.band1freq = 100           band1freq = 100           band1freq = 100
+[eq:input:3]
+band1freq = 80
+band1gain = -3.0
 ```
 
-The first keeps one section per channel and grows a dotted namespace;
-the second and third multiply sections. ADR 0006 matters here: a new
-*section* is safe on an older install and a new *option* in a known
-section is an error, so the dotted form is the one that breaks 0.3.x
-configs and the sub-section forms are the ones that degrade. **That is
-an argument, not a conclusion, and it wants an ADR before any of it is
-built.**
+**Family first, and the reason is a measurement rather than taste.**
+This section said the dotted form would break 0.3.x while sub-sections
+would degrade. Half of that was wrong. Fed to the released parser:
+
+| written as | 0.3.0 does |
+|---|---|
+| `[input:3]` + `eq.band1freq` | refuses the file |
+| `[input:3.eq]`, `[input:3:eq]`, `[input:3/eq]` | **refuses the file** |
+| `[eq:input:3]` | warns, skips, applies the rest |
+
+`config.py` dispatches on `section.startswith(("input:", "output:"))`
+before it looks at the rest, so anything beginning `input:` reaches the
+channel parser and dies on `int("3.eq")`. That is a released version's
+behaviour and cannot be fixed retroactively -- so the format moved
+instead. `tests/test_config.py` keeps both halves of the table
+executable, so the day the constraint changes, the ADR is told.
+
+The cost is that a channel strip is spread over several sections rather
+than gathered in one. A config that will not load is worse than one that
+reads awkwardly.
 
 ### Room EQ is blocked on upstream
 

@@ -457,3 +457,63 @@ def test_the_channels_a_valid_config_uses_are_still_accepted(session_mod):
     # The shipped example and the syntax range both still pass.
     config = session_mod.load_config(repo_file("config", "routing.conf.example"))
     assert config.routes[0].output == (1, 2)
+
+
+# --------------------------------------------------------------------------
+# The shape 0.4.0's nested settings have to take (ADR 0014).
+# --------------------------------------------------------------------------
+
+FORWARD_COMPATIBLE_SHAPES = (
+    "[eq:input:3]\nband1freq = 80\n",
+    "[dynamics:output:5]\ncompthres = -18.0\n",
+    "[roomeq:output:1]\nband1gain = -3.0\n",
+)
+
+REFUSED_SHAPES = (
+    "[input:3]\ngain = 12.0\neq.band1freq = 80\n",
+    "[input:3]\ngain = 12.0\neq/band1freq = 80\n",
+    "[input:3.eq]\nband1freq = 80\n",
+    "[input:3:eq]\nband1freq = 80\n",
+    "[input:3/eq]\nband1freq = 80\n",
+)
+
+_WORKING = ("[device]\nname = Fireface UCX II\n\n"
+            "[route:main]\nplayback = 1/2\noutput = 1/2\nlevel = 0.0\n\n")
+
+
+@pytest.mark.parametrize("shape", FORWARD_COMPATIBLE_SHAPES)
+def test_a_family_first_section_is_skipped_not_refused(session_mod, tmp_path,
+                                                       caplog, shape):
+    """ADR 0014, and the reason it is family-first rather than nested.
+
+    This version does not know these sections yet. It has to warn, skip
+    them, and apply the rest -- otherwise shipping 0.4.0's format means
+    every 0.3.x install refuses the file, which is no routing at all and
+    no restart to fix it.
+    """
+    path = write(tmp_path, _WORKING + shape)
+    with caplog.at_level("WARNING"):
+        config = session_mod.load_config(path)
+    assert [route.name for route in config.routes] == ["main"]
+    assert any("ignoring unknown section" in record.getMessage()
+               for record in caplog.records)
+
+
+@pytest.mark.parametrize("shape", REFUSED_SHAPES)
+def test_the_shapes_adr_0014_rejected_really_do_refuse_the_file(session_mod,
+                                                                tmp_path,
+                                                                shape):
+    """The measurement the decision rests on, kept executable.
+
+    The roadmap's plan assumed sub-sections like `[input:3.eq]` would
+    degrade. They do not: the parser dispatches on the `input:` prefix
+    before it reads the rest, so the whole file dies on
+    `int("3.eq")`. That is a property of a released version, so the
+    format had to move rather than the parser.
+
+    If this test ever passes for a shape above, the constraint behind
+    ADR 0014 has changed and the ADR should say so.
+    """
+    path = write(tmp_path, _WORKING + shape)
+    with pytest.raises(session_mod.ConfigError):
+        session_mod.load_config(path)
