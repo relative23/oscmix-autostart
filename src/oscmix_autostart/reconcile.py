@@ -262,7 +262,8 @@ def channel_entries(config: Config) -> Tuple[Entry, ...]:
     return tuple(out)
 
 
-def _register_for(device: Device, family: str, option: str):
+def _register_for(device: Device, family: str,
+                  option: str) -> Optional["Register"]:
     """The register a channel setting names, flat or nested.
 
     A nested option carries the rest of the path -- `eq/band1freq`, or
