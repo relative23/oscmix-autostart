@@ -52,6 +52,7 @@ from .config import ChannelSetting, Config, Route
 from .constants import LEVEL_MIN, UNLINKED_GAIN_OFFSET
 from .registers import (
     BOOL,
+    ENABLE_OPTION,
     ENUM,
     PIN,
     REESTABLISHED,
@@ -61,6 +62,7 @@ from .registers import (
     device_for_name,
     register_policy,
     settable_globals,
+    settable_nested,
     settable_options,
     verify_class,
 )
@@ -252,13 +254,34 @@ def channel_entries(config: Config) -> Tuple[Entry, ...]:
         return ()
     out = []
     for setting in config.channels:
-        known = settable_options(device, setting.family)
-        register = known.get(setting.option)
+        register = _register_for(device, setting.family, setting.option)
         if register is None:
             continue
         path = "/%s/%d/%s" % (setting.family, setting.channel, setting.option)
         out.append(_encode(path, register, setting.value))
     return tuple(out)
+
+
+def _register_for(device: Device, family: str, option: str):
+    """The register a channel setting names, flat or nested.
+
+    A nested option carries the rest of the path -- `eq/band1freq`, or
+    `eq` for the sub-family switch -- and those are deliberately absent
+    from `settable_options`, which only lists what a `[input:N]` section
+    may say (ADR 0014).
+
+    Looking only there is how this went wrong: `[eq:input:3]` parsed,
+    validated, and produced no entry at all, so every EQ setting was
+    silently dropped between the config and the wire. That is the fourth
+    instance of that shape in this release, and the first one caught by
+    looking rather than by a failing gate.
+    """
+    flat = settable_options(device, family)
+    if option in flat:
+        return flat[option]
+    sub = option.split("/", 1)[0]
+    return settable_nested(device, sub, family).get(
+        ENABLE_OPTION if option == sub else option.split("/", 1)[1])
 
 
 def global_entries(config: Config) -> Tuple[Entry, ...]:
@@ -288,12 +311,25 @@ def global_entries(config: Config) -> Tuple[Entry, ...]:
 
 
 def _encode(path: str, register: "Register", value: object) -> Entry:
-    """One setting as the entry that writes it."""
+    """One setting as the entry that writes it.
+
+    The **declared** tag decides the wire type, not the Python one.
+    Getting that backwards is silent: upstream's `oscgetint` rejects a
+    float argument with "incorrect argument type", `setint` then returns
+    without writing, and a write draws no reply to notice it by. A
+    config asking for `band1freq = 80` would parse, validate, reach the
+    device and change nothing.
+
+    Enums are the one place where the written tag differs from the
+    reported one: `,i` with the index going out, `,is` with the name
+    coming back.
+    """
     if register.domain == ENUM:
         return Entry(path, "i", (register.choices.index(str(value)),),
                      PHASE_CHANNEL)
-    if isinstance(value, float):
-        return Entry(path, "f", (value,), PHASE_CHANNEL)
+    if register.tags.startswith("f"):
+        return Entry(path, "f", (float(value),),  # type: ignore[arg-type]
+                     PHASE_CHANNEL)
     return Entry(path, "i", (int(value),), PHASE_CHANNEL)  # type: ignore[call-overload]
 
 

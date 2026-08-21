@@ -1579,7 +1579,7 @@ answer questions this project has already had to work around --
 family this project has already measured is a family whose row can be
 written from a recording rather than from a datasheet.
 
-### The 1424 per-channel registers -- format decided, work not started
+### The 1424 per-channel registers -- EQ done, 944 left
 
 Every current channel option is one flat word: `volume`, `reflevel`,
 `hi-z`. Everything left is nested -- `/input/3/eq/band1freq`,
@@ -1614,6 +1614,23 @@ executable, so the day the constraint changes, the ADR is told.
 The cost is that a channel strip is spread over several sections rather
 than gathered in one. A config that will not load is worse than one that
 reads awkwardly.
+
+**EQ is done** -- 480 registers, in and out, three bands each. Two
+things came out of it that were not about EQ:
+
+- **A sub-family's own switch is flat by path shape.** `/input/{ch}/eq`
+  has no slash after the prefix, so it landed in `[input:3]` as
+  `eq = true` -- the one shape ADR 0014 exists to prevent. Excluded now
+  by having children.
+- **The wire type has to come from the declared tag, not the value.**
+  Every config value parses to a Python float, so encoding by type sent
+  `,f` to `band1freq`, which upstream reads with `setint`. `oscgetint`
+  rejects a float with "incorrect argument type", `setint` returns
+  without writing, and a write draws no reply. Parsed, validated, on the
+  wire, device unchanged. `/echo/feedback` had the same latent bug.
+
+Left: dynamics (322), auto level (162), low cut (120), crossfeed (20),
+and room EQ (320, blocked on #32).
 
 ### Room EQ is blocked on upstream
 

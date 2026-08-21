@@ -278,9 +278,8 @@ level = 0.0
 [profile:tracking]
 routes = main
 
-[eq:output:5]
-band1freq = 80
-band1gain = -3.0
+[workspace:1]
+layout = wide
 
 [durec]
 autoplay = true
@@ -312,7 +311,11 @@ def test_a_config_from_a_newer_version_still_applies_what_we_understand(
     # newer version" has to be one this version will not grow. The
     # roadmap puts DUREC transport under "never -- interactive", so it
     # will stay unknown.
-    for section in ("profile:tracking", "eq:output:5", "durec"):
+    # Both examples are things the roadmap puts under "never" -- DUREC
+    # transport is interactive, workspaces are GUI. `[eq:output:5]` used
+    # to stand here and stopped being unknown the day EQ landed, which
+    # is churn this test does not need twice.
+    for section in ("profile:tracking", "workspace:1", "durec"):
         assert any("[%s]" % section in text for text in warnings), section
     assert any("newer version" in text for text in warnings)
 
@@ -463,8 +466,13 @@ def test_the_channels_a_valid_config_uses_are_still_accepted(session_mod):
 # The shape 0.4.0's nested settings have to take (ADR 0014).
 # --------------------------------------------------------------------------
 
+# Sub-families this version does not carry. The property under test is
+# that an *unrecognised* one still falls through to the warning rather
+# than being claimed by the dispatch and then rejected -- which is the
+# failure ADR 0014 measured in 0.3.0. Naming a family that later lands
+# would only re-test that it landed.
 FORWARD_COMPATIBLE_SHAPES = (
-    "[eq:input:3]\nband1freq = 80\n",
+    "[nosuchthing:input:3]\nband1freq = 80\n",
     "[dynamics:output:5]\ncompthres = -18.0\n",
     "[roomeq:output:1]\nband1gain = -3.0\n",
 )
@@ -486,10 +494,12 @@ def test_a_family_first_section_is_skipped_not_refused(session_mod, tmp_path,
                                                        caplog, shape):
     """ADR 0014, and the reason it is family-first rather than nested.
 
-    This version does not know these sections yet. It has to warn, skip
-    them, and apply the rest -- otherwise shipping 0.4.0's format means
-    every 0.3.x install refuses the file, which is no routing at all and
-    no restart to fix it.
+    A sub-family this version does not carry has to warn, be skipped,
+    and leave the rest applied. The shape that matters is the dispatch:
+    it must not claim `[<anything>:input:3]` on the strength of the
+    `input` in the middle and then fail on the part it does not know --
+    which is exactly what 0.3.0 does with `[input:3:eq]`, and why the
+    format is family-first.
     """
     path = write(tmp_path, _WORKING + shape)
     with caplog.at_level("WARNING"):

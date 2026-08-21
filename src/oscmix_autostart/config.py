@@ -32,7 +32,9 @@ from .registers import (
     POLICIES,
     device_for_name,
     global_families,
+    nested_families,
     settable_globals,
+    settable_nested,
     settable_options,
 )
 
@@ -333,6 +335,31 @@ def load_config(path: Optional[Path]) -> Config:
 
     pending: List[str] = []
     pending_globals: List[str] = []
+    pending_nested: List[str] = []
+    _dispatch(parser, config, pending, pending_globals, pending_nested)
+    device = device_for_name(config.device_name)
+    for section in pending_globals:
+        config.globals.extend(_parse_global_section(parser, section, device))
+    for section in pending_nested:
+        config.channels.extend(_parse_nested_section(parser, section, device))
+    for section in pending:
+        family = section.split(":", 1)[0]
+        config.channels.extend(
+            _parse_channel_section(parser, section, family, device))
+
+    _check_device_channels(config)
+    _check_link_agreement(config.routes)
+    return config
+
+
+def _dispatch(parser: "configparser.ConfigParser", config: "Config",
+              pending: List[str], pending_globals: List[str],
+              pending_nested: List[str]) -> None:
+    """Route each section to its parser, or warn that we do not know it.
+
+    Channel and nested sections are only *collected* here: both need the
+    device, and `[device]` may appear anywhere in the file.
+    """
     for section in parser.sections():
         if section == "device":
             _check_options(section, "device", parser.options(section))
@@ -354,6 +381,8 @@ def load_config(path: Optional[Path]) -> Config:
             _parse_pin(parser, section, config)
         elif section in global_families(device_for_name(config.device_name)):
             pending_globals.append(section)
+        elif _is_nested_section(section, config):
+            pending_nested.append(section)
         else:
             # A warning, not an error. See
             # docs/decisions/0006-routing-conf-compatibility.md: a section
@@ -366,23 +395,8 @@ def load_config(path: Optional[Path]) -> Config:
             # wrong device state nobody is told about.
             log.warning(
                 "ignoring unknown section [%s] -- this config may have been "
-                "written by a newer version of oscmix-autostart "
-                "(known: [device], [osc], [pin], [route:<name>], "
-                "[input:<n>], [output:<n>])", section
-            )
-    # After the loop, because [device] may appear anywhere in the file
-    # and every check below is device-specific.
-    device = device_for_name(config.device_name)
-    for section in pending_globals:
-        config.globals.extend(_parse_global_section(parser, section, device))
-    for section in pending:
-        family = section.split(":", 1)[0]
-        config.channels.extend(
-            _parse_channel_section(parser, section, family, device))
-
-    _check_device_channels(config)
-    _check_link_agreement(config.routes)
-    return config
+                "written by a newer version of oscmix-autostart (known: %s)",
+                section, _known_sections(config))
 
 
 def _check_device_channels(config: Config) -> None:
@@ -455,6 +469,84 @@ def _check_link_agreement(routes: Sequence[Route]) -> None:
                    "/".join(map(str, route.output)),
                    str(previous.stereo).lower(), str(route.stereo).lower())
             )
+
+
+def _known_sections(config: "Config") -> str:
+    """The section names this version understands, for the warning.
+
+    Derived rather than spelled out. The hand-written list went stale
+    the moment `[echo]` landed and again with `[eq:input:<n>]`, and a
+    diagnostic that lists the wrong alternatives is worse than one that
+    lists none -- it reads as authoritative.
+    """
+    device = device_for_name(config.device_name)
+    names = ["[device]", "[osc]", "[pin]", "[route:<name>]",
+             "[input:<n>]", "[output:<n>]"]
+    names += ["[%s]" % family for family in global_families(device)]
+    for family in ("input", "output"):
+        names += ["[%s:%s:<n>]" % (sub, family)
+                  for sub in nested_families(device, family)]
+    return ", ".join(names)
+
+
+def _is_nested_section(section: str, config: "Config") -> bool:
+    """Whether ``[<sub>:<family>:<n>]`` names something the model carries.
+
+    Checked before the section is parsed so an unknown sub-family still
+    falls through to the "newer version" warning rather than being
+    claimed and then rejected -- which is precisely the failure ADR 0014
+    measured in 0.3.0 and moved the format to avoid.
+    """
+    parts = section.split(":")
+    if len(parts) != 3 or not parts[2].strip().isdigit():
+        return False
+    sub, family = parts[0], parts[1]
+    device = device_for_name(config.device_name)
+    return family in ("input", "output") and sub in nested_families(device,
+                                                                    family)
+
+
+def _parse_nested_section(parser: "configparser.ConfigParser", section: str,
+                          device: object) -> List[ChannelSetting]:
+    """Parse ``[eq:input:3]`` and the families that follow it.
+
+    Produces ``ChannelSetting`` like a flat section does, with the option
+    carrying the rest of the path -- ``eq/band1freq``, or ``eq`` for the
+    sub-family's own switch. One settings type rather than two, because
+    the plan consumes them identically and a second type would be a
+    second loop to forget.
+    """
+    sub, family, raw = section.split(":")
+    channel = int(raw)
+    known = settable_nested(device, sub, family)  # type: ignore[arg-type]
+    if not known:
+        return []
+    if not _has_channel(device, family, sub, channel):
+        raise ConfigError(
+            "[%s]: %s has no channel %d with %s"
+            % (section, family, channel, sub))
+    unknown = set(parser.options(section)) - set(known)
+    if unknown:
+        raise ConfigError(
+            "[%s]: unknown option(s) %s (valid: %s)"
+            % (section, ", ".join(sorted(unknown)), ", ".join(sorted(known))))
+    found = []
+    for option in parser.options(section):
+        register = known[option]
+        value = _parse_domain(parser.get(section, option), section, option,
+                              register)
+        rest = sub if option == ENABLE_OPTION else "%s/%s" % (sub, option)
+        found.append(ChannelSetting(family, channel, rest, value))
+    return found
+
+
+def _has_channel(device: object, family: str, sub: str, channel: int) -> bool:
+    """Whether this device has that channel in that sub-family."""
+    known = settable_nested(device, sub, family)  # type: ignore[arg-type]
+    for register in known.values():
+        return channel in device.channels_for(  # type: ignore[attr-defined]
+            register.channels)
+    return False
 
 
 def _parse_global_section(parser: "configparser.ConfigParser", section: str,

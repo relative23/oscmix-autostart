@@ -231,6 +231,43 @@ def _seq(first: int, last: int) -> Tuple[int, ...]:
 #     fold onto the odd channel. It is deliberately not modelled here.
 # --------------------------------------------------------------------------
 
+#: The three-band EQ, per channel, as upstream's `eqtree` declares it.
+#:
+#: Built from a table rather than written out twenty-four times, and the
+#: reason is one row: `band1type` offers a **Low** Shelf and `band3type`
+#: a **High** Shelf. The rest of each band is identical, which is exactly
+#: the condition under which copy-paste gets the odd one out wrong.
+#:
+#: Bounds are upstream's: freq `20..20000` Hz, gain `.scale=0.1,
+#: .min=-200, .max=200` (-20..+20 dB), q `.scale=0.1, .min=4, .max=99`
+#: (0.4..9.9).
+_EQ_BANDS = (
+    (1, ("Peak", "Low Shelf", "High Pass", "Low Pass")),
+    (2, None),
+    (3, ("Peak", "High Shelf", "Low Pass", "High Pass")),
+)
+
+
+def _eq_registers(family: str) -> Tuple["Register", ...]:
+    """The twelve EQ rows for one channel family."""
+    prefix = "/%s/{ch}" % family
+    rows = [Register(prefix + "/eq", "i", VERIFIABLE, family, BOOL)]
+    for band, types in _EQ_BANDS:
+        rows.append(Register("%s/eq/band%dfreq" % (prefix, band), "i",
+                             VERIFIABLE, family, NUMBER,
+                             lo=20.0, hi=20000.0, unit="Hz"))
+        rows.append(Register("%s/eq/band%dgain" % (prefix, band), "f",
+                             VERIFIABLE, family, NUMBER,
+                             lo=-20.0, hi=20.0, unit="dB"))
+        rows.append(Register("%s/eq/band%dq" % (prefix, band), "f",
+                             VERIFIABLE, family, NUMBER, lo=0.4, hi=9.9))
+        if types is not None:
+            rows.append(Register("%s/eq/band%dtype" % (prefix, band), "is",
+                                 VERIFIABLE, family, ENUM, types))
+    return tuple(rows)
+
+
+
 UCX2 = Device(
     key="ucx2",
     name="Fireface UCX II",
@@ -409,6 +446,19 @@ UCX2 = Device(
         Register("/hardware/ccmode", "i", VERIFIABLE, GLOBAL),
         Register("/hardware/dspload", "i", VERIFIABLE, GLOBAL),
         Register("/hardware/dspvers", "i", VERIFIABLE, GLOBAL),
+
+        # --- the three-band EQ, in and out (0.4.0) ---------------------
+        # 480 registers, the largest family in the release, and the
+        # first written in a nested section (ADR 0014):
+        #
+        #     [eq:input:3]
+        #     band1freq = 80
+        #
+        # REMEMBER throughout. An EQ curve is dialled in while listening;
+        # a session that put one back would be arguing with whoever set
+        # it. A config that wants otherwise says so with [pin].
+        *_eq_registers("input"),
+        *_eq_registers("output"),
 
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),
@@ -609,9 +659,59 @@ def settable_options(device: Optional[Device], family: str) -> Dict[str, Registe
     from a text file until a hardware case proves the channel it names
     is the channel it hits. An off-by-one in a silent output is a bug;
     an off-by-one in phantom power is a damaged ribbon microphone.
+
+    Flat options only, and "flat" has two halves. A nested register --
+    `/input/{ch}/eq/band1freq` -- would otherwise land here as
+    `eq/band1freq`; and a sub-family's own *switch* -- `/input/{ch}/eq` --
+    is flat by path shape while belonging to the nested section, so it is
+    excluded by having children. Both would be settable from `[input:3]`,
+    which is the one shape an installed 0.3.0 refuses the whole file over
+    (ADR 0014). Both live in `settable_nested` instead, the switch under
+    ``ENABLE_OPTION``.
     """
     if device is None:
         return {}
     prefix = "/%s/{ch}/" % family
+    parents = {r.template.rsplit("/", 1)[0] for r in device.registers}
     return {r.template[len(prefix):]: r for r in device.registers
-            if r.domain is not None and r.template.startswith(prefix)}
+            if r.domain is not None and r.template.startswith(prefix)
+            and "/" not in r.template[len(prefix):]
+            and r.template not in parents}
+
+
+def nested_families(device: Optional[Device], family: str) -> Tuple[str, ...]:
+    """The sub-families a `[<sub>:<family>:<n>]` section may name."""
+    if device is None:
+        return ()
+    prefix = "/%s/{ch}/" % family
+    found = set()
+    for register in device.registers:
+        if not register.template.startswith(prefix):
+            continue
+        rest = register.template[len(prefix):]
+        if "/" in rest:
+            found.add(rest.split("/", 1)[0])
+    return tuple(sorted(found))
+
+
+def settable_nested(device: Optional[Device], sub: str,
+                    family: str) -> Dict[str, Register]:
+    """Options a ``[<sub>:<family>:<n>]`` section may set.
+
+    Keyed like every other section: the last path segment, or
+    ``ENABLE_OPTION`` for the sub-family's own switch --
+    `/input/{ch}/eq` carries a value as well as a subtree, the same
+    shape `/echo` has.
+    """
+    if device is None:
+        return {}
+    prefix = "/%s/{ch}/%s" % (family, sub)
+    found: Dict[str, Register] = {}
+    for register in device.registers:
+        if register.domain is None:
+            continue
+        if register.template == prefix:
+            found[ENABLE_OPTION] = register
+        elif register.template.startswith(prefix + "/"):
+            found[register.template[len(prefix) + 1:]] = register
+    return found

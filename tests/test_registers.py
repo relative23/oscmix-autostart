@@ -155,17 +155,24 @@ def test_the_input_matrix_is_verifiable_which_0_3_0_depends_on(warm):
                 if p.startswith("/mix/") and "/input/" in p]) >= 100
 
 
-def test_the_class_of_an_unknown_path_is_unknown():
-    # Not a default of "verifiable": a register nobody modelled must not
-    # inherit a promise.
-    #
-    # The examples have to be paths the model really does not carry.
-    # This used to name /reverb/type, which stopped being true the day
-    # reverb was declared -- so it now names the EQ family, which is
-    # 0.4.0's largest and is blocked behind a config-format decision.
-    assert registers.verify_class(registers.UCX2,
-                                  "/input/1/eq/band1gain") is None
-    assert registers.verify_class(registers.UCX2, "/output/1/crossfeed") is None
+def test_the_class_of_an_unknown_path_is_unknown(warm):
+    """Not a default of "verifiable": an unmodelled register must not
+    inherit a promise.
+
+    The example is taken from the recording rather than written here.
+    Twice now this test named a path that a later release declared --
+    `/reverb/type`, then `/input/1/eq/band1gain` -- and each time the
+    failure was the test doing its job and the fix was churn. Asking the
+    dump for something the model does not carry keeps it honest without
+    needing an edit per family.
+    """
+    device = registers.UCX2
+    declared = set(registers.declared_paths(device))
+    undeclared = sorted(p for p in warm["registers"]
+                        if p not in declared and not p.endswith("/level"))
+    assert undeclared, "the model now declares the entire dump -- update this"
+    assert registers.verify_class(device, undeclared[0]) is None
+    assert registers.verify_class(device, "/no/such/register") is None
 
 
 def test_every_declared_class_is_one_of_the_three():
