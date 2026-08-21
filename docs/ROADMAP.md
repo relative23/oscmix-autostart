@@ -945,14 +945,43 @@ dump has to be waited out at all. The ceiling on "provably correct" is
 therefore set by code this project does not own. Treating that as given
 would cap the whole effort.
 
-It used to say *four*, and counted the implausible Room EQ registers.
-That one was withdrawn: measured against the pinned revision, every one
-of the 220 EQ gain registers reads 0.0 dB and no Q is anywhere near 80.
-See [docs/upstream-issues.md](upstream-issues.md), which records why it
-was not filed -- it had reached the point of being reported as a bug in
-someone else's project without anyone checking it against the device.
+There is a fourth, and its history is the useful part. The Room EQ
+registers were carried as reporting implausible values, then withdrawn
+when a measurement showed all 220 gains at 0.0 dB, then filed after all
+as [#32](https://github.com/michaelforney/oscmix/issues/32) once the
+mechanism turned up: the block is folded onto its own lower half, so a
+reader that keeps the first reported value sees zeros and one that keeps
+the last sees the +30 dB the original note described. Both observations
+were half of a double report.
+
+[docs/upstream-issues.md](upstream-issues.md) keeps the withdrawal and
+the resolution side by side, because being wrong in both directions
+about one register block is more instructive than either.
 
 So, as work items rather than complaints:
+
+- **Watch for upstream taking on a mirror state.** Not a work item of
+  ours and not a promise of his -- but on 2026-08-21, replying on #30,
+  the maintainer wrote that oscmix was built to hold as little state as
+  possible and use the device as the source of truth, and that "it seems
+  this isn't always possible, so maybe oscmix needs keep its own
+  complete mirror state."
+
+  If that happens it is the ground under several things here. The
+  stereo-link race exists precisely because oscmix does *not* track the
+  flag it just wrote; `LINK_ECHO_TIMEOUT`, `LINK_SETTLE` and
+  `LINK_SYNC_BLIND_DELAY` are all workarounds for that one fact, and
+  `patches/0001` is the narrow version of the same fix. The measurement
+  that only `/output/{ch}/stereo` is pushed on change -- which is what
+  made "pin" mean "the config wins while this session is looking" rather
+  than "snaps back" -- is a statement about a backend that keeps no
+  mirror.
+
+  So: nothing to do now, and nothing to plan around. What it changes is
+  what a future measurement could show, and ADR 0008 already fixes the
+  order for that -- bump the pin, measure on hardware, *then* remove
+  what the measurement made unnecessary. Worth watching rather than
+  waiting for.
 
 - ~~Offer the cache-synchronisation patch.~~ **Offered as
   [michaelforney/oscmix#31](https://github.com/michaelforney/oscmix/pull/31)**

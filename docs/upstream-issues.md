@@ -14,7 +14,34 @@ All observations below are against the pinned revision
 
 ---
 
-## 1. Filed: `unexpected enum value -1` from `/controlroom/mainout`
+## 1. Fixed upstream: `unexpected enum value -1` from `/controlroom/mainout`
+
+**Status:** the maintainer added optional value lists for enums and
+pushed to master on 2026-08-21, after a branch test from here. The
+warning also names the OSC address now.
+
+Two things came out of it that outlast the fix.
+
+**On the report itself:** *"The AI text contains a lot of fluff, and
+it's hard to tell what's important and what's irrelevant on the first
+read through."* The measurements were right and every number held, but
+the write-up was some forty lines for a result that needed five, and the
+one paragraph he engaged with was the short observation at the end. The
+style this repository uses -- counter-checks, taxonomies, methodology
+stated so a claim can be re-derived -- is for readers auditing the work.
+A maintainer is deciding whether to apply a patch. Short version first,
+and in a human's own words.
+
+**On the design:** he replied that oscmix was built to hold as little
+state as possible and use the device as the source of truth, "however,
+it seems this isn't always possible, so maybe oscmix needs keep its own
+complete mirror state." That is the ground under the stereo-link race,
+the three timing constants and `patches/0001`. Recorded as a thing to
+watch in the roadmap, not as a plan.
+
+---
+
+
 
 **Status:** filed as [michaelforney/oscmix#30][issue30] on 2026-08-17.
 Reproducible on every start.
