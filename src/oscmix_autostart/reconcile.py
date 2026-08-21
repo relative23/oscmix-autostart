@@ -48,7 +48,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .config import ChannelSetting, Config, Route
+from .config import ChannelSetting, Config, GlobalSetting, Route
 from .constants import LEVEL_MIN, UNLINKED_GAIN_OFFSET
 from .registers import (
     BOOL,
@@ -59,7 +59,10 @@ from .registers import (
     VERIFIABLE,
     Device,
     Register,
+    _matches,
     device_for_name,
+    global_families,
+    nested_families,
     register_policy,
     settable_globals,
     settable_nested,
@@ -532,13 +535,53 @@ def channels_from_observed(seen: Mapping[str, Args],
         return ()
     found: List[ChannelSetting] = []
     for family in ("input", "output"):
-        for option, register in sorted(settable_options(device, family).items()):
+        wanted = dict(settable_options(device, family))
+        for sub in nested_families(device, family):
+            for option, register in settable_nested(device, sub, family).items():
+                key = sub if option == ENABLE_OPTION else "%s/%s" % (sub, option)
+                wanted[key] = register
+        for option, register in sorted(wanted.items()):
             for channel in device.channels.get(register.channels, ()):
                 args = seen.get(register.path(ch=channel))
                 if args:
                     found.append(ChannelSetting(family, channel, option,
                                                 _config_value(register, args)))
     return tuple(found)
+
+
+def globals_from_observed(seen: Mapping[str, Args],
+                          device: Optional[Device] = None
+                          ) -> Tuple[GlobalSetting, ...]:
+    """Channel-less settings read back out of a dump.
+
+    The counterpart to `channels_from_observed` for the families with no
+    channel dimension. Without it a dump reads as though the device had
+    no echo, reverb, control room, clock or hardware settings at all --
+    42 registers the device reports and the file does not mention.
+    """
+    if device is None:
+        return ()
+    found: List[GlobalSetting] = []
+    for family in global_families(device):
+        for option, register in sorted(settable_globals(device, family).items()):
+            args = seen.get(register.template)
+            if args:
+                found.append(GlobalSetting(family, option,
+                                           _config_value(register, args)))
+    return tuple(found)
+
+
+def _unnameable(register: "Register", value: object) -> bool:
+    """Whether an enum value is one this backend cannot put a name to.
+
+    `/controlroom/mainout` reports -1 for "no main out", and at the
+    pinned revision `oscsendenum` has no value list, so it arrives
+    unnamed. Written into a config as `mainout = -1` it produces a file
+    that will not load -- a dump of a working device that refuses to be
+    a config, which is the round trip catching exactly what it exists
+    for (michaelforney/oscmix#30, fixed upstream, pin not moved).
+    """
+    return register.domain == ENUM and value not in register.choices
 
 
 def _config_value(register: "Register", args: Args) -> object:
@@ -684,6 +727,7 @@ def render_config(config: Config, device: Optional[Device] = None) -> str:
         if not route.stereo:
             lines.append("stereo = false")
         lines.append("")
+    lines += _global_sections(config, device)
     lines += _channel_sections(config, device)
     return "\n".join(lines).rstrip() + "\n"
 
@@ -698,26 +742,83 @@ def _channel_sections(config: Config,
     runs a dump, and hiding it would make the file look like the channel
     had no state at all.
     """
-    by_channel: Dict[Tuple[str, int], List[ChannelSetting]] = {}
+    # Grouped by the section a setting belongs in, not by channel: a
+    # nested option goes to `[eq:input:3]` and a flat one to `[input:3]`
+    # (ADR 0014), so one channel produces several sections and they must
+    # not be run together.
+    by_section: Dict[Tuple[str, str, int], List[ChannelSetting]] = {}
     for setting in config.channels:
-        by_channel.setdefault((setting.family, setting.channel),
+        sub = setting.option.split("/", 1)[0] if "/" in setting.option else ""
+        if not sub and setting.option in nested_families(device,
+                                                         setting.family):
+            sub = setting.option          # the sub-family's own switch
+        by_section.setdefault((sub, setting.family, setting.channel),
                               []).append(setting)
     lines: List[str] = []
-    for (family, channel), settings in sorted(by_channel.items()):
-        lines.append("[%s:%d]" % (family, channel))
+    for (sub, family, channel), settings in sorted(by_section.items()):
+        header = ("[%s:%s:%d]" % (sub, family, channel) if sub
+                  else "[%s:%d]" % (family, channel))
+        lines.append(header)
         for setting in sorted(settings, key=lambda s: s.option):
             path = "/%s/%d/%s" % (family, channel, setting.option)
-            entry = "%s = %s" % (setting.option, _render_value(setting.value))
-            if policy_for(path, device) == PIN:
-                lines.append(entry)
-            else:
-                lines.append("# %s   # remembered: the device's value wins"
-                             % entry)
+            name = (ENABLE_OPTION if setting.option == sub
+                    else setting.option.split("/", 1)[-1])
+            lines.append(_setting_line(name, setting.value, path, device))
         lines.append("")
     return lines
 
 
-def _render_value(value: object) -> str:
+def _global_sections(config: Config, device: Optional[Device]) -> List[str]:
+    """`[echo]` and the other channel-less families."""
+    by_family: Dict[str, List[GlobalSetting]] = {}
+    for setting in config.globals:
+        by_family.setdefault(setting.family, []).append(setting)
+    lines: List[str] = []
+    for family, settings in sorted(by_family.items()):
+        lines.append("[%s]" % family)
+        for setting in sorted(settings, key=lambda s: s.option):
+            lines.append(_setting_line(setting.option, setting.value,
+                                       setting.path, device))
+        lines.append("")
+    return lines
+
+
+def _setting_line(name: str, value: object, path: str,
+                  device: Optional[Device]) -> str:
+    """One config line, live or commented, with the reason for commenting."""
+    register = _register_at(device, path)
+    entry = "%s = %s" % (name, _render_value(value, register))
+    if register is not None and _unnameable(register, value):
+        return ("# %s   # this backend reports no name for it; see "
+                "michaelforney/oscmix#30" % entry)
+    if policy_for(path, device) == PIN:
+        return entry
+    return "# %s   # remembered: the device's value wins" % entry
+
+
+def _register_at(device: Optional[Device],
+                 path: str) -> "Optional[Register]":
+    """The register a concrete path belongs to, or None."""
+    if device is None:
+        return None
+    for register in device.registers:
+        if _matches(register.template, path):
+            return register
+    return None
+
+
+def _render_value(value: object, register: "Optional[Register]" = None) -> str:
+    """A value as the config file spells it.
+
+    Keyed off the declared domain rather than the Python type, for the
+    same reason `_encode` is: a bool arrives from the device as `True`
+    and from the parser as `1` (the wire form), and a renderer that
+    asked `isinstance` wrote `true` the first time and `1` the second.
+    Both parse, so nothing failed -- the dump of a dump just quietly
+    stopped matching the dump. The fixed-point test caught it.
+    """
+    if register is not None and register.domain == BOOL:
+        return "true" if value else "false"
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, float):

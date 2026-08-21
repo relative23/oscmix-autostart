@@ -24,6 +24,7 @@ from .pipewire import generate_pipewire_conf, pw_sink_info
 from .profiles import REFUSED, describe_profiles, switch_profile
 from .reconcile import (
     channels_from_observed,
+    globals_from_observed,
     observed,
     render_config,
     routes_from_observed,
@@ -200,9 +201,11 @@ def _dump_config(config: Config) -> int:
                     osc_port=config.osc_port,
                     osc_recv_port=config.osc_recv_port,
                     routes=list(routes_from_observed(observed(seen))),
-                    channels=list(channels_from_observed(seen, model)))
-    log.info("read %d registers; %d input route(s) and %d channel "
-             "setting(s) reconstructed",
-             len(seen), len(dumped.routes), len(dumped.channels))
+                    channels=list(channels_from_observed(seen, model)),
+                    globals=list(globals_from_observed(seen, model)))
+    log.info("read %d registers; %d input route(s), %d channel setting(s) "
+             "and %d global setting(s) reconstructed",
+             len(seen), len(dumped.routes), len(dumped.channels),
+             len(dumped.globals))
     sys.stdout.write(render_config(dumped, model))
     return EXIT_OK

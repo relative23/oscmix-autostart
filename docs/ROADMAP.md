@@ -1632,6 +1632,44 @@ things came out of it that were not about EQ:
 Left: dynamics (322), auto level (162), low cut (120), crossfeed (20),
 and room EQ (320, blocked on #32).
 
+### The round trip now covers the new sections
+
+Point 3 of the bar, closed for both halves. Before this the dumper knew
+only about `[input:N]` and `[output:N]`: a dump of a fully configured
+device reconstructed 124 settings of the 604 it reports, and dropped
+every global and all 480 EQ registers without a word. Measured against
+the device now: **604 channel settings and 38 global settings, 840 lines
+against 232.**
+
+The fixed point that holds is *from the second render*, not the first,
+and the distinction is real rather than a weakened claim. A remembered
+value is written as a comment carrying the device's state (ADR 0012), so
+a family that is entirely remembered -- `[echo]` -- keeps its header
+while everything under it is a comment the parser is right to drop. The
+settings survive from the first render; the file is byte-stable from the
+second.
+
+Writing the round trip found two defects that the dumper's own output
+looked fine with:
+
+- **`mainout = -1` produced a config that would not load.**
+  `/controlroom/mainout` reports -1 for "no main out", and at the pinned
+  revision it arrives unnamed, so the dump wrote the raw index and the
+  parser refused the file whole (ADR 0006). A dump of a working device
+  that could not be read back. It is now a comment naming
+  michaelforney/oscmix#30 -- the state is real and worth seeing, it just
+  cannot be spelled as a setting yet.
+- **`wckout = true` came back as `wckout = 1`.** The renderer decided
+  true/false from the Python type, and a bool arrives as `True` from the
+  device but as `1` -- the wire form -- from the parser. Both parse, so
+  nothing ever failed; the dump of a dump simply stopped matching the
+  dump. Fixed the same way `_encode` was: ask the declared domain, not
+  the value.
+
+Neither is exotic, and neither would have been found by reading the
+output. That is the argument for point 3 being a fixed point rather than
+"the dump looks right".
+
 ### Room EQ is blocked on upstream
 
 The 320 Room EQ registers in the recording are a *folded* address space:
