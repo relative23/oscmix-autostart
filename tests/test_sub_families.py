@@ -95,15 +95,26 @@ def test_the_switch_is_a_bool_and_every_option_has_a_domain(family, sub):
     assert all(register.domain is not None for register in options.values())
 
 
+#: Q is the one conventionally unitless quantity here. Everything else
+#: with bounds has to say what its number is -- including the ones that
+#: are not physical: the ratios carry ":1" and `lowcut/slope` carries
+#: "index", because "3" of nothing is a number nobody can act on.
+UNITLESS_BY_CONVENTION = ("band1q", "band2q", "band3q")
+
+
 @pytest.mark.parametrize(("family", "sub"), FAMILIES, ids=IDS)
 def test_every_bounded_option_declares_a_unit(family, sub):
     """A bound with no unit is a number nobody can act on: `9.9` of what?
-    Only the dimensionless ones may leave it empty, and they say so by
-    having no bounds of a physical quantity -- `q` and the ratios."""
+
+    Kept as a sweep with one named exemption rather than a growing list.
+    `lowcut/slope` failed it, and the fix was to say what the value is
+    ("index") rather than to add it here -- which is the outcome this
+    test exists to force.
+    """
     for name, register in settable_nested(UCX2, sub, family).items():
         if register.domain != NUMBER or register.lo is None:
             continue
-        assert register.unit or name in ("band1q", "band2q", "band3q"), (
+        assert register.unit or name in UNITLESS_BY_CONVENTION, (
             "%s has bounds %s..%s and no unit"
             % (register.template, register.lo, register.hi))
 
@@ -122,11 +133,20 @@ def test_a_section_round_trips_through_a_dump(family, sub):
 
 
 def _plausible(register):
+    """A value inside the register's domain, bounded or not.
+
+    `lowcut/slope` carries no bounds -- upstream declares none, so the
+    model declares none either -- and the first version of this helper
+    reached straight for `register.lo`, which produced the string
+    "None" in a config file. The sweep found it on the family that
+    introduced the case, which is the argument for sweeping.
+    """
     if register.domain == BOOL:
         return (1,)
     if register.domain == NUMBER:
-        return (register.lo if register.tags.startswith("f")
-                else int(register.lo),)
+        value = register.lo if register.lo is not None else 0
+        return (float(value) if register.tags.startswith("f")
+                else int(value),)
     return (0, register.choices[0])
 
 
@@ -138,7 +158,7 @@ def test_a_config_section_writes_only_declared_paths(tmp_path, family, sub):
     for name, register in sorted(options.items()):
         if name == ENABLE_OPTION or register.domain != NUMBER:
             continue
-        lines.append("%s = %s" % (name, register.lo))
+        lines.append("%s = %s" % (name, _plausible(register)[0]))
     path = tmp_path / "routing.conf"
     path.write_text("[device]\nname = Fireface UCX II\n\n"
                     + "\n".join(lines) + "\n")

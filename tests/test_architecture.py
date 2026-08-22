@@ -274,6 +274,7 @@ def _defined_at(name):
 
 @pytest.mark.parametrize("name", ["_seq", "_EQ_BANDS", "_eq_registers",
                                   "_DYNAMICS_OPTIONS", "_AUTOLEVEL_OPTIONS",
+                                  "_LOWCUT_OPTIONS",
                                   "_sub_registers",
                                   "UCX2", "FF802", "DEVICES"])
 def test_the_register_table_is_inside_the_mutation_exemption(name):

@@ -660,8 +660,13 @@ def _parse_number(raw: str, section: str, option: str,
     declares no bound neither does the model, and this only checks that
     the text is a number -- inventing a range would reject values the
     device accepts, which is a config that will not load rather than an
-    error the device reports. What the hardware itself does with an
-    out-of-range value is not measured here.
+    error the device reports.
+
+    What the *hardware* does with an out-of-range value has been measured
+    once, and it clamps: `/output/5/lowcut/slope` returns 3 for 4, 7 and
+    -1 alike. One register at one revision is not a rule, so nothing here
+    relies on it -- but it is the reason `slope` carries bounds at all
+    when upstream declares none.
     """
     unit = getattr(register, "unit", "") or ""
     suffix = (" in %s" % unit) if unit else ""

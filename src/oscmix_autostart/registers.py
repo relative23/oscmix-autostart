@@ -303,6 +303,24 @@ _DYNAMICS_OPTIONS = (
     ("expratio", "f", 1.0, 10.0, ":1"),
 )
 
+#: `slope` carries no `.min`/`.max` upstream, so its bounds are the one
+#: pair here that came from the device rather than from the node table.
+#: Written and read back on `/output/5/lowcut/slope`: 0, 1, 2 and 3 come
+#: back as written, and 4, 7 and -1 all come back as **3** -- the device
+#: clamps. Four positions, which is the count RME's low cut has
+#: (6/12/18/24 dB/oct).
+#:
+#: The unit is "index", which is what the value is. The device holds 0
+#: and 1 where a dB/oct reading would hold 6 and 12, and which index
+#: means which steepness was not measured -- declaring "dB/oct" would
+#: make `slope = 1` read as one decibel per octave. Not an ENUM either:
+#: upstream takes it with `setint` and declares no names, so a config
+#: writing a name would send a string `oscgetint` drops.
+_LOWCUT_OPTIONS = (
+    ("freq", "i", 20.0, 500.0, "Hz"),
+    ("slope", "i", 0.0, 3.0, "index"),
+)
+
 _AUTOLEVEL_OPTIONS = (
     ("maxgain", "f", 0.0, 18.0, "dB"),
     ("headroom", "f", 3.0, 12.0, "dB"),
@@ -311,7 +329,8 @@ _AUTOLEVEL_OPTIONS = (
 
 
 def _sub_registers(family: str, sub: str,
-                   options: Tuple[Tuple[str, str, float, float, str], ...]
+                   options: Tuple[Tuple[str, str, Optional[float],
+                                        Optional[float], str], ...]
                    ) -> Tuple["Register", ...]:
     """One sub-family's rows: its own switch, then its options.
 
@@ -526,6 +545,8 @@ UCX2 = Device(
         *_sub_registers("output", "dynamics", _DYNAMICS_OPTIONS),
         *_sub_registers("input", "autolevel", _AUTOLEVEL_OPTIONS),
         *_sub_registers("output", "autolevel", _AUTOLEVEL_OPTIONS),
+        *_sub_registers("input", "lowcut", _LOWCUT_OPTIONS),
+        *_sub_registers("output", "lowcut", _LOWCUT_OPTIONS),
 
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),

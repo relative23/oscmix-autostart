@@ -1593,7 +1593,7 @@ answer questions this project has already had to work around --
 family this project has already measured is a family whose row can be
 written from a recording rather than from a datasheet.
 
-### The 1424 per-channel registers -- EQ, dynamics and auto level done, 462 left
+### The 1424 per-channel registers -- 964 done, 460 left
 
 Every current channel option is one flat word: `volume`, `reflevel`,
 `hi-z`. Everything left is nested -- `/input/3/eq/band1freq`,
@@ -1684,7 +1684,43 @@ point could be a coincidence; two cannot be the wrong scale. Restored
 afterwards, and the dump before and after is identical over all 1480
 lines.
 
-Left: low cut (120), crossfeed (20), and room EQ (320, blocked on #32).
+**Low cut is done**, and it is the family that found the limits of the
+sweep and of the "bounds come from upstream" rule.
+
+`freq` is upstream's: `.min=20 .max=500`, no scale. `slope` has **no
+bounds upstream at all**, so they came from the device instead --
+written and read back on `/output/5/lowcut/slope`, 0, 1, 2 and 3 return
+as written and 4, 7 and -1 all return **3**. The device clamps, at four
+positions, which is the count RME's low cut has.
+
+That is the one pair of bounds in the model taken from the hardware
+rather than from the node table, and it settles a question
+`_parse_number` had left open: *the hardware does clamp*, at least here.
+One register at one revision is not a rule and nothing relies on it, but
+it is why declaring 0..3 is a measurement rather than the invention the
+rule warns against.
+
+**`slope` is an index, and saying so was the finding.** The device holds
+0 and 1 where a dB/oct reading would hold 6 and 12. Declared "dB/oct" --
+which is what it looks like -- `slope = 1` would read as one decibel per
+octave. It carries the unit `index` instead, and which index means which
+steepness was not measured, so nothing claims it. Nor is it an ENUM:
+upstream takes it with `setint` and declares no names, so a config
+writing "12 dB/oct" would send a string `oscgetint` drops without a word.
+
+Measured audibly: a 60 Hz tone into output 5 sits at -49.4 dBFS, and the
+filter at 500 Hz with slope 3 takes it to **-76.3 dBFS, -26.9 dB**.
+Restored afterwards; the dump before and after is identical over all
+1680 lines, including after writing 4, 7 and -1 to probe the clamp.
+
+The sweep in `test_sub_families.py` earned itself here twice. It caught
+that its own value generator reached for `register.lo` on an option that
+has none -- writing the string "None" into a config -- and it caught
+`slope` carrying bounds with no unit. The second one was fixed by saying
+what the number is rather than by adding an exemption, which is the
+outcome that test exists to force.
+
+Left: crossfeed (20), and room EQ (320, blocked on #32).
 
 ### Nested options were classified as promptly reported, and are not
 
