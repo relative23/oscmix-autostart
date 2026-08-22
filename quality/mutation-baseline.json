@@ -50,7 +50,20 @@
     "`split(\"/\", 2)`, which are equivalent while no path remainder has",
     "two slashes; the rest are message text. One real looseness turned",
     "up and was fixed: `settable_nested` answered for childless options,",
-    "so `[gain:input:3]` was rejected only by a second guard elsewhere."
+    "so `[gain:input:3]` was rejected only by a second guard elsewhere.",
+    "",
+    "0.68 -> 0.69 (2026-08-22), on the round trip for the dump's new",
+    "sections. The score rose while the code grew, which is the unusual",
+    "direction: a fixed-point test drives every branch of the renderer",
+    "over the whole register table and compares the file byte for byte,",
+    "so a mutant that survives a line-by-line assertion changes the file",
+    "and dies. 4711 -> 4874 mutants, 0.685 -> 0.692.",
+    "",
+    "The rise is measured on CI rather than locally -- see",
+    "confirmed_by_ci -- because that run is the one that exercised this",
+    "commit. The `measured` block below is still the previous commit's",
+    "local run and is the older of the two numbers; it stays until a",
+    "local run on this tree replaces it."
   ],
   "measured": {
     "total": 4711,
@@ -73,26 +86,36 @@
     ]
   },
   "confirmed_by_ci": {
-    "run": 32059176310,
-    "commit": "afed144",
-    "killed": 1722,
-    "survived": 912,
+    "run": 32537410701,
+    "commit": "07ee560",
+    "killed": 3316,
+    "survived": 1476,
     "not_covered": 82,
-    "score": 0.654,
+    "score": 0.692,
     "note": [
-      "Measured independently on a GitHub runner. Five mutants differ,",
-      "which is the timing-sensitive tail: the suite binds real UDP",
-      "sockets and drives threads. not_covered agrees exactly, and that",
-      "is the number a re-baseline turns on."
+      "The measurement this min_score is set from. Ten green jobs; the",
+      "policy printed 'score rose to 0.692; raise min_score' itself,",
+      "which is what this change does.",
+      "",
+      "Earlier CI runs measured below the local score (0.654 against",
+      "0.685 on afed144). This one is above it, and the difference is",
+      "the commit rather than the runner: CI ran the tree with the new",
+      "round-trip tests, the local 0.685 did not."
     ]
   },
-  "min_score": 0.68,
+  "min_score": 0.69,
   "tolerance": 0.01,
   "floor_note": [
-    "The gate is min_score - tolerance = 0.64. That is the number that",
-    "matters: the score may not fall below it. min_score itself is set",
-    "at the measured 0.655 rounded down, so the policy neither fails",
-    "nor nags on the run it was recorded from -- a baseline that prints",
-    "'raise me' on every CI run teaches people to ignore it."
+    "The gate is min_score - tolerance = 0.68. That is the number that",
+    "matters: the score may not fall below it. min_score is set at the",
+    "measured score rounded down to the hundredth, so the policy neither",
+    "fails nor nags on the run it was recorded from -- a baseline that",
+    "prints 'raise me' on every CI run teaches people to ignore it.",
+    "",
+    "Raising it is a ratchet and costs something: at 0.69 the floor is",
+    "0.68, and the last local measurement was 0.685. A change that adds",
+    "code faster than tests now has 0.005 of room on that measurement",
+    "rather than 0.015. That is the point of a ratchet, but it means the",
+    "next fall will be a failure rather than a warning."
   ]
 }
