@@ -10,8 +10,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # A newer PR revision makes an older run obsolete; main runs are kept.
+  # Per commit on push, per ref on a pull request, and the difference
+  # is not cosmetic. A concurrency group holds one running run and one
+  # queued run; a third arrival displaces the *queued* one. With every
+  # push to main sharing one group, three pushes inside an hour meant
+  # the middle commit was cancelled before a single job started --
+  # dd44ebb, 0 jobs, conclusion "cancelled", while the comment here
+  # claimed main runs were kept. A commit reached main with no CI at
+  # all. github.sha gives each push its own group, so nothing queues
+  # behind anything; pull requests still share a group per ref, which
+  # is what makes a newer revision cancel an older one.
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request'
+    && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

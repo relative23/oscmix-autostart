@@ -67,3 +67,45 @@ def test_no_timeout_is_anywhere_near_the_default():
             too_generous[job] = int(found.group(1))
     assert too_generous == {}, (
         "these are long enough to hide a hang: %s" % too_generous)
+
+
+# --------------------------------------------------------------------------
+# The concurrency group, which decides whether a commit is tested at all.
+# --------------------------------------------------------------------------
+
+def _concurrency(name="ci.yml"):
+    """The `concurrency:` block, comments stripped and folded to one line.
+
+    `group:` is a folded scalar over two lines, so a test that matched
+    the raw text would break on a rewrap rather than on a change of
+    meaning.
+    """
+    text = repo_file(".github", "workflows", name).read_text()
+    match = re.search(r"\nconcurrency:\n(.*?)\n\w", text, re.DOTALL)
+    assert match, "no concurrency block -- this test judges nothing"
+    body = [line.split("#")[0] for line in match.group(1).splitlines()]
+    return " ".join(" ".join(body).split())
+
+
+def test_a_push_gets_its_own_concurrency_group():
+    """Otherwise a commit can reach main having run no jobs at all.
+
+    A group holds one running run and one queued run, and a third
+    arrival cancels the queued one. Three pushes to main inside an hour
+    did exactly that: the middle run reported `cancelled` with zero jobs
+    and nothing was ever tested on that commit. Keying the group on the
+    commit means no push run can ever be queued behind another.
+    """
+    assert "github.sha" in _concurrency()
+
+
+def test_a_pull_request_still_supersedes_its_own_older_revisions():
+    """The behaviour the group existed for in the first place: pushing a
+    fix to a PR should not leave the previous revision burning runners.
+    Both halves have to be there, so the fix above cannot be "drop the
+    grouping entirely"."""
+    group = _concurrency()
+    assert "github.ref" in group
+    assert "github.event_name == 'pull_request'" in group
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" \
+        in group
