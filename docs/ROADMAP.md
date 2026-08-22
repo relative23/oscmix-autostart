@@ -88,13 +88,22 @@ a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
 the honest answer today is "turn it in the GUI, and hope nothing resets
 it" -- which is the same answer TotalMix gives, minus the snapshot.
 
-## Where we are (0.3.0, unreleased)
+## Where we are (0.3.0 released, 0.4.0 in progress)
+
+**0.3.0 was tagged and published on 2026-08-20.** 0.4.0 is under way:
+6 of its 11 register families are declared and measured at the device --
+the five global ones and EQ, 522 of 1466 registers. What is left is
+under [0.4.0](#040----the-rest-of-the-strip-and-what-it-costs).
 
 Working and verified: playback→output and **hardware input** routing for
 mono and stereo pairs, stereo linking with the ordering that requires,
 output faders, per-channel state (`gain`, `reflevel`, `hi-z`, `mute`,
-`phase`, `volume`), profiles, PipeWire named sinks, hotplug autostart,
-readiness signalling, routing read-back, and reconcile on SIGHUP.
+`phase`, `volume`), EQ on every input and output, the five channel-less
+families (`[clock]`, `[controlroom]`, `[echo]`, `[hardware]`,
+`[reverb]`), profiles, PipeWire named sinks, hotplug autostart,
+readiness signalling, routing read-back, `--dump-config` over every
+declared register the device reports (the playback matrix is not one of
+them -- ADR 0002), and reconcile on SIGHUP and resume.
 
 Three release-blocking defects in 0.1.3 were found by measuring output
 levels off the wire, not by reading code. Two of them were invisible at
@@ -114,6 +123,11 @@ What 0.3.0 moved (2026-08-20):
 | register model | none | 18 families, 9 settable, per-device channel maps |
 | decisions recorded | ADR 0001-0010 | ADR 0001-0013 |
 | upstream pin | 2411b12d | unchanged -- no bump, so no new evidence owed |
+
+Since the tag, on `main`: 5133 runtime lines, 743 test cases, 84
+register rows of which 71 are settable, mutation 0.692 with the floor at
+0.68, and ADR 0001-0014. Those are 0.4.0 in progress, not 0.3.0 -- the
+table above is the released record and stays as it was measured.
 
 **What the release is, in one line:** 0.2.0 made the existing behaviour
 provable; 0.3.0 spends that on surface, and every piece of it was
