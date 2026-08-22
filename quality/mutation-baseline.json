@@ -62,28 +62,51 @@
     "Measured locally on this tree at 0.693 (58 min, cache cleared), and",
     "on CI at 0.692 -- see confirmed_by_ci. The two agree to a thousandth,",
     "which they have not before: earlier CI runs sat well below the local",
-    "score. Both are above the 0.68 floor this raise sets."
+    "score. Both are above the 0.68 floor this raise sets.",
+    "",
+    "0.69 -> 0.71 (2026-08-22), and this rise is a *denominator* change,",
+    "not better tests. ADR 0015 exempts the register table from mutation:",
+    "it is built at import time, which mutmut cannot attribute to a",
+    "covering test, so it ran a subset that did not contain the test that",
+    "would kill the mutant and reported a survivor the full suite kills.",
+    "Verified by hand twice -- three `_eq_registers` mutants above, and",
+    "`_seq` losing its `+ 1`, which fails",
+    "test_an_option_the_channel_does_not_have_is_refused.",
+    "",
+    "159 survivors left the denominator; killed moved by 9. registers.py",
+    "went from ~180 survivors to 14, and all 14 are in functions that",
+    "*query* the table, which is where they belong. What now checks the",
+    "table is tests/data/refresh-dump.json -- every path and every type",
+    "tag against what the device reports.",
+    "",
+    "min_score follows floor_note's own rule rather than the rise: set at",
+    "the measured score rounded down, so the policy neither fails nor",
+    "nags. The reason it is safe to move now and was not before is that",
+    "the erosion mechanism is gone -- auto level, low cut and crossfeed",
+    "are the same shape as dynamics and will add their rows inside the",
+    "exemption, so they cannot walk the score down 0.005 at a time."
   ],
   "measured": {
+    "total": 4741,
+    "killed": 3319,
+    "survived": 1340,
+    "not_covered": 82,
+    "score": 0.712,
+    "run_minutes": 57,
+    "cache": "cleared before the run, as CI does",
+    "scope": "register table exempt (ADR 0015); registers.py keeps 14 survivors, all in functions that query the table"
+  },
+  "previous": {
+    "recorded": "2026-08-22",
     "total": 4885,
     "killed": 3321,
     "survived": 1473,
     "not_covered": 82,
-    "timeout": 9,
     "score": 0.693,
-    "run_minutes": 58,
-    "cache": "cleared before the run, as CI does"
-  },
-  "previous": {
-    "recorded": "2026-08-21",
-    "total": 4711,
-    "killed": 3172,
-    "survived": 1457,
-    "not_covered": 82,
-    "score": 0.685,
     "why_it_moved": [
-      "0.4.0's EQ family: 480 registers of new data, and mutmut",
-      "attributes none of `_eq_registers` to a covering test."
+      "The last run with the register table still in the denominator.",
+      "Dynamics had taken it from 0.692 to 0.687 by adding 32 survivors",
+      "that no test could be attributed to; ADR 0015 took the table out."
     ]
   },
   "confirmed_by_ci": {
@@ -104,19 +127,20 @@
       "round-trip tests, the local 0.685 did not."
     ]
   },
-  "min_score": 0.69,
+  "min_score": 0.71,
   "tolerance": 0.01,
   "floor_note": [
-    "The gate is min_score - tolerance = 0.68. That is the number that",
+    "The gate is min_score - tolerance = 0.70. That is the number that",
     "matters: the score may not fall below it. min_score is set at the",
     "measured score rounded down to the hundredth, so the policy neither",
     "fails nor nags on the run it was recorded from -- a baseline that",
     "prints 'raise me' on every CI run teaches people to ignore it.",
     "",
-    "Raising it is a ratchet and costs something: at 0.69 the floor is",
-    "0.68, and the last local measurement was 0.685. A change that adds",
-    "code faster than tests now has 0.005 of room on that measurement",
-    "rather than 0.015. That is the point of a ratchet, but it means the",
-    "next fall will be a failure rather than a warning."
+    "0.012 of headroom on the measured 0.712, which is the same margin",
+    "0.69 had. The difference is what eats it: before ADR 0015 every new",
+    "register family spent some, because its rows landed in the",
+    "denominator unattributable. Now they land inside the exemption, and",
+    "what moves the score is what should -- assertions getting better or",
+    "worse."
   ]
 }

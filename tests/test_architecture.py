@@ -237,3 +237,61 @@ def test_every_public_name_is_exercised_by_some_test(session_mod):
                       if name not in named_in_tests())
     assert untested == [], (
         "declared in __all__ but named by no test: %s" % untested)
+
+
+# --------------------------------------------------------------------------
+# The mutation exemption, ADR 0015.
+# --------------------------------------------------------------------------
+
+def _exempt_lines():
+    """(first, last) line of the `no mutate` region in registers.py."""
+    source = (PACKAGE / "registers.py").read_text().splitlines()
+    starts = [i for i, line in enumerate(source, 1)
+              if line.strip() == "# pragma: no mutate start"]
+    ends = [i for i, line in enumerate(source, 1)
+            if line.strip() == "# pragma: no mutate end"]
+    assert len(starts) == 1, "expected one no-mutate start, found %d" % len(starts)
+    assert len(ends) == 1, "expected one no-mutate end, found %d" % len(ends)
+    assert starts[0] < ends[0]
+    return starts[0], ends[0]
+
+
+def _defined_at(name):
+    """The line a top-level name is bound on in registers.py."""
+    for node in ast.walk(parse(PACKAGE / "registers.py")):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node.lineno
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    return node.lineno
+        if (isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == name):
+            return node.lineno
+    raise AssertionError("registers.py defines no %s" % name)
+
+
+@pytest.mark.parametrize("name", ["_seq", "_EQ_BANDS", "_eq_registers",
+                                  "_DYNAMICS_OPTIONS", "_dynamics_registers",
+                                  "UCX2", "FF802", "DEVICES"])
+def test_the_register_table_is_inside_the_mutation_exemption(name):
+    """ADR 0015: the data is checked by the recordings, not by mutmut."""
+    first, last = _exempt_lines()
+    assert first < _defined_at(name) < last
+
+
+@pytest.mark.parametrize("name", ["device_for_name", "settable_options",
+                                  "settable_nested", "nested_families",
+                                  "register_at", "cold_plug_complete",
+                                  "declared_paths", "register_policy",
+                                  "verify_class", "settable_globals"])
+def test_everything_that_queries_the_table_stays_under_mutation(name):
+    """The half of ADR 0015 that keeps it honest.
+
+    Exempting data is defensible because the recordings check it harder.
+    Exempting the functions that read that data would not be -- a wrong
+    answer there is behaviour, and nothing else is measuring it.
+    """
+    _, last = _exempt_lines()
+    assert _defined_at(name) > last

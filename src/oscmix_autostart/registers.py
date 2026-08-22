@@ -213,6 +213,25 @@ class Device:
         return channel in self.channels_for(capability)
 
 
+# --------------------------------------------------------------------------
+# The register table itself, exempt from mutation. ADR 0015.
+#
+# Everything from here to the end of the device literals is the table:
+# the channel-map helper, the two loops that expand a row table into
+# rows, and the device literals themselves. It is all built at import
+# time, which is what mutmut cannot attribute to a covering test -- it
+# runs a subset that does not contain the test which would kill the
+# mutant, and reports a survivor that the full suite kills. Verified by
+# hand for `_eq_registers` (three mutants) and for `_seq` (dropping the
+# `+ 1` fails test_an_option_the_channel_does_not_have_is_refused).
+#
+# What checks it instead is `tests/data/refresh-dump.json`, which fixes
+# every path and every type tag against what the device reports -- a
+# stricter statement than a surviving mutant. ADR 0015 has the numbers.
+# --------------------------------------------------------------------------
+
+# pragma: no mutate start
+
 def _seq(first: int, last: int) -> Tuple[int, ...]:
     return tuple(range(first, last + 1))
 
@@ -525,6 +544,13 @@ FF802 = Device(
 )
 
 DEVICES: Tuple[Device, ...] = (UCX2, FF802)
+
+# pragma: no mutate end
+
+# --------------------------------------------------------------------------
+# Back under mutation from here: everything below queries the table, and
+# a wrong answer there is behaviour rather than data.
+# --------------------------------------------------------------------------
 
 
 def device_for_name(name: str) -> Optional[Device]:

@@ -25,3 +25,4 @@ silences half the outputs.
 | [0012](0012-pin-and-remember.md) | Pin and remember are a column in the register table |
 | [0013](0013-reconcile-triggers.md) | Reconcile on events, never on a clock |
 | [0014](0014-nested-config-sections.md) | Nested settings go in `[<family>:<channel-family>:<n>]` |
+| [0015](0015-the-register-table-is-not-mutated.md) | The register table is exempt from mutation, and checked against recordings instead |
