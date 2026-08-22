@@ -32,7 +32,7 @@ def test_the_options_come_from_the_register_model():
     assert set(registers.settable_options(registers.UCX2, "input")) == {
         "gain", "hi-z", "mute", "phase", "reflevel"}
     assert set(registers.settable_options(registers.UCX2, "output")) == {
-        "mute", "phase", "reflevel", "volume"}
+        "crossfeed", "mute", "phase", "reflevel", "volume"}
 
 
 def test_phantom_power_is_modelled_but_not_settable():
@@ -98,10 +98,14 @@ def test_the_device_s_own_vocabulary_is_the_only_one_accepted(session_mod,
 
 
 def test_an_unknown_option_lists_what_is_valid(session_mod, tmp_path):
+    # A name that cannot land, not a real option this version lacks.
+    # This test used `crossfeed`, which 0.4.0 then declared -- at which
+    # point it asserted that a *known* option is rejected. Same trap the
+    # forward-compatible section shapes fell into.
     with pytest.raises(session_mod.ConfigError) as excinfo:
         session_mod.load_config(write(tmp_path, DEVICE +
-                                      "[output:5]\ncrossfeed = 3\n"))
-    assert "mute, phase, reflevel, volume" in str(excinfo.value)
+                                      "[output:5]\nnosuchoption = 3\n"))
+    assert "crossfeed, mute, phase, reflevel, volume" in str(excinfo.value)
 
 
 def test_a_gain_outside_the_range_is_refused(session_mod, tmp_path):

@@ -405,6 +405,19 @@ UCX2 = Device(
         Register("/output/{ch}/phase", "i", VERIFIABLE, "output", BOOL),
         Register("/output/{ch}/reflevel", "is", VERIFIABLE, "output-reflevel", ENUM,
                  ("+4dBu", "+13dBu", "+19dBu"), policy=PIN),
+        # Crossfeed: the last of 0.4.0's per-channel families and the only
+        # *flat* one, so it lives here rather than in a sub-family table.
+        # Upstream declares no bounds -- `{"crossfeed", OUTPUT_CROSSFEED,
+        # .set=setint, .new=newint}` -- so 0..5 came from the device:
+        # written and read back on /output/7/crossfeed, 0 through 5 return
+        # as written and 6, 10, 99 and -1 all return 5. Six positions,
+        # which is Off plus the five TotalMix offers.
+        #
+        # `index` for the same reason as `lowcut/slope`: 0 is off and the
+        # rest are increasing amounts, but what each step does was not
+        # measured, so nothing here claims a scale.
+        Register("/output/{ch}/crossfeed", "i", VERIFIABLE, "output", NUMBER,
+                 lo=0.0, hi=5.0, unit="index"),
 
         # --- global: no channel dimension (0.4.0) ----------------------
         # The echo send. Bounds and names are upstream's node table

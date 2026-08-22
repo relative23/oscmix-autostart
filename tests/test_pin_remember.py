@@ -94,6 +94,11 @@ def test_every_settable_option_has_a_deliberate_policy():
     decided = {
         "stereo": PIN, "hi-z": PIN, "gain": PIN, "reflevel": PIN,
         "volume": REMEMBER, "mute": REMEMBER, "phase": REMEMBER,
+        # A headphone listening preference, not installation state: it
+        # changes how a mix sounds to one listener and breaks nothing if
+        # somebody turns it. ADR 0003's default, decided rather than
+        # inherited -- which is what this test is for.
+        "crossfeed": REMEMBER,
     }
     for family in ("input", "output"):
         for option, register in settable_options(UCX2, family).items():

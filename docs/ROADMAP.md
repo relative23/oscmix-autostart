@@ -1593,7 +1593,7 @@ answer questions this project has already had to work around --
 family this project has already measured is a family whose row can be
 written from a recording rather than from a datasheet.
 
-### The 1424 per-channel registers -- 964 done, 460 left
+### The 1424 per-channel registers -- 1084 declared, 320 left and blocked
 
 Every current channel option is one flat word: `volume`, `reflevel`,
 `hi-z`. Everything left is nested -- `/input/3/eq/band1freq`,
@@ -1720,7 +1720,40 @@ has none -- writing the string "None" into a config -- and it caught
 what the number is rather than by adding an exemption, which is the
 outcome that test exists to force.
 
-Left: crossfeed (20), and room EQ (320, blocked on #32).
+**Crossfeed is declared, and it is the one family in this release whose
+point 4 is not met.** Everything else about it is done: 20 registers,
+`/output/{ch}/crossfeed`, the only *flat* per-channel option of 0.4.0 --
+it belongs in `[output:5]`, not a section of its own. Upstream declares
+no bounds, so 0..5 came from the device: 0 through 5 return as written
+and 6, 10, 99 and -1 all return **5**. Six positions, Off plus the five
+TotalMix offers. `index` again, for the same reason as `lowcut/slope`.
+
+Being flat rather than nested made it the first new option in
+`settable_options` since 0.3.0, which moved three existing tests: the
+per-option policy table (it forces a REMEMBER/PIN decision rather than
+letting one be inherited -- exactly what it is for), the list of valid
+options in an error message, and a test that had been using the word
+"crossfeed" as an example of a name this version does *not* know. That
+is the third time a test has named a family that later landed.
+
+**What is missing is the audible measurement.** Crossfeed is a
+controlled L/R blend for headphones, so the measurement is the
+definition: a left-only tone into the phones pair should appear on the
+right output as the setting rises. The first attempt did not hold up --
+output 8 already showed -40.7 dBFS at crossfeed 0, and the *same*
+setting read -39.5 dBFS and then -41.7 dBFS, about 2 dB of wander
+against an effect of the same size. It was not repeated because the
+mixer GUI took UDP 8222, and `LevelReader` refuses to compete for the
+device's replies rather than produce quietly wrong numbers.
+
+So this family is **not done by the bar**, and the release should not
+say otherwise. It needs one measurement session with the GUI closed:
+establish that a left-only tone really is isolated at outputs 7/8 with
+crossfeed off, then step 0 -> 3 -> 5 and read the bleed. Until then the
+declaration rests on the register probe, which is solid, and on nothing
+audible, which is not.
+
+Left: room EQ (320, blocked on #32).
 
 ### Nested options were classified as promptly reported, and are not
 
