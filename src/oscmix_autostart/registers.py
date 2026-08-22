@@ -287,12 +287,12 @@ def _eq_registers(family: str) -> Tuple["Register", ...]:
 
 
 
-#: The dynamics options, in upstream's own order, as
-#: (name, tags, lo, hi, unit). Bounds are upstream's `.min`/`.max`
-#: *after* `.scale`: `setfixed` sends the scaled value and divides by
-#: the scale on the way in, so a node with min=-300 max=300 scale=0.1
-#: is -30.0..30.0 to a config. Getting that backwards would declare
-#: every range ten times too wide.
+#: Sub-family option tables, as (name, tags, lo, hi, unit) in upstream's
+#: own order. Bounds are upstream's `.min`/`.max` *after* `.scale`:
+#: `setfixed` divides the OSC value by the scale on the way in, so a node
+#: with min=-300 max=300 scale=0.1 is -30.0..30.0 to a config. Getting
+#: that backwards would declare every range ten times too wide, and
+#: upstream enforces none of them -- see `config._parse_number`.
 _DYNAMICS_OPTIONS = (
     ("gain", "f", -30.0, 30.0, "dB"),
     ("attack", "i", 0.0, 200.0, "ms"),
@@ -303,18 +303,29 @@ _DYNAMICS_OPTIONS = (
     ("expratio", "f", 1.0, 10.0, ":1"),
 )
 
+_AUTOLEVEL_OPTIONS = (
+    ("maxgain", "f", 0.0, 18.0, "dB"),
+    ("headroom", "f", 3.0, 12.0, "dB"),
+    ("risetime", "f", 0.1, 9.9, "s"),
+)
 
-def _dynamics_registers(family: str) -> Tuple["Register", ...]:
-    """The eight dynamics rows for one channel family.
 
-    `/X/{ch}/dynamics/meter` is deliberately absent. It is streamed and
-    has no `.set` upstream, so it is not a setting -- the model declares
-    no meters, and the recording shows it arriving for whichever
-    channels happened to be moving.
+def _sub_registers(family: str, sub: str,
+                   options: Tuple[Tuple[str, str, float, float, str], ...]
+                   ) -> Tuple["Register", ...]:
+    """One sub-family's rows: its own switch, then its options.
+
+    The switch carries a value as well as a subtree (`/input/3/dynamics`
+    is a bool), which is the shape ADR 0014 spells `enabled`.
+
+    `.../meter` is deliberately absent from every table here. It is
+    streamed and has no `.set` upstream, so it is not a setting -- the
+    model declares no meters, and the recording shows one arriving only
+    for whichever channels happened to be moving.
     """
-    prefix = "/%s/{ch}/dynamics" % family
+    prefix = "/%s/{ch}/%s" % (family, sub)
     rows = [Register(prefix, "i", VERIFIABLE, family, BOOL)]
-    for name, tags, lo, hi, unit in _DYNAMICS_OPTIONS:
+    for name, tags, lo, hi, unit in options:
         rows.append(Register("%s/%s" % (prefix, name), tags, VERIFIABLE,
                              family, NUMBER, lo=lo, hi=hi, unit=unit))
     return tuple(rows)
@@ -511,8 +522,10 @@ UCX2 = Device(
         # it. A config that wants otherwise says so with [pin].
         *_eq_registers("input"),
         *_eq_registers("output"),
-        *_dynamics_registers("input"),
-        *_dynamics_registers("output"),
+        *_sub_registers("input", "dynamics", _DYNAMICS_OPTIONS),
+        *_sub_registers("output", "dynamics", _DYNAMICS_OPTIONS),
+        *_sub_registers("input", "autolevel", _AUTOLEVEL_OPTIONS),
+        *_sub_registers("output", "autolevel", _AUTOLEVEL_OPTIONS),
 
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),

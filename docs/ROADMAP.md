@@ -1593,7 +1593,7 @@ answer questions this project has already had to work around --
 family this project has already measured is a family whose row can be
 written from a recording rather than from a datasheet.
 
-### The 1424 per-channel registers -- EQ and dynamics done, 622 left
+### The 1424 per-channel registers -- EQ, dynamics and auto level done, 462 left
 
 Every current channel option is one flat word: `volume`, `reflevel`,
 `hi-z`. Everything left is nested -- `/input/3/eq/band1freq`,
@@ -1668,8 +1668,23 @@ Three things came out of it that were not in the plan:
   moved it by one.
 - **Nested options were escaping the cold-plug rule.** Below.
 
-Left: auto level (162), low cut (120), crossfeed (20), and room EQ
-(320, blocked on #32).
+**Auto level is done**, and it is the number that says whether the
+nested shape paid off: 160 registers for one option table of three rows
+and a bounds test. Everything else came from the sweep in
+`tests/test_sub_families.py`, which now checks all six sub-families --
+declared paths equal reported paths in both directions, declared tags
+equal reported tags, no meter is a setting, and each section
+round-trips. Low cut and crossfeed inherit that for free.
+
+Measured at the device, two points rather than one: with the signal
+~49 dB below the headroom target the limit binds, so the rise should
+equal `maxgain` exactly. `maxgain = 6.0` lifted output 5 from -49.4 to
+-43.4 dBFS, and `maxgain = 12.0` to -37.4 -- **+6.0 and +12.0 dB.** One
+point could be a coincidence; two cannot be the wrong scale. Restored
+afterwards, and the dump before and after is identical over all 1480
+lines.
+
+Left: low cut (120), crossfeed (20), and room EQ (320, blocked on #32).
 
 ### Nested options were classified as promptly reported, and are not
 
