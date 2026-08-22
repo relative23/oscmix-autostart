@@ -471,10 +471,16 @@ def test_the_channels_a_valid_config_uses_are_still_accepted(session_mod):
 # than being claimed by the dispatch and then rejected -- which is the
 # failure ADR 0014 measured in 0.3.0. Naming a family that later lands
 # would only re-test that it landed.
+#
+# That warning was written here and then ignored two lines below it:
+# the list named `dynamics` and `roomeq`, and when dynamics landed this
+# test started asserting that a *known* section warns as unknown, which
+# it does not. Synthetic names only, now -- the test is about the
+# dispatch, and a real family name adds nothing to it.
 FORWARD_COMPATIBLE_SHAPES = (
     "[nosuchthing:input:3]\nband1freq = 80\n",
-    "[dynamics:output:5]\ncompthres = -18.0\n",
-    "[roomeq:output:1]\nband1gain = -3.0\n",
+    "[notafamily:output:5]\ncompthres = -18.0\n",
+    "[stillnothing:output:1]\nband1gain = -3.0\n",
 )
 
 REFUSED_SHAPES = (

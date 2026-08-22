@@ -40,8 +40,11 @@ def _conf(tmp_path, body):
 def test_the_eq_is_declared_for_both_families():
     from oscmix_autostart.registers import declared_paths
 
-    assert nested_families(UCX2, "input") == ("eq",)
-    assert nested_families(UCX2, "output") == ("eq",)
+    # Membership rather than equality: the tuple grows with every nested
+    # family, and pinning it here would make this EQ test fail for
+    # reasons that have nothing to do with EQ.
+    assert "eq" in nested_families(UCX2, "input")
+    assert "eq" in nested_families(UCX2, "output")
     assert len([p for p in declared_paths(UCX2) if "/eq" in p]) == 480
 
 

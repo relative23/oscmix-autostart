@@ -17,7 +17,7 @@ from .registers import (
     Device,
     cold_plug_complete,
     device_for_name,
-    settable_options,
+    register_at,
     verify_class,
 )
 from .routing import (
@@ -146,13 +146,19 @@ def register_promptly_reported(path: str,
 
 
 def _is_channel_state(device: Device, path: str) -> bool:
-    """Whether the model declares this path as something a config sets."""
-    for family in ("input", "output"):
-        if path.startswith("/%s/" % family):
-            option = path.rsplit("/", 1)[-1]
-            if option in settable_options(device, family):
-                return True
-    return False
+    """Whether the model declares this path as something a config sets.
+
+    Asked the register model rather than `settable_options`, which knows
+    only the *flat* options of a family. Every nested one answered "not
+    channel state" and so skipped the cold-plug rule written for exactly
+    this -- 480 EQ registers, of which a cold plug delivers 332, each
+    one classified as promptly reported and therefore re-sent on every
+    hotplug. Declaring dynamics would have added 320 more.
+    """
+    register = register_at(device, path)
+    return (register is not None and register.domain is not None
+            and register.template.startswith(("/input/{ch}/",
+                                              "/output/{ch}/")))
 
 @dataclass
 class VerifyResult:

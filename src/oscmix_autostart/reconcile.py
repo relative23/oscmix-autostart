@@ -59,10 +59,10 @@ from .registers import (
     VERIFIABLE,
     Device,
     Register,
-    _matches,
     device_for_name,
     global_families,
     nested_families,
+    register_at,
     register_policy,
     settable_globals,
     settable_nested,
@@ -786,7 +786,7 @@ def _global_sections(config: Config, device: Optional[Device]) -> List[str]:
 def _setting_line(name: str, value: object, path: str,
                   device: Optional[Device]) -> str:
     """One config line, live or commented, with the reason for commenting."""
-    register = _register_at(device, path)
+    register = register_at(device, path)
     entry = "%s = %s" % (name, _render_value(value, register))
     if register is not None and _unnameable(register, value):
         return ("# %s   # this backend reports no name for it; see "
@@ -794,17 +794,6 @@ def _setting_line(name: str, value: object, path: str,
     if policy_for(path, device) == PIN:
         return entry
     return "# %s   # remembered: the device's value wins" % entry
-
-
-def _register_at(device: Optional[Device],
-                 path: str) -> "Optional[Register]":
-    """The register a concrete path belongs to, or None."""
-    if device is None:
-        return None
-    for register in device.registers:
-        if _matches(register.template, path):
-            return register
-    return None
 
 
 def _render_value(value: object, register: "Optional[Register]" = None) -> str:

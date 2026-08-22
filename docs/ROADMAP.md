@@ -1593,7 +1593,7 @@ answer questions this project has already had to work around --
 family this project has already measured is a family whose row can be
 written from a recording rather than from a datasheet.
 
-### The 1424 per-channel registers -- EQ done, 944 left
+### The 1424 per-channel registers -- EQ and dynamics done, 622 left
 
 Every current channel option is one flat word: `volume`, `reflevel`,
 `hi-z`. Everything left is nested -- `/input/3/eq/band1freq`,
@@ -1643,8 +1643,55 @@ things came out of it that were not about EQ:
   without writing, and a write draws no reply. Parsed, validated, on the
   wire, device unchanged. `/echo/feedback` had the same latent bug.
 
-Left: dynamics (322), auto level (162), low cut (120), crossfeed (20),
-and room EQ (320, blocked on #32).
+**Dynamics is done** -- 320 registers, eight options on 40 channels, and
+the first family added *after* the nested shape existed. It cost a
+table of eight rows and no new machinery: `[dynamics:input:3]` parses,
+dumps and round-trips because ADR 0014's sections are generic. The dump
+of the development machine went from 840 lines to 1240.
+
+Three things came out of it that were not in the plan:
+
+- **Upstream declares bounds and does not enforce them.** `.min` and
+  `.max` are read nowhere at the pinned revision -- `setfixed` and
+  `setint` both end in `setval`, which converts the control to a
+  register and writes, with no comparison in between. So the config
+  parser's range check is not a second opinion agreeing with oscmix; it
+  is the only thing between a file and the register. `_parse_number`
+  said the opposite and now says this.
+- **The bounds are scaled, and getting that backwards is invisible.**
+  `setfixed` divides the OSC value by `.scale`, so `min=-300 max=300
+  scale=0.1` is -30.0..30.0 to a config, not -300..300. Declared the
+  raw way, every range would be ten times too wide and every
+  out-of-range value would reach the device. Measured rather than
+  argued: `gain = -10.0` on output 5 moved the device's own level meter
+  from -49.4 to -59.5 dBFS, exactly 10 dB. The raw reading would have
+  moved it by one.
+- **Nested options were escaping the cold-plug rule.** Below.
+
+Left: auto level (162), low cut (120), crossfeed (20), and room EQ
+(320, blocked on #32).
+
+### Nested options were classified as promptly reported, and are not
+
+`register_promptly_reported` decides whether an *absent* register is
+re-sent, and its own docstring gives the reason it exists: without it
+"an `[output:N]` section would be reported unconfirmed on every hotplug
+and the whole routing re-sent, every time".
+
+It asked `settable_options`, which knows only a family's **flat**
+options. Every nested one fell through to "yes, promptly reported" --
+240 paths, measured against the cold-plug recording, of which 480 EQ
+registers arrive as 332. Declaring dynamics would have added 320 more.
+
+It now asks the register model directly, through a new
+`registers.register_at`, which also replaces a private copy of the same
+lookup in the reconciler. The test is a sweep over the model against
+`tests/data/cold-plug-timeline.json` rather than a list of paths, so the
+next nested family cannot reintroduce it quietly.
+
+Worth naming plainly: this shipped with EQ, in this release, and no gate
+caught it. The measurement that would have -- the cold-plug timeline --
+was already in the repository.
 
 ### The round trip now covers the new sections
 

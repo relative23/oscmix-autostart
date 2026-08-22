@@ -268,6 +268,39 @@ def _eq_registers(family: str) -> Tuple["Register", ...]:
 
 
 
+#: The dynamics options, in upstream's own order, as
+#: (name, tags, lo, hi, unit). Bounds are upstream's `.min`/`.max`
+#: *after* `.scale`: `setfixed` sends the scaled value and divides by
+#: the scale on the way in, so a node with min=-300 max=300 scale=0.1
+#: is -30.0..30.0 to a config. Getting that backwards would declare
+#: every range ten times too wide.
+_DYNAMICS_OPTIONS = (
+    ("gain", "f", -30.0, 30.0, "dB"),
+    ("attack", "i", 0.0, 200.0, "ms"),
+    ("release", "i", 100.0, 999.0, "ms"),
+    ("compthres", "f", -60.0, 0.0, "dB"),
+    ("compratio", "f", 1.0, 10.0, ":1"),
+    ("expthres", "f", -99.0, 20.0, "dB"),
+    ("expratio", "f", 1.0, 10.0, ":1"),
+)
+
+
+def _dynamics_registers(family: str) -> Tuple["Register", ...]:
+    """The eight dynamics rows for one channel family.
+
+    `/X/{ch}/dynamics/meter` is deliberately absent. It is streamed and
+    has no `.set` upstream, so it is not a setting -- the model declares
+    no meters, and the recording shows it arriving for whichever
+    channels happened to be moving.
+    """
+    prefix = "/%s/{ch}/dynamics" % family
+    rows = [Register(prefix, "i", VERIFIABLE, family, BOOL)]
+    for name, tags, lo, hi, unit in _DYNAMICS_OPTIONS:
+        rows.append(Register("%s/%s" % (prefix, name), tags, VERIFIABLE,
+                             family, NUMBER, lo=lo, hi=hi, unit=unit))
+    return tuple(rows)
+
+
 UCX2 = Device(
     key="ucx2",
     name="Fireface UCX II",
@@ -459,6 +492,8 @@ UCX2 = Device(
         # it. A config that wants otherwise says so with [pin].
         *_eq_registers("input"),
         *_eq_registers("output"),
+        *_dynamics_registers("input"),
+        *_dynamics_registers("output"),
 
         # --- accepted, never reported ----------------------------------
         Register("/input/{ch}/name", "s", WRITE_ONLY, "input"),
@@ -555,6 +590,23 @@ def _matches(template: str, path: str) -> bool:
         elif part_want != part_got:
             return False
     return True
+
+
+def register_at(device: Optional[Device], path: str) -> Optional[Register]:
+    """The register a concrete path is an instance of, or None.
+
+    One lookup for the two modules that were each doing their own. The
+    reconciler wants it to render a value the way its domain spells it;
+    the verifier wants it to decide whether a path is channel state at
+    all, and asking `settable_options` for that was the bug this
+    replaces -- see `verify._is_channel_state`.
+    """
+    if device is None:
+        return None
+    for register in device.registers:
+        if _matches(register.template, path):
+            return register
+    return None
 
 
 def cold_plug_complete(device: Optional[Device], path: str) -> bool:

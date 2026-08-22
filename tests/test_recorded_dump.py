@@ -21,6 +21,11 @@ import json
 import pytest
 from conftest import repo_file
 
+# Aliased: `registers` is already a local name in the fixtures below,
+# for the dict a recording holds.
+from oscmix_autostart import registers as model
+from oscmix_autostart import verify
+
 # Registers this project writes, in the families it cares about.
 ROUTED = [
     "/output/1/stereo", "/output/5/stereo", "/output/7/stereo",
@@ -370,3 +375,38 @@ def test_playback_stereo_survives_a_cold_plug_completely(cold):
     assert max(stereo.values()) == 0.0, (
         "the latest arrived at %.2fs, so 'first' is too strong"
         % max(stereo.values()))
+
+
+def test_no_channel_setting_is_called_prompt_unless_the_cold_plug_proves_it(
+        cold):
+    """The rule, checked against the recording rather than by hand.
+
+    `register_promptly_reported` decides whether an absent register is
+    re-sent. Saying yes for something a cold plug does not deliver means
+    re-sending it on every hotplug -- which is the whole reason the rule
+    exists, stated in its own docstring.
+
+    It was asked of `settable_options`, which knows only a family's flat
+    options, so every nested one fell through to "yes": 480 EQ registers
+    of which the recording shows 332 arriving. Written as a sweep over
+    the model so the next nested family cannot reintroduce it silently.
+    """
+    arrived = set(cold["first_report_seconds"])
+    wrongly_prompt = []
+    for register in model.UCX2.registers:
+        if register.domain is None:
+            continue
+        if not register.template.startswith(("/input/{ch}/",
+                                             "/output/{ch}/")):
+            continue
+        paths = [register.template.format(ch=channel)
+                 for channel in model.UCX2.channels[register.channels]]
+        if all(path in arrived for path in paths):
+            continue            # complete after a cold plug, so "yes" is right
+        wrongly_prompt += [path for path in paths
+                           if verify.register_promptly_reported(
+                               path, model.UCX2)]
+    assert wrongly_prompt == [], (
+        "%d paths a cold plug does not deliver are still called prompt, "
+        "so a hotplug re-sends them: %s"
+        % (len(wrongly_prompt), sorted(wrongly_prompt)[:4]))

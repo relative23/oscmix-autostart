@@ -649,12 +649,19 @@ def _parse_number(raw: str, section: str, option: str,
                   register: object) -> float:
     """A quantity, checked against the bounds the register declares.
 
-    The bounds come from upstream's node table, so a value this rejects
-    is one the device would reject too. Where upstream declares no bound
-    neither does the model, and this only checks that the text is a
-    number -- inventing a range would reject values the device accepts,
-    which is a config that will not load rather than an error the device
-    reports.
+    The bounds come from upstream's node table -- and upstream does not
+    enforce them. At the pinned revision `.min`/`.max` are read nowhere:
+    `setfixed` and `setint` both end in `setval`, which converts the
+    control to a register and writes, with no comparison in between.
+    So this check is not a second opinion agreeing with oscmix; it is
+    the only thing between a config file and the register.
+
+    That makes it worth being right rather than strict. Where upstream
+    declares no bound neither does the model, and this only checks that
+    the text is a number -- inventing a range would reject values the
+    device accepts, which is a config that will not load rather than an
+    error the device reports. What the hardware itself does with an
+    out-of-range value is not measured here.
     """
     unit = getattr(register, "unit", "") or ""
     suffix = (" in %s" % unit) if unit else ""
