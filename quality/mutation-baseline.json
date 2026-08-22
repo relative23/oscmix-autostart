@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-21",
+  "recorded": "2026-08-22",
   "note": [
     "A ratio, not a count. Absolute survivor counts rise with every",
     "line added -- new code means new mutants, so a healthy change",
@@ -57,32 +57,33 @@
     "direction: a fixed-point test drives every branch of the renderer",
     "over the whole register table and compares the file byte for byte,",
     "so a mutant that survives a line-by-line assertion changes the file",
-    "and dies. 4711 -> 4874 mutants, 0.685 -> 0.692.",
+    "and dies. 4711 -> 4885 mutants, 0.685 -> 0.693.",
     "",
-    "The rise is measured on CI rather than locally -- see",
-    "confirmed_by_ci -- because that run is the one that exercised this",
-    "commit. The `measured` block below is still the previous commit's",
-    "local run and is the older of the two numbers; it stays until a",
-    "local run on this tree replaces it."
+    "Measured locally on this tree at 0.693 (58 min, cache cleared), and",
+    "on CI at 0.692 -- see confirmed_by_ci. The two agree to a thousandth,",
+    "which they have not before: earlier CI runs sat well below the local",
+    "score. Both are above the 0.68 floor this raise sets."
   ],
   "measured": {
+    "total": 4885,
+    "killed": 3321,
+    "survived": 1473,
+    "not_covered": 82,
+    "timeout": 9,
+    "score": 0.693,
+    "run_minutes": 58,
+    "cache": "cleared before the run, as CI does"
+  },
+  "previous": {
+    "recorded": "2026-08-21",
     "total": 4711,
     "killed": 3172,
     "survived": 1457,
     "not_covered": 82,
     "score": 0.685,
-    "run_minutes": 58,
-    "cache": "cleared before the run, as CI does"
-  },
-  "previous": {
-    "recorded": "2026-08-20",
-    "total": 4180,
-    "killed": 2820,
-    "survived": 1278,
-    "not_covered": 82,
-    "score": 0.688,
     "why_it_moved": [
-      "The 0.3.0 release measurement."
+      "0.4.0's EQ family: 480 registers of new data, and mutmut",
+      "attributes none of `_eq_registers` to a covering test."
     ]
   },
   "confirmed_by_ci": {

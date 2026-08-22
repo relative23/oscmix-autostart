@@ -28,8 +28,13 @@ def current_counts() -> dict:
     cannot answer whether kills went down. The stats export carries every
     bucket.
     """
-    subprocess.run(["mutmut", "export-cicd-stats"], capture_output=True,
-                   text=True, check=False)
+    # Through this interpreter rather than a bare `mutmut`: the run
+    # itself is `$(PYTHON) -m mutmut`, so `make mutation
+    # PYTHON=.venv/bin/python` mutates 4885 mutants over an hour and
+    # then dies here with FileNotFoundError, because the venv's bin is
+    # not on PATH. CI hid it by activating the venv.
+    subprocess.run([sys.executable, "-m", "mutmut", "export-cicd-stats"],
+                   capture_output=True, text=True, check=False)
     if not STATS.is_file():
         return {}
     raw = json.loads(STATS.read_text())
