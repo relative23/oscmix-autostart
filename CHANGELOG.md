@@ -1,5 +1,138 @@
 # Changelog
 
+## 0.4.0 (2026-08-23)
+
+The rest of the strip. 0.3.0 declared the signal path; this release
+declares what sits on it -- EQ, dynamics, auto level, low cut,
+crossfeed, and the five settings that have no channel at all. The
+register model went from 18 rows to 147, from 9 settable to 102, and
+from 246 concrete paths to 2028.
+
+The pattern of the release is that the plan kept losing to the device.
+Three families changed shape after a measurement, one turned out not to
+be settable at all, and the two questions the roadmap had filed as
+"decide, do not measure" were both measurable.
+
+### Everything the strip has
+
+- **`[eq:input:N]` and the nested section format** (ADR 0014). Settings
+  with a sub-family get their own section rather than a dotted option,
+  because a dotted option makes an installed 0.3.0 refuse the whole
+  file, and a family-first header is the one shape it warns about and
+  skips instead.
+- **EQ** (480 registers), **dynamics** (320), **auto level** (160),
+  **low cut** (120), **crossfeed** (20).
+- **The five channel-less families**: `[clock]`, `[controlroom]`,
+  `[echo]`, `[hardware]`, `[reverb]`. 38 settable of 42; the other four
+  are reporters with no setter upstream, and a config cannot set what
+  oscmix cannot write.
+- **Room EQ** (640) is declared **readable and not settable**. See below.
+
+### `--diff`
+
+`plan()` printed instead of sent: what an apply would write, what
+already matches, and what gets rewritten regardless. Nothing is
+written. A rewrite is counted apart from a difference, because
+`/mix/<out>/playback/<pb>` is never reported (ADR 0002) and is written
+every time whatever the device holds -- listing it as drift would answer
+"has the desk changed?" with a number that is never zero.
+
+### The upstream pin moved to 55802a6
+
+Both issues this project filed upstream are fixed: discontinuous enum
+values (#30) and the Room EQ register folding (#32). Measured on the
+same desk, as ADR 0008 requires: the dump goes from 2002 registers to
+2322, Room EQ from 320 folded to 640 real, and `/controlroom/mainout`
+arrives as `(-1, 'None')` instead of unnamed.
+
+That gave the model its first enum whose value is not its position, and
+upstream's `setenum` reads an integer argument as the raw value -- so a
+positional encoder would have written 10 where -1 was meant. Registers
+can now declare `values` beside `choices`.
+
+### What the measurements changed
+
+- **Room EQ is reported and ignores every write.** The upstream fix was
+  to `regtoctl`, the read path. Writing `/output/N/roomeq/band1gain`
+  changes nothing while the channel EQ on the same output, in the same
+  run, works; and tracing the MIDI pipe shows oscmix *does* send it.
+  Filed as [#33][33]. Declared with no value domain, which is the line
+  `/clock/samplerate` already sits on.
+- **`lowcut/slope` and `crossfeed` carry bounds the device gave**, not
+  upstream, which declares none for either. Written and read back: slope
+  clamps at 0..3, crossfeed at 0..5. Both are indices, and both say so
+  rather than claiming a unit they were never measured to have.
+- **Every scaled bound was checked at the device.** `setfixed` divides
+  by `.scale`, so `min=-300 max=300 scale=0.1` is -30..30 to a config.
+  Declared the raw way, every range would be ten times too wide.
+  `dynamics/gain = -10.0` moved the meter by exactly 10 dB, and auto
+  level's `maxgain` by exactly 6 and 12 dB at two settings.
+- **Crossfeed was measured twice.** The first run read signal on a
+  channel that should have been silent and wandered 2 dB between
+  identical settings: the mixer GUI held the receive port. The fix was
+  not a better statistic but a baseline, and a left-only tone now reads
+  -144.0 dBFS on the other side before any bleed is claimed.
+- **No register is withheld as dangerous** (ADR 0016). There is no such
+  flag in this codebase; `48v` is withheld by having no value domain,
+  and the stated bar is equipment damage. Every candidate was written,
+  read back and restored -- `lockkeys = All` included -- so a config can
+  undo what a config did.
+- **The clock source is state.** Set to `Word Clock` with nothing
+  connected, the device accepts it, keeps it, and does not fall back. A
+  pinned source argues with nothing, so it stays PIN.
+
+### Defects found, none by a failing gate
+
+- **`--dump-config` never took `DUMP_LISTEN_SETTLE`**, for as long as it
+  has existed, while that constant's own test said the cost was paid by
+  "every verification, every profile switch and every --dump-config".
+  Without it, 4 of 8 reads lost all twenty `/playback/N/stereo`. Found
+  by `--diff` disagreeing with itself twice in a row.
+- **Nested options escaped the cold-plug rule.** 240 paths were called
+  "promptly reported" and re-sent on every hotplug, against a recording
+  that says a cold plug delivers 332 of 480 EQ registers.
+- **A dump of a working device produced a config that would not load**,
+  and later one whose second render differed from its first. Both found
+  by the round trip, neither visible in the output.
+- **A commit reached `main` with no CI at all.** Three pushes inside an
+  hour, and the concurrency group cancelled the queued run before a
+  single job started.
+- **`[roomeq:output:5]` was accepted and set nothing**, a guard for
+  unmodelled devices catching a modelled read-only family.
+
+### The 802
+
+Its channel capabilities are recorded, read from upstream's own
+`device_ff802.c`: 30 in, 30 out, 48V and hi-Z on channels 9-12 where the
+UCX II has 48V on 1-2, and no gain register on its Mic/Inst channels.
+The register table cannot follow, because oscmix cannot drive an 802 at
+this revision -- `init()` lists one device, and `ff802` has no
+`.regtoctl` or `.ctltoreg`. One of the three things "supported" means,
+and the other two are upstream's.
+
+### Quality
+
+- 906 tests (665 in 0.3.0); coverage 95%, gate 95.
+- Mutation score 0.708, floor 0.700 (0.687 and 0.67 in 0.3.0). ADR 0015
+  takes the register *table* out of the score: it is built at import
+  time, which mutmut cannot attribute to a covering test, so 640 rows of
+  data scored as though nothing tested them. Verified by hand twice
+  before the exemption was written, and the recordings check the table
+  harder than a mutant would.
+- ADR 0014-0016 record the nested format, the mutation scope and the
+  danger question, each with the measurement behind it.
+- Each push gets its own CI concurrency group, so a queued run can no
+  longer be evicted by the next one.
+
+### Compatibility
+
+`routing.conf` files from 0.3.x are read unchanged. Everything new is a
+new *section*, which an older install warns about and skips (ADR 0006).
+A 0.4.0 config that uses `[eq:input:3]` therefore loses its EQ on an
+older install rather than failing to start.
+
+[33]: https://github.com/michaelforney/oscmix/issues/33
+
 ## 0.3.0 (2026-08-20)
 
 The whole signal path, declared. 0.2.0 made the existing behaviour

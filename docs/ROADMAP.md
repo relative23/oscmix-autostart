@@ -62,7 +62,7 @@ GUI expose it at all?
 | Output strip: volume, pan, mute, phase, reflevel, stereo | all six reported | today: volume, stereo. 0.3.0: the rest |
 | EQ (3 band) and low cut, in and out | `eq/band1..3{freq,gain,q}`, `type` on bands 1 and 3 only, `lowcut/{freq,slope}` | 0.4.0 |
 | Dynamics, auto level | `dynamics/{attack,release,comp*,exp*,gain}`, `autolevel/{headroom,maxgain,risetime}` | 0.4.0 |
-| Room EQ (outputs) | `roomeq/band1..9{freq,gain,q}`, `type` on bands 1, 8 and 9, `delay` -- upstream reports only half of this, see #32 | 0.4.0, blocked on the pin |
+| Room EQ (outputs) | `roomeq/band1..9{freq,gain,q}`, `type` on bands 1, 8 and 9, `delay` -- 640 since the pin moved, 320 before it | 0.4.0: modelled and reported, **not settable** (writes are ignored, #33) |
 | Reverb and echo FX | `/reverb/*` (14), `/echo/*` (7) | 0.4.0 |
 | Control room: main out, dim, mono, recall volume | `/controlroom/*` (6) | 0.4.0 |
 | Crossfeed | `/output/<n>/crossfeed` | 0.4.0 |
@@ -1767,7 +1767,7 @@ a left-only tone reads -58.7 dBFS on output 7 three times running and
 whose baseline is not silent cannot say anything about bleed, and
 checking that first is what turned an unusable run into a clean one.
 
-Left: room EQ (320, blocked on #32).
+Left: nothing. Room EQ is declared as reported and not settable, for the reason below.
 
 ### Nested options were classified as promptly reported, and are not
 

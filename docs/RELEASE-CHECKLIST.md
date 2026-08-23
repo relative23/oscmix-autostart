@@ -134,4 +134,6 @@ real hardware, labelled as such.
 **Testing the 802.** It has never been tested and the release notes say
 so. A device is supported when its register table is declared, its
 channel capabilities are recorded, and one evidence artifact exists for
-it; the 802 has none of the three.
+it. Since 0.4.0 the 802 has **one** of the three: its capability map is
+read from upstream's own `device_ff802.c`. The other two are upstream's
+to unblock, because oscmix cannot drive an 802 at the pinned revision.

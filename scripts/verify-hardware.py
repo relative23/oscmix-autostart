@@ -505,6 +505,14 @@ def main() -> int:
                                           right, silence, state)
                     finding["playback"] = list(source)
                     finding["sink"] = sink
+                    # Two of 0.1.3's three defects were specific to
+                    # `stereo = false` routes: one silenced half the
+                    # pair, the other landed 6 dB low. An artifact that
+                    # does not say which routes were unlinked cannot
+                    # show that either is fixed -- a linked and an
+                    # unlinked run came out byte-identical apart from
+                    # the timestamp, which is how this was noticed.
+                    finding["stereo"] = route.stereo
                     findings.append(finding)
         finally:
             reader.close()
