@@ -13,6 +13,7 @@ from .backend import loopback
 from .config import Config, discover_config_path, load_config
 from .constants import (
     DEFAULT_DEVICE_TIMEOUT,
+    DUMP_LISTEN_SETTLE,
     EXIT_CONFIG,
     EXIT_FAILURE,
     EXIT_OK,
@@ -23,9 +24,16 @@ from .log import log
 from .pipewire import generate_pipewire_conf, pw_sink_info
 from .profiles import REFUSED, describe_profiles, switch_profile
 from .reconcile import (
+    PHASE_CHANNEL,
+    PHASE_LINK,
+    PHASE_MIX,
+    REWRITE,
+    Write,
     channels_from_observed,
+    desired,
     globals_from_observed,
     observed,
+    plan,
     render_config,
     routes_from_observed,
 )
@@ -57,6 +65,10 @@ def build_arg_parser() -> ArgumentParser:
                         help="UDP port oscmix listens on (overrides config)")
     parser.add_argument("--dry-run", action="store_true",
                         help="show what would be started and sent, then exit")
+    parser.add_argument("--diff", action="store_true",
+                        help="compare the running device against the config "
+                             "and print what an apply would write, without "
+                             "writing it")
     parser.add_argument("--dump-config", action="store_true",
                         help="ask the running device for its state and print "
                              "a routing.conf that reproduces what it reports")
@@ -108,6 +120,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.profile:
         return _switch_profile(args.profile, config_path)
 
+    if args.diff:
+        return _diff(config)
+
     if args.dump_config:
         return _dump_config(config)
 
@@ -151,14 +166,101 @@ def _switch_profile(name: str, config_path: Optional[Path]) -> int:
     return EXIT_OK
 
 
-def _dump_config(config: Config) -> int:
-    """Print a routing.conf built from what the device reports.
+#: Phase numbers as the diff prints them. The apply writes in this
+#: order and the barrier between the first two is what ADR 0001 is
+#: about, so a diff that listed writes in path order would hide the one
+#: thing about them that is not obvious.
+_PHASE_NAMES = ((PHASE_LINK, "links"),
+                (PHASE_MIX, "mix matrix"),
+                (PHASE_CHANNEL, "channel and global state"))
 
-    Needs a running backend: this reads the device rather than the
-    config it was started from. An empty read is a failure and says so
-    -- printing an empty config would look like "you have no routing"
-    when it means "nobody answered", and the two call for opposite
-    responses.
+
+def _diff(config: Config) -> int:
+    """Print what an apply would write, and what it would leave alone.
+
+    The reconciler already answers this -- `plan()` is what the session
+    runs on every start -- so this prints its result instead of sending
+    it. Nothing is written and no register is touched.
+
+    Exit stays 0 whenever the read succeeded, differences or not. A
+    `diff(1)`-style "1 means differing" would be more scriptable, but 1
+    is already EXIT_FAILURE here and a caller could not tell "the desk
+    drifted" from "the backend never answered" -- which are opposite
+    situations. The counts are on stdout for anyone who wants to gate on
+    them.
+    """
+    seen = _read_device(config)
+    if seen is None:
+        return EXIT_FAILURE
+
+    model = device_for_name(config.device_name)
+    result = plan(desired(config), seen, model)
+
+    # A rewrite is not a difference. `/mix/<out>/playback/<pb>` is never
+    # reported (ADR 0002), so it is written on every apply whatever the
+    # device holds -- listing it next to a real mismatch would answer
+    # "has the desk drifted?" with a number that is always non-zero.
+    differing = [w for w in result.writes if w.reason != REWRITE]
+    rewritten = [w for w in result.writes if w.reason == REWRITE]
+
+    log.info("read %d registers; %d differ, %d always rewritten, "
+             "%d already match", len(seen), len(differing), len(rewritten),
+             len(result.confirmed))
+
+    if not differing:
+        sys.stdout.write("the device matches the config\n")
+    else:
+        sys.stdout.write("%d register(s) differ from the config:\n\n"
+                         % len(differing))
+        for phase, name in _PHASE_NAMES:
+            writes = [w for w in differing if w.phase == phase]
+            if not writes:
+                continue
+            sys.stdout.write("phase %d -- %s\n" % (phase, name))
+            for write in sorted(writes, key=lambda w: w.path):
+                sys.stdout.write("  %s\n" % _diff_line(write, seen))
+            sys.stdout.write("\n")
+
+    if rewritten:
+        sys.stdout.write(
+            "%d more would be rewritten regardless: a dump never reports "
+            "them, so\nan apply cannot tell whether they are already "
+            "right (ADR 0002).\n" % len(rewritten))
+    return EXIT_OK
+
+
+def _diff_line(write: Write, seen: Dict[str, Tuple[object, ...]]) -> str:
+    """One write as `path  config-value  device-value  reason`."""
+    return "%-34s %-14s device %-14s %s" % (
+        write.path, _values(write.args), _values(seen.get(write.path)),
+        write.reason)
+
+
+def _values(args: Optional[Tuple[object, ...]]) -> str:
+    """OSC arguments as a config would read them, or a dash for absent.
+
+    A missing register and a register holding an empty value are
+    different facts, and a diff that printed both as blank would be
+    saying the device is silent when it answered.
+    """
+    if args is None:
+        return "-"
+    return ", ".join(_one_value(value) for value in args)
+
+
+def _one_value(value: object) -> str:
+    if isinstance(value, float):
+        return "%.1f" % value
+    return str(value)
+
+
+def _read_device(config: Config) -> Optional[Dict[str, Tuple[object, ...]]]:
+    """Every register the running backend reports, or None with a reason.
+
+    Shared by `--dump-config` and `--diff`, which ask the device the same
+    question and differ only in what they do with the answer. An empty
+    read is a failure rather than an empty result: "you have no routing"
+    and "nobody answered" call for opposite responses.
     """
     device = loopback(config.osc_port, config.osc_recv_port)
     listener = device.listen()
@@ -166,10 +268,22 @@ def _dump_config(config: Config) -> int:
         log.error("UDP %d is in use -- close the mixer GUI; its meters and "
                   "this read would split the device's replies",
                   config.osc_recv_port)
-        return EXIT_FAILURE
+        return None
 
     seen: Dict[str, Tuple[object, ...]] = {}
     try:
+        # The same settle the verifier takes, and for the same reason.
+        # `setrefresh` answers with `/playback/N/stereo` synchronously,
+        # out of oscmix's own memory, before the device's dump reaches
+        # the wire; while nothing is bound on the receive port every
+        # meter datagram draws an ICMP port-unreachable that Linux
+        # queues, and the next write is dropped with it. Measured here:
+        # without this, 4 of 8 reads came back with 1982 registers and
+        # no playback stereo at all; with it, 11 of 11 read 2002.
+        #
+        # `--dump-config` has had this hole since it existed, while the
+        # constant's own docstring claimed this path paid the wait.
+        time.sleep(DUMP_LISTEN_SETTLE)
         device.request_dump()
         deadline = time.monotonic() + DUMP_READ_SECONDS
         quiet_after = deadline
@@ -194,6 +308,14 @@ def _dump_config(config: Config) -> int:
     if not seen:
         log.error("no reply from the backend on UDP %d -- is oscmix running?",
                   config.osc_recv_port)
+        return None
+    return seen
+
+
+def _dump_config(config: Config) -> int:
+    """Print a routing.conf built from what the device reports."""
+    seen = _read_device(config)
+    if seen is None:
         return EXIT_FAILURE
 
     model = device_for_name(config.device_name)

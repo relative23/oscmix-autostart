@@ -1889,8 +1889,31 @@ committing to the big ones.
 
 ### Also in the release
 
-- `--diff`: `plan()` printed instead of sent. It falls out of the
-  reconciler that already exists and is the smallest useful thing here.
+- `--diff`: **done.** `plan()` printed instead of sent -- it does fall
+  out of the reconciler, and the command is thirty lines. Two decisions
+  in it were not obvious:
+
+  A **rewrite is not a difference.** `/mix/<out>/playback/<pb>` is never
+  reported (ADR 0002) and is written on every apply whatever the device
+  holds, so listing it beside a real mismatch would answer "has the desk
+  drifted?" with a number that is never zero. They are counted apart.
+
+  **Exit stays 0** when the read succeeds, differences or not. A
+  `diff(1)`-style "1 means differing" is more scriptable, but 1 is
+  already `EXIT_FAILURE` and a caller could not tell "the desk drifted"
+  from "the backend never answered".
+
+  It found a defect the moment it ran on real hardware. Two consecutive
+  invocations disagreed -- 1982 registers against 2002 -- and the
+  missing twenty were every `/playback/<n>/stereo`. `--dump-config` has
+  had that hole since it existed: it never took `DUMP_LISTEN_SETTLE`,
+  the wait the verifier takes before asking for a dump, while that
+  constant's own test says the cost is paid by "every verification,
+  every profile switch and every --dump-config". Measured: without it 4
+  of 8 reads lost the whole burst, with it 11 of 11 were complete. So a
+  dumped config could not reproduce playback link state, and nothing
+  noticed, because the only command that would have shown it is the one
+  being added here.
 - The 802: a device is supported when its register table is declared,
   its channel capabilities recorded, and one evidence artifact exists.
   It has none of the three, and 0.4.0 is when a second device stops

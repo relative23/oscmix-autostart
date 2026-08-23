@@ -156,3 +156,70 @@ def test_it_stops_when_the_dump_goes_quiet(session_mod, capsys):
     assert elapsed < cli.DUMP_READ_SECONDS, (
         "the read waited out the full window (%.1fs) instead of stopping "
         "when the dump went quiet" % elapsed)
+
+
+def test_the_read_settles_before_it_asks_for_the_dump(session_mod, tmp_path):
+    """The wait `DUMP_LISTEN_SETTLE` documents, actually taken here.
+
+    Its own docstring in tests/test_pin_remember.py says the cost is
+    paid by "every verification, every profile switch and every
+    --dump-config". The verifier took it; this path never did, for as
+    long as `--dump-config` has existed.
+
+    The casualty is the bundle `setrefresh()` flushes first -- all
+    twenty `/playback/<n>/stereo`, sent from oscmix's own memory before
+    the device's dump reaches the wire. Measured against the real
+    device: without the wait, 4 of 8 reads came back with 1982 registers
+    and no playback stereo at all; with it, 11 of 11 read 2002.
+
+    Asserted on when the request reaches the backend rather than on a
+    patched `sleep`, so it stays true if the wait is implemented some
+    other way.
+    """
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    config = session_mod.Config(device_name="Fireface UCX II",
+                                osc_port=send_port, osc_recv_port=recv_port)
+    backend = TimingBackend(session_mod, send_port, recv_port,
+                            dump_of(session_mod, MONITOR))
+    backend.start()
+    started = time.monotonic()
+    try:
+        cli._read_device(config)
+    finally:
+        backend.stop()
+        backend.join(timeout=3)
+        backend.sock.close()
+
+    assert backend.asked_at is not None, "the backend never saw /refresh"
+    waited = backend.asked_at - started
+    assert waited >= cli.DUMP_LISTEN_SETTLE, (
+        "asked for the dump %.3f s after opening the socket, before the "
+        "%.3f s settle -- the playback stereo burst is what gets lost"
+        % (waited, cli.DUMP_LISTEN_SETTLE))
+
+
+class TimingBackend(FakeBackend):
+    """FakeBackend that records when `/refresh` arrived."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.asked_at = None
+
+    def run(self):
+        while not self.stopping.is_set():
+            try:
+                data, _ = self.sock.recvfrom(65536)
+            except (socket.timeout, OSError):
+                if self.stopping.is_set():
+                    return
+                continue
+            for message in self.session_mod.iter_osc_messages(data):
+                try:
+                    path, _t, _a = self.session_mod.decode_osc(message)
+                except ValueError:
+                    continue
+                if path == "/refresh":
+                    if self.asked_at is None:
+                        self.asked_at = time.monotonic()
+                    for register in self.dump:
+                        self.sock.sendto(register, ("127.0.0.1", self.recv_port))
