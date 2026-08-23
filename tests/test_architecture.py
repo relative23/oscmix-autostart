@@ -272,7 +272,8 @@ def _defined_at(name):
     raise AssertionError("registers.py defines no %s" % name)
 
 
-@pytest.mark.parametrize("name", ["_seq", "_EQ_BANDS", "_eq_registers",
+@pytest.mark.parametrize("name", ["_seq", "_EQ_BANDS", "_ROOMEQ_BANDS", "_HIGH_SHELF",
+                                  "_band_registers", "_roomeq_registers",
                                   "_DYNAMICS_OPTIONS", "_AUTOLEVEL_OPTIONS",
                                   "_LOWCUT_OPTIONS",
                                   "_sub_registers",

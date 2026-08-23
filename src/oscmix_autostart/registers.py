@@ -28,7 +28,7 @@ questions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, Mapping, Optional, Sequence, Tuple
 
 from .constants import LEVEL_MAX, LEVEL_MIN
@@ -275,23 +275,88 @@ _EQ_BANDS = (
 )
 
 
-def _eq_registers(family: str) -> Tuple["Register", ...]:
-    """The twelve EQ rows for one channel family."""
-    prefix = "/%s/{ch}" % family
-    rows = [Register(prefix + "/eq", "i", VERIFIABLE, family, BOOL)]
-    for band, types in _EQ_BANDS:
-        rows.append(Register("%s/eq/band%dfreq" % (prefix, band), "i",
+#: Room EQ, outputs only: nine bands where EQ has three, plus a delay.
+#: Filter types sit on bands 1, 8 and 9 -- band 1 offers a **Low** shelf
+#: and the last two a **High** shelf, the same odd-one-out that made the
+#: EQ table worth generating rather than typing.
+#:
+#: 320 of these were unreachable until the pin moved: `device_ffucxii.c`
+#: folded the upper half of each output's block onto its own lower half
+#: (michaelforney/oscmix#32, fixed in 55802a6). Declared here only after
+#: the fix was measured -- 640 reported where 320 were before.
+_HIGH_SHELF = ("Peak", "High Shelf", "Low Pass", "High Pass")
+
+_ROOMEQ_BANDS = (
+    (1, ("Peak", "Low Shelf", "High Pass", "Low Pass")),
+    (2, None), (3, None), (4, None), (5, None), (6, None), (7, None),
+    (8, _HIGH_SHELF),
+    (9, _HIGH_SHELF),
+)
+
+
+def _band_registers(family: str, sub: str,
+                    bands: Tuple[Tuple[int, Optional[Tuple[str, ...]]], ...],
+                    ) -> Tuple["Register", ...]:
+    """A parametric-EQ sub-family: its switch, then freq/gain/q per band.
+
+    Shared by `eq` and `roomeq`, which differ only in how many bands
+    they have and which of them offer a filter type. The bounds are the
+    same in upstream's two trees -- freq `20..20000`, gain
+    `.scale=0.1 .min=-200 .max=200`, q `.scale=0.1 .min=4 .max=99` --
+    and that is checked against both, not assumed from one.
+    """
+    prefix = "/%s/{ch}/%s" % (family, sub)
+    rows = [Register(prefix, "i", VERIFIABLE, family, BOOL)]
+    for band, types in bands:
+        rows.append(Register("%s/band%dfreq" % (prefix, band), "i",
                              VERIFIABLE, family, NUMBER,
                              lo=20.0, hi=20000.0, unit="Hz"))
-        rows.append(Register("%s/eq/band%dgain" % (prefix, band), "f",
+        rows.append(Register("%s/band%dgain" % (prefix, band), "f",
                              VERIFIABLE, family, NUMBER,
                              lo=-20.0, hi=20.0, unit="dB"))
-        rows.append(Register("%s/eq/band%dq" % (prefix, band), "f",
+        rows.append(Register("%s/band%dq" % (prefix, band), "f",
                              VERIFIABLE, family, NUMBER, lo=0.4, hi=9.9))
         if types is not None:
-            rows.append(Register("%s/eq/band%dtype" % (prefix, band), "is",
+            rows.append(Register("%s/band%dtype" % (prefix, band), "is",
                                  VERIFIABLE, family, ENUM, types))
     return tuple(rows)
+
+
+def _roomeq_registers() -> Tuple["Register", ...]:
+    """Room EQ: 640 registers, modelled, readable, **not settable**.
+
+    Every row here carries no value domain, which is this model's way of
+    saying "a config cannot set what oscmix cannot write" -- the same
+    line `/clock/samplerate` and `/hardware/ccmode` sit on.
+
+    It is not settable because writes do not reach the device. Measured
+    at 55802a6, on outputs 1 and 5, with the channel EQ as a control in
+    the same run:
+
+        /output/N/eq/band1gain      -6.0  ->  reads back -6.0
+        /output/N/roomeq/band1gain  -6.0  ->  reads back  0.0
+
+    The switch and `delay` behave the same way, and output 1 fails too,
+    where the channel offset is zero and the address is the base exactly
+    -- so it is not the offset arithmetic. 55802a6 fixed `regtoctl`, the
+    *read* path, which is why 640 registers are now reported where 320
+    were; `ctltoreg` maps the same addresses and the writes still do
+    nothing.
+
+    So the family is declared for what it is -- a surface this project
+    can read and report and cannot promise to set. `settable_nested`
+    returns nothing for it, and no `[roomeq:output:N]` section exists.
+    """
+    rows = list(_band_registers("output", "roomeq", _ROOMEQ_BANDS))
+    rows.append(Register("/output/{ch}/roomeq/delay", "f", VERIFIABLE,
+                         "output"))
+    return tuple(_readonly(row) for row in rows)
+
+
+def _readonly(register: "Register") -> "Register":
+    """The same row with no value domain, so no config can set it."""
+    return replace(register, domain=None, choices=(), lo=None, hi=None,
+                   unit="")
 
 
 
@@ -560,8 +625,9 @@ UCX2 = Device(
         # REMEMBER throughout. An EQ curve is dialled in while listening;
         # a session that put one back would be arguing with whoever set
         # it. A config that wants otherwise says so with [pin].
-        *_eq_registers("input"),
-        *_eq_registers("output"),
+        *_band_registers("input", "eq", _EQ_BANDS),
+        *_band_registers("output", "eq", _EQ_BANDS),
+        *_roomeq_registers(),
         *_sub_registers("input", "dynamics", _DYNAMICS_OPTIONS),
         *_sub_registers("output", "dynamics", _DYNAMICS_OPTIONS),
         *_sub_registers("input", "autolevel", _AUTOLEVEL_OPTIONS),

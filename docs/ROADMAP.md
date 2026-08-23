@@ -1856,18 +1856,47 @@ thing is absent rather than only that it is.
 **Patch 0002 is merged and must not be applied.** PR #31 (patch 0001,
 output stereo on write) is still open, so that one stays.
 
-### Room EQ is blocked on upstream
+### Room EQ: readable now, still not settable
 
-The 320 Room EQ registers in the recording are a *folded* address space:
-`device_ffucxii.c` maps the upper half of each output's block onto its
-own lower half, so 16 of 32 offsets per output are unreachable and the
-other 16 carry two values (michaelforney/oscmix#32, `patches/0002`).
+The pin move made all 640 registers **reportable** -- 320 were folded
+onto their own lower half before `55802a6`. It did not make them
+writable, and that is a second, separate limit found by measuring
+rather than by assuming the fix covered both directions.
 
-Declaring it before the pin moves past a fix would mean writing a
-register model against an address space that is known wrong. It is the
-one family here with a hard external dependency, and it is also the
-largest after EQ -- so it is worth saying plainly rather than
-discovering halfway.
+Measured at 55802a6 on outputs 1 and 5, with the channel EQ as a
+control in the same run:
+
+| write | reads back |
+|---|---|
+| `/output/N/eq/band1gain = -6.0` | **-6.0** |
+| `/output/N/roomeq/band1gain = -6.0` | **0.0** |
+
+The switch and `delay` behave the same way. Output 1 fails too, where
+the channel offset is zero and the address is the base exactly, so it is
+not the offset arithmetic. The commit that landed is *`Fix regtoctl for
+room EQ`* -- `regtoctl` is register→control, the **read** path.
+`ctltoreg` maps the same addresses and always did; the writes still do
+nothing.
+
+So the family is declared for what it is: 640 registers, modelled,
+verifiable, **no value domain**. That is the same line
+`/clock/samplerate` and `/hardware/ccmode` sit on -- a config cannot set
+what oscmix cannot write -- and it is the honest end of the family
+rather than a config section that accepts a shelf and delivers nothing.
+
+**And it found one.** `[roomeq:output:5]` was *accepted* and produced no
+settings at all. `_parse_nested_section` returned early on an empty
+option set, a guard written for unmodelled devices, which now also
+caught a modelled family that is read-only. Two situations, one empty
+dict, opposite right answers: an unmodelled device still gets no
+opinion, and a family this model knows and declares unsettable is now
+refused by name. The audible measurement went the same way -- a Low
+Shelf at 120 Hz with 20 dB of cut moved a 60 Hz tone by 0.0 dB, which is
+what sent me looking.
+
+**What is owed upstream.** A short report: writes to `/output/N/roomeq/*`
+are accepted and change nothing, with the channel EQ as the control and
+output 1 ruling out the offset. Not filed yet.
 
 ### What has to be decided, not measured
 

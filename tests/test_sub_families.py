@@ -13,6 +13,7 @@ a number it would have to invent.
 """
 
 import json
+import re
 
 import pytest
 from conftest import repo_file
@@ -29,11 +30,24 @@ from oscmix_autostart.registers import (
     settable_nested,
 )
 
-FAMILIES = [(family, sub)
-            for family in ("input", "output")
-            for sub in nested_families(UCX2, family)]
+#: Every nested sub-family, split by whether a config can set it.
+#: The sweep below used to assume "nested" implied "settable", which was
+#: true until Room EQ: 640 registers the device reports and refuses to
+#: be written (see `test_roomeq.py`). Making the split explicit is
+#: better than skipping it, because the read-only half has assertions of
+#: its own -- above all that it grows no config section.
+ALL_FAMILIES = [(family, sub)
+                for family in ("input", "output")
+                for sub in nested_families(UCX2, family)]
+
+FAMILIES = [(family, sub) for family, sub in ALL_FAMILIES
+            if settable_nested(UCX2, sub, family)]
+
+READ_ONLY = [(family, sub) for family, sub in ALL_FAMILIES
+             if not settable_nested(UCX2, sub, family)]
 
 IDS = ["%s:%s" % (sub, family) for family, sub in FAMILIES]
+READ_ONLY_IDS = ["%s:%s" % (sub, family) for family, sub in READ_ONLY]
 
 
 @pytest.fixture(scope="module")
@@ -45,9 +59,42 @@ def reported():
 
 def test_the_sweep_covers_every_family_declared():
     """The guard on the guard: a sweep that found nothing would pass."""
-    assert len(FAMILIES) >= 6                  # eq, dynamics, autolevel x 2
+    assert len(FAMILIES) >= 8         # eq, dynamics, autolevel, lowcut x 2
     assert ("input", "eq") in FAMILIES
     assert ("output", "autolevel") in FAMILIES
+    assert set(FAMILIES) | set(READ_ONLY) == set(ALL_FAMILIES)
+
+
+@pytest.mark.parametrize(("family", "sub"), READ_ONLY, ids=READ_ONLY_IDS)
+def test_a_read_only_family_offers_no_config_section(tmp_path, family, sub):
+    """"A config cannot set what oscmix cannot write."
+
+    Room EQ is reported by the device and ignores every write -- proven
+    against the channel EQ as a control in `test_roomeq.py`. It is
+    modelled so the surface is described, and it must not grow a section
+    that would accept settings and deliver none.
+    """
+    from oscmix_autostart.errors import ConfigError
+
+    assert settable_nested(UCX2, sub, family) == {}
+    path = tmp_path / "routing.conf"
+    path.write_text("[device]\nname = Fireface UCX II\n\n"
+                    "[%s:%s:5]\nband1gain = -6.0\n" % (sub, family))
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
+@pytest.mark.parametrize(("family", "sub"), READ_ONLY, ids=READ_ONLY_IDS)
+def test_a_read_only_family_is_still_declared_and_reported(reported, family,
+                                                           sub):
+    """Not settable is not the same as not modelled. The paths are still
+    checked against the recording, so the model keeps describing what
+    the device has rather than only what it accepts."""
+    infix = "/%s" % sub
+    declared = {p for p in declared_paths(UCX2)
+                if p.startswith("/%s/" % family) and infix in p}
+    assert declared
+    assert declared <= set(reported)
 
 
 @pytest.mark.parametrize(("family", "sub"), FAMILIES, ids=IDS)
@@ -99,7 +146,12 @@ def test_the_switch_is_a_bool_and_every_option_has_a_domain(family, sub):
 #: with bounds has to say what its number is -- including the ones that
 #: are not physical: the ratios carry ":1" and `lowcut/slope` carries
 #: "index", because "3" of nothing is a number nobody can act on.
-UNITLESS_BY_CONVENTION = ("band1q", "band2q", "band3q")
+#:
+#: A rule rather than a list. It was `("band1q", "band2q", "band3q")`
+#: until Room EQ arrived with nine bands, which is the second time a
+#: hardcoded set in this file needed one more entry. What makes `q`
+#: exempt is that it is a Q factor, not which band it sits on.
+UNITLESS_BY_CONVENTION = re.compile(r"^band\d+q$")
 
 
 @pytest.mark.parametrize(("family", "sub"), FAMILIES, ids=IDS)
@@ -114,7 +166,7 @@ def test_every_bounded_option_declares_a_unit(family, sub):
     for name, register in settable_nested(UCX2, sub, family).items():
         if register.domain != NUMBER or register.lo is None:
             continue
-        assert register.unit or name in UNITLESS_BY_CONVENTION, (
+        assert register.unit or UNITLESS_BY_CONVENTION.match(name), (
             "%s has bounds %s..%s and no unit"
             % (register.template, register.lo, register.hi))
 

@@ -520,6 +520,19 @@ def _parse_nested_section(parser: "configparser.ConfigParser", section: str,
     channel = int(raw)
     known = settable_nested(device, sub, family)  # type: ignore[arg-type]
     if not known:
+        # Two different situations produce an empty set, and they call
+        # for opposite answers. An unmodelled device has no opinion, so
+        # the section passes through as it always has. A family the
+        # model *does* know and declares unsettable must be refused --
+        # Room EQ is reported by the device and ignores every write, and
+        # accepting `[roomeq:output:5]` silently delivered nothing while
+        # looking exactly like a section that worked.
+        if device is not None and sub in nested_families(
+                device, family):  # type: ignore[arg-type]
+            raise ConfigError(
+                "[%s]: %s is reported by the device but cannot be set -- "
+                "oscmix accepts the write and the register does not change"
+                % (section, sub))
         return []
     if not _has_channel(device, family, sub, channel):
         raise ConfigError(
