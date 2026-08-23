@@ -62,6 +62,28 @@ QUIET_SECONDS = 6.0
 MAX_SECONDS = 90.0
 
 
+def running_matches_build(build_dir: Path) -> Optional[str]:
+    """Whether the installed backend is the binary in ``build_dir``.
+
+    The revision below is read from the *source* tree, and a recording
+    labelled with a revision it was not taken against is worse than an
+    unlabelled one -- ADR 0008 rests on that label. This caught itself
+    once: a new upstream revision was built in a scratch directory and
+    installed, `build/oscmix` was left where it was, and the recording
+    came out stamped with the old SHA.
+
+    Returns a complaint, or None when they agree or cannot be compared.
+    """
+    built = build_dir / "oscmix"
+    installed = Path.home() / ".local" / "bin" / "oscmix"
+    if not built.is_file() or not installed.is_file():
+        return None
+    if built.read_bytes() == installed.read_bytes():
+        return None
+    return ("%s and %s differ, so the revision below would be a guess -- "
+            "rebuild or reinstall before recording" % (built, installed))
+
+
 def backend_revision(build_dir: Path) -> Optional[str]:
     """The commit the running backend was built from, if it can be told."""
     try:
@@ -165,6 +187,12 @@ def main() -> int:
     parser.add_argument("--device", default="Fireface UCX II")
     args = parser.parse_args()
 
+    build_dir = Path(__file__).resolve().parent.parent / "build" / "oscmix"
+    complaint = running_matches_build(build_dir)
+    if complaint:
+        print("record-dump: %s" % complaint, file=sys.stderr)
+        return 2
+
     sock = bind_or_skip(args.recv_port)
     try:
         print("listening %.0fs without asking, to find the streamed "
@@ -181,7 +209,6 @@ def main() -> int:
               "running?" % args.recv_port, file=sys.stderr)
         return EXIT_SKIP
 
-    build_dir = Path(__file__).resolve().parent.parent / "build" / "oscmix"
     fixture = {
         "recorded": time.strftime("%Y-%m-%d"),
         "device": args.device,

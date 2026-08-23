@@ -5,8 +5,10 @@ see, kept here so the reasoning survives whether or not they are
 accepted, and so the measurement that justifies each one is in the
 repository rather than in a pull request thread.
 
-Each patch is against the pinned revision
-`2411b12d8a13b82829caf3b0b628078980c3d3a4`.
+The pin is now `55802a6ab865e551540ee9ad5081b8ae3276f8ca`. Patch 0001 is
+against it and still needed -- PR #31 is open. **Patch 0002 was merged
+upstream as `55802a6` and is kept only as a record**; applying it now
+would conflict with the fix it asked for.
 
 ---
 
@@ -76,7 +78,14 @@ has not yet shipped against.
 
 [oscmix]: https://github.com/michaelforney/oscmix
 
-## 0002 -- Room EQ register folding
+## 0002 -- Room EQ register folding (**merged upstream, do not apply**)
+
+**Status:** fixed by michaelforney as `55802a6 ffucxii: Fix regtoctl for
+room EQ`, and [#32][32] is closed. The pin moved to that commit; this
+section stays because the measurement behind it is the reason the fix
+exists, and because a patch file with no story is a patch nobody can
+review later.
+
 
 `device_ffucxii.c` recombines the per-output Room EQ offset with `|`
 against a base (`0x35D0`) whose low five bits are already `0x10`. For

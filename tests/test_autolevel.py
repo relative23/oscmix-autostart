@@ -17,7 +17,7 @@ from oscmix_autostart.config import load_config
 from oscmix_autostart.errors import ConfigError
 from oscmix_autostart.registers import NUMBER, UCX2, register_policy, settable_nested
 
-#: upstream `autoleveltree`, oscmix.c at 2411b12d. Raw `.min`/`.max`;
+#: upstream `autoleveltree`, oscmix.c at 55802a6. Raw `.min`/`.max`;
 #: `setfixed` divides the OSC value by `.scale` on the way in, so a
 #: config sees min*scale .. max*scale.
 UPSTREAM = {

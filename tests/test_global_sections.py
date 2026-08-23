@@ -263,21 +263,52 @@ def test_the_control_room_splits_setup_from_buttons():
         assert register_policy(UCX2, path) == REMEMBER, path
 
 
-def test_mainout_declares_the_ten_names_upstream_has(warm):
-    """And not the eleventh, which the pinned revision cannot produce.
+def test_mainout_declares_the_eleventh_name_the_new_pin_gives_it(warm):
+    """This test used to assert the opposite, and the pin move is why.
 
-    The device reports -1 for "no main out". At the pinned revision
-    `oscsendenum` has no value list, so -1 matches no index and is sent
-    unnamed -- that is upstream #30, fixed on a branch and tested here.
-    Declaring "None" now would put a value in the config that this
-    backend maps to index 10, which is not -1 and not a main out either.
+    The device reports -1 for "no main out". At 2411b12 `oscsendenum`
+    had no value list, so -1 matched no name and arrived unnamed -- that
+    was upstream #30. e8151cd gave enums an optional value list and
+    `mainout` a "None" option, and the pin now sits on 55802a6, so the
+    device reports `('is', (-1, 'None'))`.
+
+    The old docstring named the trap this walks into: index 10 is not
+    -1, and upstream's `setenum` reads a `,i` argument as the raw value
+    rather than as a position. That is what `values` is for, and the
+    next test is the one that would fail without it.
     """
     by_path = {r.template: r for r in UCX2.registers}
     choices = by_path["/controlroom/mainout"].choices
     assert choices[0] == "1/2"
-    assert choices[-1] == "19/20"
-    assert len(choices) == 10
-    assert "None" not in choices
+    assert choices[-1] == "None"
+    assert len(choices) == 11
+
+
+def test_selecting_no_main_out_writes_minus_one_and_not_ten():
+    """The whole reason a register may declare enum *values*.
+
+    `setenum` takes a `,i` argument as the value, not the index. "None"
+    sits at position 10 and means -1; written positionally it would set
+    the register to 10, which is not a main out and not "none" either --
+    accepted, on the wire, device wrong.
+    """
+    from oscmix_autostart.reconcile import _enum_value
+
+    by_path = {r.template: r for r in UCX2.registers}
+    mainout = by_path["/controlroom/mainout"]
+    assert mainout.values == (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, -1)
+    assert _enum_value(mainout, "None") == -1
+    assert _enum_value(mainout, "1/2") == 0
+    assert _enum_value(mainout, "19/20") == 9
+
+
+def test_every_other_enum_leaves_its_values_empty():
+    """Position and value agree everywhere else, and saying so twice is
+    a place for them to disagree."""
+    for register in UCX2.registers:
+        if register.template == "/controlroom/mainout":
+            continue
+        assert register.values == (), register.template
 
 
 def test_the_three_families_are_complete_against_the_recording(warm):

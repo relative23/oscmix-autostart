@@ -8,9 +8,13 @@ also means those items are held to the same standard as everything else
 here: an issue that wastes a maintainer's time on an unreproducible
 report is worse than no issue.
 
-All observations below are against the pinned revision
+All observations below were made against
 `2411b12d8a13b82829caf3b0b628078980c3d3a4` on a Fireface UCX II
-(serial 24216011), Linux 7.0.
+(serial 24216011), Linux 7.0. **Both are fixed upstream, and the pin now
+sits on `55802a6ab865e551540ee9ad5081b8ae3276f8ca`**, which carries both
+fixes -- measured on the same device: the dump goes from 2002 registers
+to 2322, Room EQ from 320 to its real 640, and `/controlroom/mainout`
+now arrives as `('is', (-1, 'None'))` instead of unnamed.
 
 ---
 

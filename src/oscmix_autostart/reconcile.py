@@ -314,6 +314,21 @@ def global_entries(config: Config) -> Tuple[Entry, ...]:
     return tuple(out)
 
 
+def _enum_value(register: "Register", value: object) -> int:
+    """The wire value for an enum name.
+
+    Its position, unless the register declares otherwise. Upstream's
+    `setenum` reads a `,i` argument as the raw value rather than as an
+    index, so `/controlroom/mainout` -- where "None" sits at position 10
+    and means -1 -- would be written as 10 by a positional encoder, and
+    10 is not one of its values.
+    """
+    position = register.choices.index(str(value))
+    if register.values:
+        return register.values[position]
+    return position
+
+
 def _encode(path: str, register: "Register", value: object) -> Entry:
     """One setting as the entry that writes it.
 
@@ -329,7 +344,7 @@ def _encode(path: str, register: "Register", value: object) -> Entry:
     coming back.
     """
     if register.domain == ENUM:
-        return Entry(path, "i", (register.choices.index(str(value)),),
+        return Entry(path, "i", (_enum_value(register, value),),
                      PHASE_CHANNEL)
     if register.tags.startswith("f"):
         return Entry(path, "f", (float(value),),  # type: ignore[arg-type]
@@ -574,12 +589,19 @@ def globals_from_observed(seen: Mapping[str, Args],
 def _unnameable(register: "Register", value: object) -> bool:
     """Whether an enum value is one this backend cannot put a name to.
 
-    `/controlroom/mainout` reports -1 for "no main out", and at the
-    pinned revision `oscsendenum` has no value list, so it arrives
-    unnamed. Written into a config as `mainout = -1` it produces a file
-    that will not load -- a dump of a working device that refuses to be
-    a config, which is the round trip catching exactly what it exists
-    for (michaelforney/oscmix#30, fixed upstream, pin not moved).
+    Written for `/controlroom/mainout`, which reported -1 for "no main
+    out" with no name attached: as `mainout = -1` it produced a file
+    that would not load -- a dump of a working device that refuses to be
+    a config. The round trip caught it, which is what the round trip is
+    for.
+
+    That case is gone: the pin moved to 55802a6 and e8151cd gave enums a
+    value list, so -1 now arrives as "None". This stays because the
+    situation is not specific to that register -- any enum reporting a
+    value the declared names do not cover would produce the same
+    unloadable file -- and because the alternative is finding out again
+    on somebody's desk. `tests/test_dump_sections.py` constructs the
+    case rather than relying on a device to produce it.
     """
     return register.domain == ENUM and value not in register.choices
 

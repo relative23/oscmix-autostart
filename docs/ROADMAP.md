@@ -1815,6 +1815,47 @@ Neither is exotic, and neither would have been found by reading the
 output. That is the argument for point 3 being a fixed point rather than
 "the dump looks right".
 
+### The pin moved to 55802a6, and what that cost and bought
+
+ADR 0008: the pin may only be bumped together with a fresh hardware
+measurement. Here it is, on the UCX II (serial 24216011).
+
+| | 2411b12 | 55802a6 |
+|---|---|---|
+| registers in a warm `/refresh` | 2002 | **2322** |
+| Room EQ registers | 320, folded | **640, real** |
+| `/controlroom/mainout` | `('i', (-1,))`, unnamed | `('is', (-1, 'None'))` |
+
+Three upstream commits, two of them ours: `e8151cd` allows
+discontinuous enum values and closes #30, `55802a6` fixes the Room EQ
+`regtoctl` folding and closes #32. `tests/data/refresh-dump.json` is
+re-recorded against the new revision, and the binary it was recorded
+from is byte-identical to the installed one -- `record-dump.py` now
+refuses to record when they differ, because it mislabelled a recording
+exactly once and a fixture that lies about its revision is worse than
+no fixture.
+
+**`--diff` reads 2322 registers and reports 0 differences** against the
+config on this desk, so nothing regressed in what the session already
+did.
+
+**What it cost.** `mainout` grows an eleventh name, and with it the one
+enum in the model whose value is not its position: "None" sits at
+position 10 and means -1. Upstream's `setenum` reads a `,i` argument as
+the **raw value**, so a positional encoder would have written 10 -- not
+a main out, not "none", accepted, on the wire, device wrong. Registers
+may now declare `values` alongside `choices`, mirroring upstream's own
+`.enumvals`, and every other enum leaves it empty because position and
+value agree.
+
+The test that asserted `mainout` has ten names now asserts eleven. Its
+old docstring named the trap ahead of time -- *"index 10 is not -1 and
+not a main out either"* -- which is the argument for writing down why a
+thing is absent rather than only that it is.
+
+**Patch 0002 is merged and must not be applied.** PR #31 (patch 0001,
+output stereo on write) is still open, so that one stays.
+
 ### Room EQ is blocked on upstream
 
 The 320 Room EQ registers in the recording are a *folded* address space:

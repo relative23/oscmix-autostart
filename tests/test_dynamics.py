@@ -30,7 +30,7 @@ from oscmix_autostart.registers import (
     settable_nested,
 )
 
-#: upstream `dynamicstree`, oscmix.c at 2411b12d. `.min`/`.max` are raw
+#: upstream `dynamicstree`, oscmix.c at 55802a6. `.min`/`.max` are raw
 #: register units; `setfixed` divides the OSC value by `.scale` on the
 #: way in, so a config sees min*scale .. max*scale. `setint` has no
 #: scale and its bounds are already the config's.

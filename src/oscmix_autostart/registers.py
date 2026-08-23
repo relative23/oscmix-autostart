@@ -148,6 +148,14 @@ class Register:
     #: own vocabulary lives -- inventing synonyms here would mean a
     #: config that reads well and sets nothing.
     choices: Tuple[str, ...] = ()
+    #: For ENUM: the wire value of each name, when it is not simply the
+    #: name's position. Upstream's `setenum` takes a `,i` argument as the
+    #: **raw value**, not as an index -- so a discontinuous enum written
+    #: by position writes the wrong register. `/controlroom/mainout` is
+    #: the one that has this: "None" sits at position 10 and its value is
+    #: -1 (upstream `.enumvals`, added in e8151cd for #30). Empty means
+    #: position and value agree, which is true of every other enum here.
+    values: Tuple[int, ...] = ()
     #: For NUMBER: the inclusive bounds and the unit, taken from
     #: upstream's node table (``min``/``max``/``scale``) rather than
     #: from what a device happened to report. ``None`` means upstream
@@ -454,14 +462,14 @@ UCX2 = Device(
         # section controls are all set once for a room. REMEMBER on the
         # three that are buttons somebody presses while working.
         #
-        # `mainout` declares the ten pairs upstream names. The device
-        # also reports -1 for "no main out", which the pinned revision
-        # cannot name and a config cannot request -- that is upstream
-        # #30, fixed on a branch and tested here, and this row grows an
-        # eleventh name when the pin moves.
+        # The eleventh name arrived: the pin moved to 55802a6, and
+        # e8151cd (upstream #30) gave `mainout` a "None" option. It is
+        # the one enum here whose value is not its position -- "None" is
+        # -1 -- which is what `values` exists for.
         Register("/controlroom/mainout", "is", VERIFIABLE, GLOBAL, ENUM,
                  ("1/2", "3/4", "5/6", "7/8", "9/10",
-                  "11/12", "13/14", "15/16", "17/18", "19/20"),
+                  "11/12", "13/14", "15/16", "17/18", "19/20", "None"),
+                 values=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, -1),
                  policy=PIN),
         Register("/controlroom/dimreduction", "f", VERIFIABLE, GLOBAL, NUMBER,
                  lo=LEVEL_MIN, hi=0.0, unit="dB", policy=PIN),
