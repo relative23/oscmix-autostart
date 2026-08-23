@@ -45,13 +45,39 @@ def test_the_model_is_indexed_by_device():
     assert registers.UCX2.channels_for("hi-z") == (3, 4)
 
 
-def test_an_untested_device_declares_nothing_rather_than_guesses():
-    # "May work" as a property of the data. Guessing the 802's registers
-    # is how a model becomes a lie about hardware nobody here can test.
+def test_an_untested_device_declares_no_registers_rather_than_guesses():
+    """"May work" as a property of the data, not a sentence in a README.
+
+    The 802 declares no *registers* because oscmix cannot drive it at
+    the pinned revision: `init()` lists only `&ffucxii`, so an 802 exits
+    with "unsupported device"; and `ff802` has no `.regtoctl` or
+    `.ctltoreg`, which are called unguarded in seven places. A register
+    model against that would describe writes that cannot happen.
+
+    It does declare channels, and that is not the same thing. They come
+    from upstream's own `device_ff802.c` -- 30 in, 30 out, gain on the
+    eight analog inputs, 48V and hi-Z on the four Mic/Inst ones -- so
+    they are read rather than guessed. No evidence artifact, so it stays
+    unsupported.
+    """
     assert registers.FF802.supported is False
     assert registers.FF802.registers == ()
-    assert registers.FF802.channels == {}
     assert registers.FF802.evidence is None
+
+
+def test_the_802_channel_map_is_not_a_copy_of_the_ucx2():
+    """The point of a device dimension: the two really do differ.
+
+    A capability map that quietly matched the UCX II would look declared
+    and mean nothing. These three differences are upstream's, not ours:
+    twenty channels against thirty, 48V on 1-2 against 9-12, and the
+    802's Mic/Inst channels carrying no gain register at all.
+    """
+    assert registers.FF802.channels_for("input") != \
+        registers.UCX2.channels_for("input")
+    assert registers.FF802.channels_for("48v") == (9, 10, 11, 12)
+    assert registers.UCX2.channels_for("48v") == (1, 2)
+    assert 9 not in registers.FF802.channels_for("input-gain")
 
 
 def test_a_supported_device_names_its_evidence():

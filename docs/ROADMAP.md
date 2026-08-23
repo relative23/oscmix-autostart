@@ -1914,11 +1914,51 @@ committing to the big ones.
   dumped config could not reproduce playback link state, and nothing
   noticed, because the only command that would have shown it is the one
   being added here.
-- The 802: a device is supported when its register table is declared,
-  its channel capabilities recorded, and one evidence artifact exists.
-  It has none of the three, and 0.4.0 is when a second device stops
-  being hypothetical -- the register model is device-indexed precisely
-  for this.
+- **The 802: one of the three, and the other two are blocked upstream.**
+  A device is supported here when its register table is declared, its
+  channel capabilities are recorded, and one evidence artifact exists.
+
+  **Capabilities: recorded.** `device_ff802.c` exists upstream and is
+  compiled in, so the map is read rather than guessed -- 30 in, 30 out,
+  gain and reference level on the eight analog inputs, 48V and hi-Z on
+  the four Mic/Inst channels, reference level on the twelve analog and
+  phones outputs. The same derivation was checked against the UCX II
+  first: `OUTPUT_HAS_REFLEVEL` gives outputs 1-8 and
+  `INPUT_HAS_REFLEVEL` gives inputs 3-8, which is exactly what the
+  UCX II already declares. The rule reproduces the known answer before
+  it is used on the unknown one.
+
+  Three differences are worth naming, because a capability map that
+  quietly matched the UCX II would look declared and mean nothing: 30
+  channels against 20, 48V on 9-12 against 1-2, and the 802's Mic/Inst
+  channels carrying **no gain register at all**.
+
+  **Register table: blocked, and not for lack of trying.** oscmix cannot
+  drive an 802 at the pinned revision, for two independent reasons:
+  `init()` holds a device list of exactly one entry, `&ffucxii`, so an
+  802 exits with "unsupported device" before anything else runs; and
+  `ff802` declares no `.refresh`, no `.regtoctl` and no `.ctltoreg`,
+  which are called unguarded in seven places -- `setval` alone has
+  three. The upstream table is a stub: channel names and counts, no
+  register mapping. A register model against it would describe writes
+  that cannot happen.
+
+  **Evidence artifact: impossible without hardware.** So the 802 stays
+  `supported=False`, now for a read reason rather than "never tested".
+
+  **What it cost elsewhere.** Declaring capabilities turned a stated
+  promise into a narrower one. `[device] name = Fireface 802` with
+  `output = 30/31` used to be accepted -- "being listed must not become
+  a constraint". It is now refused, with *channel 31 does not exist on a
+  Fireface 802 (it has output 1..30)*. The replacement promise is truer:
+  being listed constrains a config by exactly what upstream's own table
+  says, and never by a guess. A device with no table at all still gets
+  no opinion, and that half is asserted separately.
+
+  No ADR: the roadmap already asked for capabilities to be recorded, and
+  this is that being carried out rather than a decision taken against
+  it. The consequence is written down here because it changed a promise
+  a test used to state.
 
 ## Explicit non-goals
 

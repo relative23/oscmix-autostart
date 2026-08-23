@@ -577,15 +577,49 @@ UCX2 = Device(
 )
 
 
-# The 802 has never been tested. It is listed so the device dimension is
-# real from the first line rather than retrofitted, and so "may work" is
-# a property of the data instead of a sentence in the README. It declares
-# no registers on purpose: guessing them is how a model becomes a lie.
+# The 802, and why it declares no registers.
+#
+# Not "never tested" any more -- read. `device_ff802.c` exists upstream
+# and is compiled in, so the channel map below is derived from it rather
+# than guessed: 30 in, 30 out, gain and reference level on the eight
+# analog inputs, 48V and hi-Z on the four Mic/Inst channels, reference
+# level on the twelve analog and phones outputs. Note what the 802 does
+# *not* have where the UCX II does: its Mic/Inst channels carry no gain
+# register at all, and its analog inputs carry reference level from
+# channel 1 rather than from 3.
+#
+# The registers stay empty because **oscmix cannot drive this device at
+# the pinned revision**, for two independent reasons:
+#
+#   * `init()` in oscmix.c holds a device list of exactly one entry,
+#     `&ffucxii`. An 802 never matches, so it exits with "unsupported
+#     device" before anything else happens.
+#   * `ff802` declares no `.refresh`, no `.regtoctl` and no `.ctltoreg`.
+#     Those are called unguarded in seven places -- `setval` alone has
+#     three -- so a device that got past the list would take a NULL call
+#     on the first write.
+#
+# So the upstream table is a stub: channel names and counts, no register
+# mapping. Declaring a register model against it would describe writes
+# that cannot happen. This is the same shape of blocker as Room EQ, one
+# level deeper.
 FF802 = Device(
     key="ff802",
     name="Fireface 802",
     usb_id="2a39:3fc0",
-    channels={},
+    channels={
+        "input": _seq(1, 30),
+        "output": _seq(1, 30),
+        "playback": _seq(1, 30),
+        # No meter row: the UCX II's runs two past its control registers
+        # and nothing says whether the 802 does the same. An unmeasured
+        # guess here would be indistinguishable from a measurement.
+        "48v": _seq(9, 12),
+        "hi-z": _seq(9, 12),
+        "input-gain": _seq(1, 8),
+        "input-reflevel": _seq(1, 8),
+        "output-reflevel": _seq(1, 12),
+    },
     registers=(),
     supported=False,
 )

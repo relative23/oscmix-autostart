@@ -447,15 +447,40 @@ def test_an_unmodelled_device_keeps_working_exactly_as_before(session_mod,
     assert config.routes[0].output == (40, 41)
 
 
-def test_a_modelled_but_untested_device_is_also_no_opinion(session_mod,
-                                                           tmp_path):
-    # The 802 is in the table so the device dimension is real from the
-    # first line, and declares no channels because guessing them is how
-    # a model becomes a lie. Being listed must not become a constraint.
+def test_an_untested_device_constrains_only_what_upstream_declares(
+        session_mod, tmp_path):
+    """This test used to assert the opposite, and the change is the point.
+
+    While the 802 declared no channels, "being listed must not become a
+    constraint" was the promise, and `output = 30/31` was accepted. Its
+    channel map now comes from upstream's `device_ff802.c`, so 31 is
+    refused -- a channel that does not exist on the hardware, caught by
+    a table that was read rather than invented.
+
+    The promise it replaces is narrower and truer: being listed
+    constrains a config by exactly what upstream's own table says, and
+    never by a guess. A device with no table still gets no opinion.
+    """
     path = write(tmp_path, "[device]\nname = Fireface 802\n\n"
                            "[route:x]\nplayback = 1/2\noutput = 30/31\n")
-    config = session_mod.load_config(path)
-    assert config.routes[0].output == (30, 31)
+    with pytest.raises(session_mod.ConfigError) as excinfo:
+        session_mod.load_config(path)
+    assert "channel 31 does not exist on a Fireface 802" in str(excinfo.value)
+    assert "output 1..30" in str(excinfo.value)
+
+
+def test_the_802_still_accepts_what_it_does_have(session_mod, tmp_path):
+    path = write(tmp_path, "[device]\nname = Fireface 802\n\n"
+                           "[route:x]\nplayback = 1/2\noutput = 29/30\n")
+    assert session_mod.load_config(path).routes[0].output == (29, 30)
+
+
+def test_a_device_with_no_table_at_all_still_gets_no_opinion(session_mod,
+                                                             tmp_path):
+    """The half that did not change: an unmodelled name is unconstrained."""
+    path = write(tmp_path, "[device]\nname = Some Other Interface\n\n"
+                           "[route:x]\nplayback = 1/2\noutput = 63/64\n")
+    assert session_mod.load_config(path).routes[0].output == (63, 64)
 
 
 def test_the_channels_a_valid_config_uses_are_still_accepted(session_mod):
