@@ -1736,22 +1736,36 @@ options in an error message, and a test that had been using the word
 "crossfeed" as an example of a name this version does *not* know. That
 is the third time a test has named a family that later landed.
 
-**What is missing is the audible measurement.** Crossfeed is a
-controlled L/R blend for headphones, so the measurement is the
-definition: a left-only tone into the phones pair should appear on the
-right output as the setting rises. The first attempt did not hold up --
-output 8 already showed -40.7 dBFS at crossfeed 0, and the *same*
-setting read -39.5 dBFS and then -41.7 dBFS, about 2 dB of wander
-against an effect of the same size. It was not repeated because the
-mixer GUI took UDP 8222, and `LevelReader` refuses to compete for the
-device's replies rather than produce quietly wrong numbers.
+**Measured, with the baseline established first.** Crossfeed is a
+controlled L/R blend for headphones, so the measurement is its
+definition. A left-only tone into the phones pair, six steps:
 
-So this family is **not done by the bar**, and the release should not
-say otherwise. It needs one measurement session with the GUI closed:
-establish that a left-only tone really is isolated at outputs 7/8 with
-crossfeed off, then step 0 -> 3 -> 5 and read the bleed. Until then the
-declaration rests on the register probe, which is solid, and on nothing
-audible, which is not.
+| crossfeed | out 7 | out 8 | bleed |
+|---|---|---|---|
+| 0 | -58.7 | **silent** | none |
+| 1 | -60.0 | -77.8 | -17.8 dB |
+| 2 | -60.4 | -74.7 | -14.3 dB |
+| 3 | -61.2 | -71.9 | -10.7 dB |
+| 4 | -61.6 | -70.9 | -9.4 dB |
+| 5 | -62.1 | -70.0 | **-8.0 dB** |
+
+Monotonic in both directions: the cross channel rises and the direct one
+gives up a little, which is what a blend does. Restored afterwards, and
+the dump before and after is identical over all 1700 lines.
+
+**The first attempt was wrong, and why is worth keeping.** It read
+-40.7 dBFS on output 8 at crossfeed 0, and the same setting gave -39.5
+and then -41.7 dBFS: about 2 dB of wander against an effect of the same
+size, and a right channel that should have been silent. The cause was
+the mixer GUI holding UDP 8222, so the level reader saw a split stream.
+`LevelReader` refuses to start when the port is held for exactly this
+reason, and it was open when the first run started.
+
+The fix was not a better statistic but a baseline: with the GUI closed,
+a left-only tone reads -58.7 dBFS on output 7 three times running and
+**-144.0** on output 8, and the mirror case is exact. A measurement
+whose baseline is not silent cannot say anything about bleed, and
+checking that first is what turned an unusable run into a clean one.
 
 Left: room EQ (320, blocked on #32).
 

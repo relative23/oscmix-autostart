@@ -10,6 +10,16 @@ version does *not* know.
 
 Upstream declares no bounds for it, so like `lowcut/slope` they came
 from the device.
+
+Audible, and measured that way. A left-only tone into the phones pair,
+crossfeed 0 to 5 on outputs 7 and 8: output 8 goes from silent (-144.0
+dBFS) to -8.0 dB below the direct channel, monotonically, while output 7
+gives up 3.4 dB along the way. The baseline is the part that matters --
+with the setting off, the tone reads -58.7 dBFS on 7 and -144.0 on 8,
+three times running, and the mirror case is exact. An earlier attempt
+read signal on output 8 with crossfeed off and wandered 2 dB between
+identical runs; the mixer GUI was holding the receive port, so the level
+reader saw half the stream.
 """
 
 import pytest
