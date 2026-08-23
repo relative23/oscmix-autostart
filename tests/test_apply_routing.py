@@ -40,6 +40,7 @@ class FakeOscmix(threading.Thread):
         self.stereo_playback = set()
         self.mix_writes = []         # (path, was_linked_when_written)
         self.order = []              # every path, in arrival order
+        self.arrivals = []           # (path, monotonic) for timing assertions
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("127.0.0.1", send_port))
         # 0.2 s, like the fakes in test_faults.py, and a timeout keeps
@@ -61,6 +62,7 @@ class FakeOscmix(threading.Thread):
 
     def record(self, path):
         self.order.append(path)
+        self.arrivals.append((path, time.monotonic()))
         parts = path.split("/")
         if path.startswith("/output/") and path.endswith("/stereo"):
             channel = int(parts[2])
@@ -262,7 +264,10 @@ def test_falls_back_to_a_fixed_wait_when_the_port_is_taken(routing_mod, session_
                                                            monkeypatch):
     # The mixer GUI holds the receive port; the echo is then unobservable
     # and apply_routing waits blind instead of skipping the barrier.
-    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.05)
+    # 0.3, not a token 0.05: the assertion below is a timing one and the
+    # fake's arrival stamps carry scheduling jitter. A wait that dwarfs
+    # the jitter is what makes "did it wait" answerable.
+    monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.3)
     send_port, recv_port = free_udp_port(), free_udp_port()
     blocker = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     blocker.bind(("127.0.0.1", recv_port))
@@ -277,7 +282,26 @@ def test_falls_back_to_a_fixed_wait_when_the_port_is_taken(routing_mod, session_
         device.join(timeout=3)
         device.sock.close()
     assert [p for p, _ in device.mix_writes] == ["/mix/5/playback/1"]
-    assert all(linked for _, linked in device.mix_writes)
+
+    # Asserted on the gap the *product* controls, not on the fake's link
+    # state. That state is set by a `threading.Timer`, and a 10 ms timer
+    # measured here fires 1 ms late at the median, 12 ms at p95 and
+    # 440 ms at the worst of 400 trials, 11 of them past 40 ms. Under
+    # `make flake`, which runs the whole suite five times over, that
+    # starvation is routine and the proxy assertion failed. Raising
+    # LINK_SETTLE did not help, because the length of the wait was never
+    # the problem.
+    #
+    # What this test is about is that `apply_routing` waits LINK_SETTLE
+    # before the mix phase when the echo cannot be observed, and the
+    # fake sees that directly: the mix datagram arrives that much later
+    # than the link one.
+    when = dict(device.arrivals)
+    gap = when["/mix/5/playback/1"] - when["/output/5/stereo"]
+    assert gap >= 0.15, (
+        "mix arrived %.3f s after the link; a blind 0.3 s wait puts it "
+        "far beyond half that, and skipping the barrier puts it near "
+        "zero" % gap)
 
 
 def test_await_link_echo_reports_port_unavailable(session_mod):
