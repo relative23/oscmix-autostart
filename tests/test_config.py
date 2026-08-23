@@ -1,5 +1,7 @@
 """routing.conf parsing: valid configs, defaults, and error reporting."""
 
+import json
+
 import pytest
 from conftest import repo_file
 
@@ -493,6 +495,33 @@ REFUSED_SHAPES = (
 
 _WORKING = ("[device]\nname = Fireface UCX II\n\n"
             "[route:main]\nplayback = 1/2\noutput = 1/2\nlevel = 0.0\n\n")
+
+
+def _section_names(shapes):
+    """The `<sub>` of each `[<sub>:<family>:<n>]` header in the shapes."""
+    return [shape.split("[", 1)[1].split(":", 1)[0] for shape in shapes]
+
+
+def test_the_unknown_names_are_ones_that_cannot_ever_land():
+    """The guard that would have caught this three times.
+
+    `dynamics`, `roomeq` and `crossfeed` were each used somewhere as an
+    example of a name this version does not know, and each one later
+    landed -- at which point the test asserted the opposite of what it
+    was written to assert, silently, because a passing test says
+    nothing.
+
+    A name the *device* never reports cannot land, and that is checkable
+    against the recording rather than against anybody's memory of what
+    is planned.
+    """
+    reported = json.loads(
+        repo_file("tests", "data", "refresh-dump.json").read_text())["registers"]
+    segments = {segment for path in reported for segment in path.split("/")}
+    for name in _section_names(FORWARD_COMPATIBLE_SHAPES) + ["nosuchoption"]:
+        assert name not in segments, (
+            "%r is a real register segment, so this stops testing the "
+            "unknown-section path the day it is declared" % name)
 
 
 @pytest.mark.parametrize("shape", FORWARD_COMPATIBLE_SHAPES)
