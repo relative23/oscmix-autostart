@@ -1926,52 +1926,55 @@ this project cannot.
 **What is owed upstream.** A short report saying that much. Not filed
 yet.
 
-### What has to be decided, not measured
+### What had to be decided: settled in ADR 0016
 
-- **The nested-option format.** Above. First ADR of the release.
-- **Which of these are dangerous.** Still open, and deliberately not
-  answered by inventing a rule. `48v` has one (never implied, applied
-  last, proven by a hardware case) because an off-by-one there damages
-  equipment. The candidates here are milder and different in kind:
-  `/clock/source` costs every downstream device its lock at once,
-  `/hardware/lockkeys = All` locks somebody out of their own front
-  panel, and `/hardware/{opticalout,spdifout,standalonearc}` change what
-  the box does with no computer attached.
+All three are answered, and two of them turned out to be *measurable*,
+which was the finding. The section that held them said they had to be
+decided rather than measured; looking for the measurement first is what
+this project does everywhere else, and it worked here too.
 
-  **One candidate was measured and dropped.** `/hardware/ccmix` looked
-  like the worst of them. A hand-written note in a working
-  `routing.conf` on the development machine says the matrix "only takes
-  effect when the device's CC Mix setting is TotalMix App -- in any
-  other CC Mix mode the Fireface hard-wires playback channels to outputs
-  and ignores the matrix". If that held, a config could silently disable
-  everything this project does.
+- **The nested-option format.** ADR 0014, first of the release.
+- **Which of these are dangerous: none of them.** There is no
+  `DANGEROUS` flag in this codebase. `48v` is withheld by having no
+  value domain, and the reason is written beside it -- *an off-by-one in
+  phantom power is a damaged ribbon microphone*. So the bar is equipment
+  damage, and every candidate here is inconvenience instead.
 
-  It did not reproduce. With `ccmix = 8ch` a tone into playback 1/2
-  still came out at outputs 1, 5 and 7 at the same level, and a *new*
-  matrix write (playback 1/2 to outputs 3/4) took effect as well. So on
-  this device at the pinned revision, `ccmix` does not gate the matrix,
-  and it is declared as an ordinary setting. The note may well be
-  describing class-compliant mode, which is a different switch --
-  `/hardware/ccmode`, which reads 1 here and which oscmix cannot write.
-  Worth re-testing on a device actually in CC mode before anyone treats
-  the note as wrong rather than as unconfirmed.
+  What separates them from an ordinary setting is whether a write can be
+  taken back, and that is measurable without locking anyone out of
+  anything, because the OSC path is the way back. Every value of
+  `lockkeys`, `opticalout`, `spdifout`, `standalonearc` and
+  `clock/source` was written, read back and restored: all landed, all
+  restored. `lockkeys = All` included, which was the one worth being
+  careful about. Somebody who locks themselves out with a config gets
+  back in with a config.
 
-  The rest stay undeclared as hazards because none of them has been
-  measured. Locking the front panel of somebody's interface to find out
-  what it locks is not a measurement worth taking casually, and a rule
-  written without one is the folklore this project keeps deleting.
-- **Whether clock is state or an event.** The table lists `/clock/*` as
-  declarable. The sample-rate measurement says the device changes it on
-  its own, reports it, and loses nothing. A config that *declares* a
-  sample rate is a config that fights PipeWire for it. Declaring the
-  *source* is a different question from declaring the *rate*, and they
-  should not be one row.
-- **Which rows this project should own at all.** The table's own note
-  stands: every 0.4.0 row is one where the honest answer today is "turn
-  it in the GUI and hope". Reverb and echo in particular are creative
-  settings, not installation state -- the pin/remember default of
-  REMEMBER covers them, but it is worth asking whether a *config file*
-  is the right place for a reverb tail at all.
+  Stated in the ADR and not glossed over: that holds *while oscmix is
+  reachable*. A config that locks the panel and a machine that then
+  fails to boot leaves no way back. That is an argument for reading a
+  config before applying it, not for withholding the register.
+- **Clock is state, measured.** The rate was never a decision:
+  `/clock/samplerate` has no `.set` upstream, so a config cannot declare
+  it. For the source, set to `Word Clock` **with nothing connected**,
+  the device accepts it, reports it, does **not** fall back within eight
+  seconds, pushes nothing unprompted, holds 48000 kHz throughout, and
+  restores exactly. It keeps what it is told, including state that is
+  useless to it, so a pinned source argues with nothing. **PIN stays.**
+
+  The case not measured needs hardware this project does not have: a
+  source that is present, in use, and then disappears. Named rather than
+  assumed either way.
+- **Creative settings stay, as REMEMBER.** The question answers itself
+  once `--dump-config` exists: the dump's job is to reproduce a desk as
+  a file, and a reverb tail is part of that desk. Leaving it out means a
+  dump that silently describes less than the device holds, which is the
+  failure this release has now fixed three times.
+
+  What keeps it from becoming a file full of creative decisions is the
+  policy column, not the model. REMEMBER means the dump writes them
+  commented, carrying the device's value, and nothing sets them unless
+  somebody puts them in `[pin]`. The file shows the reverb without
+  imposing it.
 
 ### What does not change
 

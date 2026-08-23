@@ -26,3 +26,4 @@ silences half the outputs.
 | [0013](0013-reconcile-triggers.md) | Reconcile on events, never on a clock |
 | [0014](0014-nested-config-sections.md) | Nested settings go in `[<family>:<channel-family>:<n>]` |
 | [0015](0015-the-register-table-is-not-mutated.md) | The register table is exempt from mutation, and checked against recordings instead |
+| [0016](0016-no-register-is-declared-dangerous.md) | No 0.4.0 register is declared dangerous, and the clock source stays pinned |
