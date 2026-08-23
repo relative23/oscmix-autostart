@@ -338,10 +338,15 @@ def _roomeq_registers() -> Tuple["Register", ...]:
 
     The switch and `delay` behave the same way, and output 1 fails too,
     where the channel offset is zero and the address is the base exactly
-    -- so it is not the offset arithmetic. 55802a6 fixed `regtoctl`, the
-    *read* path, which is why 640 registers are now reported where 320
-    were; `ctltoreg` maps the same addresses and the writes still do
-    nothing.
+    -- so it is not the offset arithmetic.
+
+    **And oscmix does send it.** Tracing what oscmix writes to the MIDI
+    pipe (fd 7, the one `alsaseqio` forwards) during exactly those two
+    writes shows both SysEx messages going out: register `0x0511` for
+    the channel EQ and `0x35D3` for Room EQ, which is what `ctltoreg`
+    maps them to. The device applies the first and ignores the second,
+    from the same address block it happily *reports* Room EQ values
+    from. So this is not oscmix dropping the write.
 
     So the family is declared for what it is -- a surface this project
     can read and report and cannot promise to set. `settable_nested`

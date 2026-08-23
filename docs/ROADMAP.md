@@ -1894,9 +1894,23 @@ refused by name. The audible measurement went the same way -- a Low
 Shelf at 120 Hz with 20 dB of cut moved a 60 Hz tone by 0.0 dB, which is
 what sent me looking.
 
-**What is owed upstream.** A short report: writes to `/output/N/roomeq/*`
-are accepted and change nothing, with the channel EQ as the control and
-output 1 ruling out the offset. Not filed yet.
+**oscmix does send the write, which took a trace to establish.** The
+first version of this finding stopped at "writes change nothing", which
+would have sent a maintainer into his own code to find nothing wrong.
+`aseqdump` cannot subscribe to oscmix's ALSA port, but the bridge is a
+pipe -- `alsaseqio` hands the child fd 6 and fd 7 -- so tracing writes
+to fd 7 shows the wire. During those two writes, both SysEx messages go
+out: register `0x0511` for the channel EQ and `0x35D3` for Room EQ,
+exactly what `ctltoreg` maps them to.
+
+The device applies the first and ignores the second, from the same
+address block it reports Room EQ values from. That is a device-side
+fact, and the open question is whether RME writes Room EQ some other
+way -- which a maintainer who has the protocol notes can answer and
+this project cannot.
+
+**What is owed upstream.** A short report saying that much. Not filed
+yet.
 
 ### What has to be decided, not measured
 
