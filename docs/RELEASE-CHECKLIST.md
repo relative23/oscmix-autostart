@@ -106,7 +106,22 @@ one that found all three defects in 0.1.3.
       `/usr/lib` -- a scratch `HOME` does not move them. A scratch-home
       uninstall with a live sudo ticket therefore deletes the *real*
       system's hotplug rule. It failed safely here only because sudo had
-      no terminal.
+      no terminal. Check `sudo -n true` fails before running it, and
+      check the two files are still there afterwards.
+
+      **`systemctl --user` does not follow `HOME` either**, and that is
+      the same trap one level down. A scratch-home uninstall stops and
+      *disables* the real user's `oscmix.service`, because the user
+      instance is per-login-session and not per-`HOME`. Nothing is lost
+      -- the unit file, the binaries and the config all live under the
+      real `HOME` and survive -- but the desk stops being managed until
+      `systemctl --user enable --now oscmix` puts it back. Expect that,
+      and restore it as part of the step rather than discovering it
+      later.
+
+      Likewise the *install* half: `./install.sh` into a scratch `HOME`
+      restarts the real service. That is harmless, and it is also how
+      the `READY=1` item below gets satisfied without a second run.
 
 ## 6. The tag
 

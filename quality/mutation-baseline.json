@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-22",
+  "recorded": "2026-08-24",
   "note": [
     "A ratio, not a count. Absolute survivor counts rise with every",
     "line added -- new code means new mutants, so a healthy change",
@@ -84,29 +84,35 @@
     "nags. The reason it is safe to move now and was not before is that",
     "the erosion mechanism is gone -- auto level, low cut and crossfeed",
     "are the same shape as dynamics and will add their rows inside the",
-    "exemption, so they cannot walk the score down 0.005 at a time."
+    "exemption, so they cannot walk the score down 0.005 at a time.",
+    "",
+    "0.4.0 release run: 4866 mutants, score 0.711 against the 0.700 floor.",
+    "The whole of `--diff`, Room EQ, low cut, crossfeed and the 802's",
+    "capability map landed between this and the previous entry, and the",
+    "score moved by a thousandth. That is ADR 0015 doing what it was",
+    "written for: new register rows land inside the exemption, so what",
+    "moves the number is assertions rather than data."
   ],
   "measured": {
+    "total": 4866,
+    "killed": 3402,
+    "survived": 1382,
+    "not_covered": 82,
+    "score": 0.711,
+    "run_minutes": 64,
+    "cache": "cleared before the run, as CI does",
+    "scope": "register table exempt (ADR 0015)",
+    "note": "the 0.4.0 release measurement"
+  },
+  "previous": {
+    "recorded": "2026-08-22",
     "total": 4741,
     "killed": 3319,
     "survived": 1340,
     "not_covered": 82,
     "score": 0.712,
-    "run_minutes": 57,
-    "cache": "cleared before the run, as CI does",
-    "scope": "register table exempt (ADR 0015); registers.py keeps 14 survivors, all in functions that query the table"
-  },
-  "previous": {
-    "recorded": "2026-08-22",
-    "total": 4885,
-    "killed": 3321,
-    "survived": 1473,
-    "not_covered": 82,
-    "score": 0.693,
     "why_it_moved": [
-      "The last run with the register table still in the denominator.",
-      "Dynamics had taken it from 0.692 to 0.687 by adding 32 survivors",
-      "that no test could be attributed to; ADR 0015 took the table out."
+      "The run that ADR 0015's exemption was measured on."
     ]
   },
   "confirmed_by_ci": {
