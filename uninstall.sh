@@ -20,10 +20,35 @@ case "${1:-}" in
 esac
 
 info() { printf '\033[1;34m::\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 
-info "stopping and disabling oscmix.service"
-systemctl --user stop oscmix.service 2>/dev/null || true
-systemctl --user disable --quiet oscmix.service 2>/dev/null || true
+# systemd's user instance belongs to the login session, not to $HOME. It
+# reads units from the *session's* home whatever HOME this script was
+# given, so installing or uninstalling into a scratch home would enable,
+# restart, stop or disable the real user's oscmix.service. That is not
+# hypothetical: it happened while running the release checklist, and the
+# desk stopped being managed until `systemctl --user enable --now` put it
+# back.
+#
+# `systemctl --user show-environment` reports the session's own HOME, so
+# the two can be compared. When it reports nothing -- an unusual systemd,
+# or none -- this proceeds, which is what every earlier version did.
+manages_this_home() {
+    local session_home
+    session_home="$(systemctl --user show-environment 2>/dev/null |
+                    sed -n 's/^HOME=//p')" || true
+    [ -z "$session_home" ] || [ "$session_home" = "$HOME" ]
+}
+
+if manages_this_home; then
+    info "stopping and disabling oscmix.service"
+    systemctl --user stop oscmix.service 2>/dev/null || true
+    systemctl --user disable --quiet oscmix.service 2>/dev/null || true
+else
+    warn "not touching oscmix.service: systemd's user instance serves a"
+    warn "different home than $HOME, and stopping it would take down a"
+    warn "running desk this uninstall was never asked to touch."
+fi
 
 info "removing installed files"
 rm -rf "$LIB_DIR"

@@ -237,3 +237,81 @@ def test_the_installed_tree_carries_every_runtime_module(tmp_path):
                  (home / ".local" / "lib" / "oscmix-autostart"
                   / "oscmix_autostart").glob("*.py")}
     assert source == installed, "not installed: %s" % sorted(source - installed)
+
+
+# --------------------------------------------------------------------------
+# systemd's user instance is per login session, not per HOME.
+# --------------------------------------------------------------------------
+
+def session_home_stub(tmp_path, session_home):
+    """A `systemctl` stub that answers show-environment with a HOME.
+
+    The default stub in `make_fake_home` answers nothing, which is the
+    "cannot tell" case the scripts treat as "proceed". This one lets a
+    test say *whose* session systemd is serving.
+    """
+    stub = tmp_path / "stub-bin" / "systemctl"
+    log = tmp_path / "calls.log"
+    stub.write_text(
+        '#!/bin/sh\n'
+        'echo "systemctl $@" >> "%s"\n'
+        'for a in "$@"; do\n'
+        '  if [ "$a" = "show-environment" ]; then\n'
+        '    echo "HOME=%s"\n'
+        '    exit 0\n'
+        '  fi\n'
+        'done\n'
+        'exit 0\n' % (log, session_home))
+    stub.chmod(0o755)
+
+
+def test_uninstall_leaves_another_session_service_alone(tmp_path):
+    """The trap this closes, found while running the release checklist.
+
+    `systemctl --user` reads units from the *session's* home whatever
+    HOME the script was given, so a scratch-home uninstall stopped and
+    disabled the real user's oscmix.service. Nothing was lost, but the
+    desk stopped being managed until somebody noticed.
+    """
+    _home, env, log = make_fake_home(tmp_path)
+    run("install.sh", ["--no-build"], env)
+    session_home_stub(tmp_path, "/home/somebodyelse")
+    log.write_text("")
+
+    result = run("uninstall.sh", ["--purge"], env)
+
+    assert result.returncode == 0
+    calls = log.read_text()
+    assert "stop oscmix.service" not in calls
+    assert "disable" not in calls
+    assert "not touching oscmix.service" in result.stderr
+
+
+def test_install_does_not_arm_another_session_service(tmp_path):
+    """The mirror case: installing into a scratch home would otherwise
+    enable and restart a service belonging to somebody else's session,
+    and then report "backend is running" about it."""
+    home, env, log = make_fake_home(tmp_path)
+    session_home_stub(tmp_path, "/home/somebodyelse")
+
+    result = run("install.sh", ["--no-build"], env)
+
+    assert result.returncode == 0
+    calls = log.read_text()
+    assert "enable" not in calls
+    assert "restart oscmix.service" not in calls
+    assert "not enabled" in result.stderr
+    # The unit is still installed; only arming it is withheld.
+    assert (home / ".config" / "systemd" / "user" / "oscmix.service").is_file()
+
+
+def test_install_arms_the_service_when_the_session_matches(tmp_path):
+    """The guard must not block the ordinary path, which is the whole
+    point of comparing rather than refusing outright."""
+    home, env, log = make_fake_home(tmp_path)
+    session_home_stub(tmp_path, str(home))
+
+    result = run("install.sh", ["--no-build"], env)
+
+    assert result.returncode == 0
+    assert "enable --quiet oscmix.service" in log.read_text()

@@ -206,10 +206,34 @@ fi
 install -D -m 644 "$PROJECT_DIR/config/routing.conf.example" \
     "$CONFIG_DIR/routing.conf.example"
 
+
+# systemd's user instance belongs to the login session, not to $HOME. It
+# reads units from the *session's* home whatever HOME this script was
+# given, so an install into a scratch home would enable and restart the
+# real user's oscmix.service -- and report "backend is running" about a
+# service that is not the one just installed.
+#
+# `systemctl --user show-environment` reports the session's own HOME, so
+# the two can be compared. When it reports nothing this proceeds, which
+# is what every earlier version did.
+manages_this_home() {
+    local session_home
+    session_home="$(systemctl --user show-environment 2>/dev/null |
+                    sed -n 's/^HOME=//p')" || true
+    [ -z "$session_home" ] || [ "$session_home" = "$HOME" ]
+}
+
 info "installing systemd user service"
 install_file 644 "$PROJECT_DIR/systemd/oscmix.service" "$UNIT_DIR/oscmix.service"
-systemctl --user daemon-reload
-systemctl --user enable --quiet oscmix.service
+if manages_this_home; then
+    systemctl --user daemon-reload
+    systemctl --user enable --quiet oscmix.service
+else
+    warn "unit installed but not enabled: systemd's user instance serves a"
+    warn "different home than $HOME, so enabling it would arm somebody"
+    warn "else's service. Enable it from that session with:"
+    warn "  systemctl --user enable --now oscmix.service"
+fi
 
 info "installing desktop entry and icon"
 install_file 644 "$PROJECT_DIR/desktop/oscmix.svg" \
@@ -287,7 +311,10 @@ device_present() {
     return 1
 }
 
-if device_present; then
+if device_present && ! manages_this_home; then
+    info "Fireface detected, but not restarting the backend: systemd's user"
+    info "instance serves a different home than $HOME"
+elif device_present; then
     info "Fireface detected; (re)starting backend"
     systemctl --user restart oscmix.service
     sleep 2

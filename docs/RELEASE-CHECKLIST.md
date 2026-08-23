@@ -109,19 +109,19 @@ one that found all three defects in 0.1.3.
       no terminal. Check `sudo -n true` fails before running it, and
       check the two files are still there afterwards.
 
-      **`systemctl --user` does not follow `HOME` either**, and that is
-      the same trap one level down. A scratch-home uninstall stops and
-      *disables* the real user's `oscmix.service`, because the user
-      instance is per-login-session and not per-`HOME`. Nothing is lost
-      -- the unit file, the binaries and the config all live under the
-      real `HOME` and survive -- but the desk stops being managed until
-      `systemctl --user enable --now oscmix` puts it back. Expect that,
-      and restore it as part of the step rather than discovering it
-      later.
+      **`systemctl --user` does not follow `HOME` either**, and that was
+      the same trap one level down: the user instance is per login
+      session, not per `HOME`, so a scratch-home uninstall stopped and
+      *disabled* the real user's `oscmix.service`. **Fixed rather than
+      documented in 0.4.0**: both scripts compare `$HOME` against the
+      session's own, which `systemctl --user show-environment` reports,
+      and skip the service entirely when they differ. The unit is still
+      installed or removed; only arming and stopping it is withheld,
+      with a message saying how to do it from the right session.
 
-      Likewise the *install* half: `./install.sh` into a scratch `HOME`
-      restarts the real service. That is harmless, and it is also how
-      the `READY=1` item below gets satisfied without a second run.
+      So this step is now safe to run, and its two guards are what to
+      check: `sudo -n true` must fail, and the real service must still
+      be `active`/`enabled` afterwards.
 
 ## 6. The tag
 
