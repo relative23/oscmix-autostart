@@ -13,10 +13,12 @@ true, so they are checked here rather than trusted:
 
 import ast
 import os
+import re
 import sys
 from pathlib import Path
 
 import pytest
+from conftest import repo_file
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = PROJECT_ROOT / "src" / "oscmix_desk"
@@ -298,3 +300,52 @@ def test_everything_that_queries_the_table_stays_under_mutation(name):
     """
     _, last = _exempt_lines()
     assert _defined_at(name) > last
+
+
+# --------------------------------------------------------------------------
+# The architecture page, checked against the code.
+# --------------------------------------------------------------------------
+
+def documented_modules():
+    """Module names the architecture page's module table lists."""
+    text = repo_file("docs", "ARCHITECTURE.md").read_text()
+    table = text[text.index("## The modules"):]
+    table = table[:table.index("\n## ")]
+    return set(re.findall(r"^\| `([a-z_]+)` \|", table, re.MULTILINE))
+
+
+def test_the_architecture_page_names_every_runtime_module():
+    """A page that drifts is worse than none, because it is believed.
+
+    `docs/ARCHITECTURE.md` was 186 lines describing the 0.2.0 system and
+    mentioning none of `reconcile`, `desired`, `plan`, `snapshot` or
+    `profiles`. It did not drift slowly: it was never checked, so there
+    was nothing to notice.
+    """
+    actual = {path.stem for path in module_paths()}
+    missing = sorted(actual - documented_modules())
+    assert missing == [], (
+        "runtime modules absent from docs/ARCHITECTURE.md: %s" % missing)
+
+
+def test_the_architecture_page_invents_no_modules():
+    """The other direction, which is how a page survives a deletion."""
+    actual = {path.stem for path in module_paths()}
+    invented = sorted(documented_modules() - actual)
+    assert invented == [], (
+        "docs/ARCHITECTURE.md names modules that do not exist: %s" % invented)
+
+
+def test_the_page_carries_no_history():
+    """Chronicle belongs in the roadmap, decisions in the ADRs.
+
+    Not style policing: the page rotted because it mixed "how it works"
+    with "how we got here", and the second kind of sentence is the kind
+    nobody updates. Version numbers in prose are the tell.
+    """
+    text = repo_file("docs", "ARCHITECTURE.md").read_text()
+    body = text[text.index("## The system it sits in"):text.index("## Design decisions")]
+    dated = re.findall(r"\b0\.\d\.\d\b", body)
+    assert dated == [], (
+        "version numbers in the architecture body belong in the roadmap: %s"
+        % dated)

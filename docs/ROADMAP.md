@@ -2155,10 +2155,19 @@ and when, which is exactly right for auditing a claim and exactly wrong
 for finding out how something works. Most facts about this project live
 here and nowhere else.
 
-*What is missing:* a short, stable page that says how the thing is
-built -- the layering, the two-phase apply, the reconciler, the policy
-column -- without the history of how each was arrived at.
-`docs/ARCHITECTURE.md` exists and has not kept pace.
+**Done.** `docs/ARCHITECTURE.md` is rewritten in the present tense: the
+system it sits in, the pipeline every command is a stopping point along,
+the module table, the register model as data, pin and remember, the
+two-phase apply and the two seams. History stays here, decisions stay in
+the ADRs.
+
+The page had not "failed to keep pace". It described the 0.2.0 system
+and mentioned none of `reconcile`, `desired`, `plan`, `snapshot` or
+`profiles` -- because nothing checked it, so there was nothing to
+notice. **Three tests now do**: every runtime module must appear in its
+table, every module in the table must exist, and version numbers in the
+body fail because a sentence about how we got here is the kind nobody
+updates. All three were verified against a deliberately broken page.
 
 *Why it matters more than it sounds:* this project's whole method is
 that reasoning is written down. A chronicle nobody can navigate is a

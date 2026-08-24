@@ -1,6 +1,16 @@
 # Architecture
 
-## Layers
+How oscmix-desk is built, in the present tense. It carries no history:
+why a thing is the way it is lives in [the decision
+records](decisions/), and what was measured to get there lives in
+[the roadmap](ROADMAP.md).
+
+**This page is checked against the code.** `tests/test_architecture.py`
+requires every runtime module to be named here and every module named
+here to exist. A page that drifts fails the suite, which is the only
+reason to trust one.
+
+## The system it sits in
 
 Four layers have to cooperate for audio to work; oscmix-desk owns the
 glue between them:
@@ -29,99 +39,120 @@ glue between them:
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## oscmix-session in detail
+## The shape of the whole thing
 
-1. **Wait for the device.** Poll `/proc/asound/seq/clients` (up to
-   `--timeout`, default 30 s) for a client whose name contains the
-   configured device name. Parsing the proc file instead of `aconnect -l`
-   output avoids a dependency on alsa-utils and the classic trap that the
-   device name also appears in *port* lines. If the proc file does not
-   exist yet, opening `/dev/snd/seq` makes the kernel autoload `snd-seq`.
+Everything this project does is one pipeline, and every command is a
+different place to stop along it:
 
-2. **Distinguish "absent" from "broken".** If no client appears, sysfs
-   (`/sys/bus/usb/devices/*/idVendor|idProduct`) tells us whether the
-   device is physically connected:
-   - not connected → exit **0** ("nothing to do", no restart loop, no red
-     `failed` unit at boot without the device)
-   - connected but no MIDI client → exit **1** (driver problem; systemd
-     retries via `Restart=on-failure`)
+```
+routing.conf ──config──▶ Config
+                           │
+                    reconcile.desired()
+                           ▼
+                        Entry[]           what the file asks for
+                           │
+      device ──backend──▶ reconcile.observed()
+                           ▼
+                        seen{}            what the device reports
+                           │
+                    reconcile.plan()
+                           ▼
+                        Plan              what to write, and why
+                           │
+              ┌────────────┴────────────┐
+        routing.apply()            cli --diff
+        (sends it)                 (prints it)
+```
 
-3. **Start the bridge.** `alsaseqio <client>:1 <oscmix>` connects to port
-   `:1` of the client -- port 0 is regular MIDI, port 1 is the SysEx
-   control port the mixer protocol uses. Binary paths are resolved
-   explicitly (env override → `PATH` → `~/.local/bin`, `/usr/local/bin`,
-   `/usr/bin`) because the systemd user manager's `PATH` may not include
-   `~/.local/bin`.
+`--dump-config` runs the middle of it backwards: device state in,
+`routing.conf` out. `--snapshot` stops one step earlier and prints
+`seen{}` verbatim, which is the only view that includes registers a
+config cannot express.
 
-4. **Wait until oscmix listens.** `/proc/net/udp{,6}` is polled for the
-   OSC port (no `ss`/`netstat` dependency). If the port does not appear
-   within 10 s the session logs a warning and continues -- sending UDP
-   datagrams to a not-yet-listening port is harmless, and killing the
-   backend would only cause a restart loop.
+**The reconciler is pure.** No socket, no clock, no device. That is what
+lets it be tested against recorded dumps instead of hardware, and it is
+why the register model is data rather than code.
 
-5. **Apply routing.** Each `[route:*]` section of routing.conf is
-   translated into the OSC messages TotalMix would generate (see
-   [OSC-PROTOCOL.md](OSC-PROTOCOL.md)) and sent to `127.0.0.1:<port>`.
-   The state ends up in the device's hardware mixer: zero latency,
-   independent of PipeWire/PulseAudio/JACK.
+## The modules
 
-   This happens in **two phases**, and the order is load-bearing. First
-   the channel-pair links (`/playback/<n>/stereo`, `/output/<n>/stereo`),
-   then the mix matrix. oscmix only updates its own link state when the
-   *device* reports `/output/<n>/stereo` back; the OSC setter forwards
-   the register and leaves that state untouched. A `/mix` write
-   evaluated against a stale link state takes the unlinked branch and
-   never writes the pair's right channel -- every even output goes
-   silent. Between the phases the session waits briefly for the device
-   echo, which only fires when the link actually *changes*; when the
-   pairs were already linked no echo comes, and step 7 is what closes
-   the gap.
+Layered: each may import only from those below it, enforced as an
+acyclic graph.
 
-6. **Signal readiness.** With the backend up and the routing sent, the
-   session reports `READY=1` (`Type=notify`), so for systemd -- and
-   anything ordered after the service -- "started" means "backend up,
-   routing applied". The no-device exit also notifies before exiting 0
-   to avoid a protocol failure.
+| Module | What it owns |
+|---|---|
+| `constants` | every timing constant and exit code, each with the measurement that produced it |
+| `errors` | `ConfigError`, the one exception a user ever sees |
+| `log` | journal-shaped logging, no configuration |
+| `osc` | encode and decode OSC messages; no I/O |
+| `registers` | the register model as data: paths, tags, bounds, verification class, policy, per-device channel maps |
+| `config` | parse `routing.conf` into a `Config`, refusing anything the model does not declare |
+| `discovery` | find the device: ALSA sequencer clients, USB presence, whether a UDP port is bound |
+| `notify` | `sd_notify`, so `Type=notify` means "the routing is applied" |
+| `reconcile` | `desired` / `observed` / `plan`, and rendering a `Config` back to text |
+| `backend` | the one place that opens a socket to the device; its `Traits` name the upstream behaviour the timing constants work around |
+| `routing` | send a plan in two phases, with the link barrier between them |
+| `verify` | read the device back and say confirmed, mismatched or unverifiable |
+| `process` | supervise the backend: start, `SIGTERM`, escalate to `SIGKILL`, reap |
+| `pipewire` | generate named virtual sinks from the same config |
+| `profiles` | switch to `profiles/<name>.conf` as a transaction, reporting an outcome rather than raising |
+| `session` | the service lifecycle: wait for the device, start the backend, apply, signal ready, verify, shut down |
+| `launcher` | the desktop entry's entry point; deliberately depends on almost nothing |
+| `cli` | argument parsing and the exit-code mapping, and nothing else |
+| `__init__` | the public surface, and the only module that re-exports |
 
-7. **Sync and verify in the background.** OSC over UDP is
-   fire-and-forget, so a background thread reads the state back: it binds
-   the receive port (8222, where oscmix reports state), sends `/refresh`,
-   and compares the reported registers against the expected ones -- with
-   a 0.5 dB tolerance for the device's level quantization. On mismatch
-   the routing is re-sent once.
+## The register model is data
 
-   That dump does double duty. oscmix does not sync its register cache
-   on its own; the dump is the only thing that teaches it the device's
-   real link state. So the moment the dump has reported every
-   `/output/<n>/stereo`, the mix matrix is written a second time -- now
-   against a state that is known to be correct. Both jobs deliberately
-   share a single `/refresh`: two overlapping dumps starve each other and
-   confirm measurably fewer registers. The matrix itself is never
-   verified, because a `/mix` write draws no reply and the dump omits the
-   playback matrix; it is re-established rather than checked.
+`registers.py` declares every register as a row: path template, OSC type
+tags, which channels have it on which device, how it verifies, what a
+config may set it to, its bounds and unit, and who wins after the first
+write.
 
-   Verification is advisory: a
-   failed read-back is logged, never fatal (a restart loop would not
-   improve anything), and it is skipped when the port is taken because
-   the mixer GUI is running. Every expected register is classified
-   dynamically: **confirmed** (reported with a matching value),
-   **mismatched** (reported with a different value; a later matching
-   report overrides), or **unobserved** (never reported). Only
-   mismatches -- and the absence of registers the dump is known to
-   report promptly -- count as problems worth a re-send and a warning;
-   registers the device is known not to report in time are logged as
-   information. The known-not-prompt families, measured against the
-   real device, are `/mix/*/playback/*` (upstream dumps the input mix
-   matrix but not the playback matrix) and `/playback/*` (that section
-   streams so late in the multi-second dump that no sane window awaits
-   it) -- but if one of them does appear, it is compared like any
-   other, so a changed upstream dump format is handled without code
-   changes.
+Two consequences run through everything else:
 
-8. **Supervise.** On SIGTERM/SIGINT the child gets SIGTERM, after a 5 s
-   grace period SIGKILL, and the session exits 0. If the child dies on its
-   own, the USB check decides again: device gone → 0 (normal unplug),
-   device still there → 1 (systemd restarts).
+- **A config can set exactly what declares a value domain.** Phantom
+  power, Room EQ and `/output/{ch}/phase` have none, so no `routing.conf`
+  can reach them. That is one rule in one place instead of a list of
+  exceptions in the parser.
+- **The wire type comes from the declared tag**, never from the Python
+  value. A `,f` written to a register that reads integers is accepted,
+  dropped, and changes nothing.
+
+The table itself is exempt from mutation testing and checked against
+recorded device dumps instead ([ADR 0015](decisions/0015-the-register-table-is-not-mutated.md)).
+
+## Who wins: pin and remember
+
+Every settable register carries a policy. `REMEMBER` is the default: the
+file describes the value, a dump shows it as a comment, and the device
+keeps whatever it has. `PIN` means the file owns it and every start
+writes it back.
+
+The device does not announce most of its own changes, so "pinned" means
+*the config wins while this session is looking*
+([ADR 0012](decisions/0012-pin-and-remember.md),
+[ADR 0013](decisions/0013-reconcile-triggers.md)).
+
+## The two-phase apply
+
+Channel links are written before the mix matrix, with a barrier between
+them. Sending both in one burst silences every even output, because
+oscmix only learns a pair is linked when the device echoes the change
+back over MIDI, and a `/mix` write that overtakes that echo is evaluated
+against the stale flag ([ADR 0001](decisions/0001-two-phase-routing-apply.md)).
+
+The barrier waits for the echo, or for a fixed settle when the receive
+port is held by the mixer GUI and the echo cannot be observed.
+
+## The two seams
+
+**`backend`** is the only module that opens a socket. Everything above it
+takes a `Backend` argument, which is what lets the whole apply and verify
+path be driven by a fake in tests.
+
+**`registers.Device`** is the only place that knows a device exists. The
+model is indexed by device from the first line, so a second interface is
+a table rather than a rewrite. Only the UCX II has one; the 802 has its
+channel map and no registers, because oscmix cannot drive it.
 
 ### Exit codes
 
