@@ -88,12 +88,21 @@ a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
 the honest answer today is "turn it in the GUI, and hope nothing resets
 it" -- which is the same answer TotalMix gives, minus the snapshot.
 
-## Where we are (0.3.0 released, 0.4.0 in progress)
+## Where we are (0.4.0 released)
 
-**0.3.0 was tagged and published on 2026-08-20.** 0.4.0 is under way:
-6 of its 11 register families are declared and measured at the device --
-the five global ones and EQ, 522 of 1466 registers. What is left is
-under [0.4.0](#040----the-rest-of-the-strip-and-what-it-costs).
+**0.4.0 was tagged and published on 2026-08-24**, and the project was
+renamed from `oscmix-autostart` to `oscmix-desk` with it: the old name
+described 0.1.0 exactly and named one of two halves by the end.
+
+All eleven register families are declared and measured at the device.
+Room EQ is declared **reported and not settable**, because the writes
+are ignored (upstream #33), and `/output/{ch}/phase` the same, because
+the writes never leave oscmix (upstream #34).
+
+What comes next is in
+[After 0.4.0](#after-040-what-actually-threatens-this), and it is not a
+feature list: the surface is finished, and what is left are the things
+that would make this unmaintainable or untrue in a few years.
 
 Working and verified: playback→output and **hardware input** routing for
 mono and stereo pairs, stereo linking with the ordering that requires,
@@ -2060,6 +2069,125 @@ committing to the big ones.
   this is that being carried out rather than a decision taken against
   it. The consequence is written down here because it changed a promise
   a test used to state.
+
+## After 0.4.0: what actually threatens this
+
+0.4.0 finished the surface. Every register the device reports is
+declared, measured and either settable or explicitly not. There is no
+obvious next feature, and that is the point at which a project either
+finds out what it is for or accumulates ornament.
+
+So this section is not a wish list. It is the five things that would
+make this unmaintainable, unusable or untrue in a few years, in the
+order they are likely to bite.
+
+### A. Everything rests on one maintainer's project
+
+oscmix is the reason this works and the reason it can stop working. One
+person, no signed releases, and four of our findings are sitting in his
+issue tracker. Room EQ writes (#33), output phase (#34) and the 802 (#4)
+are all blocked there, and nothing here can unblock them.
+
+**Started, and the shape is right.** `docs/register-addresses.md` holds
+the arithmetic, the wire format and eleven addresses confirmed on the
+wire rather than copied out of upstream's source. If oscmix stopped
+being maintained tomorrow, the OSC paths would be worth nothing and that
+table would still be true.
+
+*What is left:* the table covers eleven registers of 2028. Extending it
+is mechanical -- write each register its own value, trace, compare --
+but it is a measurement session per family, and the value falls off
+sharply after the ones that have already caused defects. **The honest
+target is not "all of them" but "enough to rebuild the model", and
+nobody has said what that number is.**
+
+*What this does not do:* it does not make this project independent.
+oscmix also carries the SysEx transport, the device discovery and the
+register-to-control mapping in both directions. A table of addresses is
+the notes, not the instrument.
+
+### B. Nothing notices when the desk drifts
+
+The session applies once, verifies for a minute, and then stops looking.
+Turn a knob afterwards and the config and the hardware disagree with
+nobody the wiser. `--diff` answers the question, but only when asked.
+
+**The premise this was decided on was wrong**, and it took until 0.4.x
+to measure it. ADR 0013 says only `/output/{ch}/stereo` is pushed, so
+there is nothing to react to. Measured: the device reports the **partner
+channel of a linked pair** for volume, mute, crossfeed and every block of
+EQ, dynamics, low cut and auto level. A drift signal needs no clock and
+no polling.
+
+*The reason it is still not built:* the registers that stay silent are
+`reflevel`, `input/gain` and `input/phase` -- exactly the installation
+state ADR 0012 says PIN exists for. A signal built on this would
+announce the settings a config mostly leaves alone and say nothing about
+the ones it pins.
+
+*What has to be decided, not measured:* whether a partial signal is
+worth having. "The desk changed, and I can tell you about most of it"
+may be more useful than silence, or it may be the kind of half-promise
+this project keeps deleting. **That is a judgement and it has not been
+made.**
+
+### C. Security is as closed as it can be here
+
+Done in 0.4.x, and the useful part was finding out how little was left.
+`systemd-analyze security --user` went from 8.3 to 5.4, three directives
+had been listed as impossible for two releases and were not, and ADR
+0017 states the trust boundary instead of implying one.
+
+*What remains is not closable here.* The OSC port authenticates nothing:
+any local process can set any register, including the phantom power this
+project withholds from config files. That guard is in the config parser
+and cannot be moved to the port, which is oscmix's. Stated, not fixed,
+and a fix would have to happen upstream.
+
+*The one thing worth revisiting:* `PrivateUsers=yes` is refused here as
+untested against ALSA device access. Testing it is an afternoon, and it
+is the largest single item left on the exposure score.
+
+### D. The documents cannot answer a question quickly
+
+This file is 2000 lines and is a chronicle: it records what was measured
+and when, which is exactly right for auditing a claim and exactly wrong
+for finding out how something works. Most facts about this project live
+here and nowhere else.
+
+*What is missing:* a short, stable page that says how the thing is
+built -- the layering, the two-phase apply, the reconciler, the policy
+column -- without the history of how each was arrived at.
+`docs/ARCHITECTURE.md` exists and has not kept pace.
+
+*Why it matters more than it sounds:* this project's whole method is
+that reasoning is written down. A chronicle nobody can navigate is a
+place where reasoning goes to be lost, which is the failure it was
+built to avoid.
+
+### E. The mutation score is expensive and says less each release
+
+An hour per run, and ADR 0015 had to exempt the register table before
+the number meant anything at all. Since then it has moved by a
+thousandth across four register families, which is the exemption
+working -- and also the number telling us very little.
+
+*The question to ask:* what would we do differently if it moved? If the
+answer is "read the survivors", then the survivors are the artifact and
+the score is a wrapper. **A cheaper scope that runs on every push may be
+worth more than a thorough one that runs once a release.**
+
+### The limit under all of this
+
+**Every measurement in this repository was taken on one Fireface UCX II,
+serial 24216011, on one machine.** Every bound, every timing constant,
+every "the device does X" is that device's behaviour. The 802 has never
+been tested and its register table cannot be written. There is no second
+unit, no second Linux, and no user other than the author.
+
+That does not make the measurements wrong. It makes them narrower than
+their wording, and the roadmap should say so once, plainly, rather than
+qualify every sentence.
 
 ## Explicit non-goals
 
