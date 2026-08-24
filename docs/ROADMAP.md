@@ -2258,6 +2258,113 @@ That does not make the measurements wrong. It makes them narrower than
 their wording, and the roadmap should say so once, plainly, rather than
 qualify every sentence.
 
+## 0.5.0 -- the write direction, proven
+
+**Every one of the 1242 settable registers is declared `verifiable`**,
+and that word is a promise: write it, and the device reports the new
+value back. About a dozen of those promises have been checked against a
+Fireface. Two of the unchecked ones were false.
+
+- **Room EQ** (upstream #33): the write is accepted and ignored. Found
+  while measuring something else.
+- **Output phase** (upstream #34): oscmix never puts the write on the
+  wire. Found by reading upstream's source.
+
+Neither was found by a test, because no test writes. The verification
+apparatus this project is built on runs entirely in the read direction:
+the dump says what the device holds, `plan` compares it against the
+config, and the recordings prove the model matches the dump. **What
+nobody has ever asked the device is whether a register it reports is a
+register it accepts.**
+
+That is the release. Not new surface -- the surface is finished -- but
+the other half of the claim already made about it.
+
+### What the sweep does
+
+For each settable register, in order:
+
+1. read the current value from a snapshot taken first;
+2. write a different legal value, chosen from the register's own
+   declared domain (`lo`/`hi`, `choices`, `values`);
+3. wait for the device's report;
+4. compare;
+5. write the original value back.
+
+Then a second full snapshot, compared against the first. That comparison
+is the restoration proof, and it is the reason this is affordable now
+rather than in 0.3.0: `--snapshot` covers all 2252 registers including
+those with no value domain, where the dump-versus-dump comparison of
+0.3.0 was blind and left `/output/9/stereo` unlinked while reporting
+equality.
+
+### The step size is the discriminator, not a parameter
+
+A register that reports nothing after a write is ambiguous. Either the
+new value quantised onto the old one, in which case silence is correct
+and the device is behaving exactly as documented -- it reports only on
+change -- or the write was ignored.
+
+**A second, larger step separates them.** If the larger step reports,
+the first was quantisation. If nothing reports at any step inside the
+declared domain, the register is deaf. So the sweep does not need a
+step size guessed in advance; it needs an escalation, and the step a
+register required is itself a recorded result. A control that only
+answers to coarse changes is worth knowing about before a config
+promises it.
+
+This also fixes the audibility problem the obvious design has. Starting
+small and escalating only where necessary keeps the sweep quiet on the
+families that are actually in the signal path, instead of stepping every
+fader through ten percent of its range.
+
+### What it costs is the first thing to measure
+
+**Not estimated here.** The refresh dump moves 2002 registers in 1.9 s,
+so the wire is not the constraint; the wait for each individual echo
+is, and that wait is what `LINK_ECHO_TIMEOUT` exists for. Whether 1242
+sequential writes take two minutes or twenty is a measurement, and
+putting a number in this document before taking it would be the exact
+mistake ADR 0010 was written about.
+
+### reflevel is named, not measured
+
+Fourteen `reflevel` registers are the only members of ADR 0016's
+dangerous class that are settable at all -- `48v` correctly has no value
+domain, so a config cannot reach it and neither can the sweep. Changing
+a reference level on a live output is audible and potentially loud.
+
+**They are skipped, and the artifact says so per register.** "Skipped,
+dangerous" is a result. Quietly omitting them and reporting 1228 of 1228
+would not be.
+
+### What the artifact holds
+
+One line per register, with a verdict from a closed set: `confirmed`,
+`confirmed at step N`, `ignored`, `skipped-dangerous`. Same shape and
+same place as the release evidence artifacts, so a claim in the README
+has a file behind it rather than a memory of a session.
+
+An `ignored` verdict is a defect somewhere in the stack, and the sweep
+does not decide where. Room EQ and phase failed identically from this
+side and for entirely different reasons, one in the device's firmware
+and one in oscmix's write path. Attribution needs a trace, which is the
+work the finding starts rather than the work it completes.
+
+### What it does not prove
+
+That a register does what its name says. A confirmed write proves the
+value round-trips; it does not prove `/output/5/crossfeed = 3` changes
+anything anyone can hear. That is `verify-hardware`'s ground, and it
+covers routing only.
+
+**So this release closes a class of defect, not the gap between
+declared and audible.** The declared surface is 1242 registers; the
+audible evidence is a handful of routes. Naming that ratio is more
+useful than narrowing it, because narrowing it means an audio
+measurement per register family and this project has one room, one
+device and one pair of ears.
+
 ## Explicit non-goals
 
 - **A mixer GUI.** That is [oscmix-gtk][oscmix].
