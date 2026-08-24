@@ -1,0 +1,353 @@
+{
+ "_": [
+  "Control offsets for the Fireface UCX II, and the rules that turn",
+  "one into a register address. Extracted from upstream's",
+  "device_ffucxii.c at the pinned revision, then checked on the wire:",
+  "docs/register-addresses.md lists the eleven addresses measured and",
+  "which rule each one exercises.",
+  "",
+  "The numbers are Michael Forney's, under ISC, the same as the code",
+  "quoted under patches/. They live here because a table extracted",
+  "from upstream on demand is not independent of upstream, which was",
+  "the whole point of writing them down."
+ ],
+ "source": "michaelforney/oscmix device_ffucxii.c",
+ "revision": "55802a6ab865e551540ee9ad5081b8ae3276f8ca",
+ "extracted": "2026-08-25",
+ "rules": {
+  "channel": "idx << 6 | offset, idx = input index or 20 + output index",
+  "mix": "0x2000 | out << 6 | in            (pan)",
+  "mixlevel": "0x4000 | out << 6 | idx       (level; idx = input, or 20 + playback)",
+  "roomeq": "offset + (out << 5), offsets already carry the 0x35D0 base"
+ },
+ "offsets": {
+  "AUTOLEVEL": {
+   "offset": 35,
+   "rule": "channel"
+  },
+  "AUTOLEVEL_HEADROOM": {
+   "offset": 37,
+   "rule": "channel"
+  },
+  "AUTOLEVEL_MAXGAIN": {
+   "offset": 36,
+   "rule": "channel"
+  },
+  "AUTOLEVEL_RISETIME": {
+   "offset": 38,
+   "rule": "channel"
+  },
+  "DYNAMICS": {
+   "offset": 27,
+   "rule": "channel"
+  },
+  "DYNAMICS_ATTACK": {
+   "offset": 29,
+   "rule": "channel"
+  },
+  "DYNAMICS_COMPRATIO": {
+   "offset": 32,
+   "rule": "channel"
+  },
+  "DYNAMICS_COMPTHRES": {
+   "offset": 31,
+   "rule": "channel"
+  },
+  "DYNAMICS_EXPRATIO": {
+   "offset": 34,
+   "rule": "channel"
+  },
+  "DYNAMICS_EXPTHRES": {
+   "offset": 33,
+   "rule": "channel"
+  },
+  "DYNAMICS_GAIN": {
+   "offset": 28,
+   "rule": "channel"
+  },
+  "DYNAMICS_RELEASE": {
+   "offset": 30,
+   "rule": "channel"
+  },
+  "EQ": {
+   "offset": 15,
+   "rule": "channel"
+  },
+  "EQ_BAND1FREQ": {
+   "offset": 18,
+   "rule": "channel"
+  },
+  "EQ_BAND1GAIN": {
+   "offset": 17,
+   "rule": "channel"
+  },
+  "EQ_BAND1Q": {
+   "offset": 19,
+   "rule": "channel"
+  },
+  "EQ_BAND1TYPE": {
+   "offset": 16,
+   "rule": "channel"
+  },
+  "EQ_BAND2FREQ": {
+   "offset": 21,
+   "rule": "channel"
+  },
+  "EQ_BAND2GAIN": {
+   "offset": 20,
+   "rule": "channel"
+  },
+  "EQ_BAND2Q": {
+   "offset": 22,
+   "rule": "channel"
+  },
+  "EQ_BAND3FREQ": {
+   "offset": 25,
+   "rule": "channel"
+  },
+  "EQ_BAND3GAIN": {
+   "offset": 24,
+   "rule": "channel"
+  },
+  "EQ_BAND3Q": {
+   "offset": 26,
+   "rule": "channel"
+  },
+  "EQ_BAND3TYPE": {
+   "offset": 23,
+   "rule": "channel"
+  },
+  "INPUT_48V": {
+   "offset": 9,
+   "rule": "channel"
+  },
+  "INPUT_AUTOSET": {
+   "offset": 10,
+   "rule": "channel"
+  },
+  "INPUT_FXSEND": {
+   "offset": 1,
+   "rule": "channel"
+  },
+  "INPUT_GAIN": {
+   "offset": 8,
+   "rule": "channel"
+  },
+  "INPUT_HIZ": {
+   "offset": 11,
+   "rule": "channel"
+  },
+  "INPUT_MSPROC": {
+   "offset": 6,
+   "rule": "channel"
+  },
+  "INPUT_MUTE": {
+   "offset": 0,
+   "rule": "channel"
+  },
+  "INPUT_PHASE": {
+   "offset": 7,
+   "rule": "channel"
+  },
+  "INPUT_PLAYCHAN": {
+   "offset": 5,
+   "rule": "channel"
+  },
+  "INPUT_RECORD": {
+   "offset": 3,
+   "rule": "channel"
+  },
+  "INPUT_REFLEVEL": {
+   "offset": 9,
+   "rule": "channel"
+  },
+  "INPUT_STEREO": {
+   "offset": 2,
+   "rule": "channel"
+  },
+  "LOWCUT": {
+   "offset": 12,
+   "rule": "channel"
+  },
+  "LOWCUT_FREQ": {
+   "offset": 13,
+   "rule": "channel"
+  },
+  "LOWCUT_SLOPE": {
+   "offset": 14,
+   "rule": "channel"
+  },
+  "OUTPUT_CROSSFEED": {
+   "offset": 10,
+   "rule": "channel"
+  },
+  "OUTPUT_FXRETURN": {
+   "offset": 3,
+   "rule": "channel"
+  },
+  "OUTPUT_MUTE": {
+   "offset": 2,
+   "rule": "channel"
+  },
+  "OUTPUT_PAN": {
+   "offset": 1,
+   "rule": "channel"
+  },
+  "OUTPUT_PHASE": {
+   "offset": 8,
+   "rule": "channel"
+  },
+  "OUTPUT_PLAYCHAN": {
+   "offset": 7,
+   "rule": "channel"
+  },
+  "OUTPUT_RECORD": {
+   "offset": 5,
+   "rule": "channel"
+  },
+  "OUTPUT_REFLEVEL": {
+   "offset": 9,
+   "rule": "channel"
+  },
+  "OUTPUT_STEREO": {
+   "offset": 4,
+   "rule": "channel"
+  },
+  "OUTPUT_VOLUME": {
+   "offset": 0,
+   "rule": "channel"
+  },
+  "OUTPUT_VOLUMECAL": {
+   "offset": 11,
+   "rule": "channel"
+  },
+  "ROOMEQ": {
+   "offset": 13777,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND1FREQ": {
+   "offset": 13780,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND1GAIN": {
+   "offset": 13779,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND1Q": {
+   "offset": 13781,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND1TYPE": {
+   "offset": 13778,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND2FREQ": {
+   "offset": 13783,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND2GAIN": {
+   "offset": 13782,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND2Q": {
+   "offset": 13784,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND3FREQ": {
+   "offset": 13786,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND3GAIN": {
+   "offset": 13785,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND3Q": {
+   "offset": 13787,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND4FREQ": {
+   "offset": 13789,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND4GAIN": {
+   "offset": 13788,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND4Q": {
+   "offset": 13790,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND5FREQ": {
+   "offset": 13792,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND5GAIN": {
+   "offset": 13791,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND5Q": {
+   "offset": 13793,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND6FREQ": {
+   "offset": 13795,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND6GAIN": {
+   "offset": 13794,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND6Q": {
+   "offset": 13796,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND7FREQ": {
+   "offset": 13798,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND7GAIN": {
+   "offset": 13797,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND7Q": {
+   "offset": 13799,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND8FREQ": {
+   "offset": 13802,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND8GAIN": {
+   "offset": 13801,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND8Q": {
+   "offset": 13803,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND8TYPE": {
+   "offset": 13800,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND9FREQ": {
+   "offset": 13806,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND9GAIN": {
+   "offset": 13805,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND9Q": {
+   "offset": 13807,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_BAND9TYPE": {
+   "offset": 13804,
+   "rule": "roomeq"
+  },
+  "ROOMEQ_DELAY": {
+   "offset": 13776,
+   "rule": "roomeq"
+  }
+ }
+}

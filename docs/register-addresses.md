@@ -74,8 +74,36 @@ relearning: an instrument that has not been checked against something
 known is not a measurement. The tell was that the error was *constant*,
 which noise never is.
 
+## How many addresses are enough
+
+The roadmap asked this and did not answer it. The answer is that
+**2028 addresses are not 2028 facts**: they are the three rules above
+over a table of 82 control offsets. Verifying two thousand registers was
+never the task.
+
+- **The rules are the part that could be misunderstood, and all three
+  are confirmed** by the eleven addresses above: nine exercise the
+  channel rule, one the matrix, one Room EQ.
+- **The offsets are a table**, and the risk in a table is not
+  misunderstanding but availability. Extracted from upstream on demand,
+  they are not independent of upstream, which was the entire point.
+
+So "enough" meant: store the table. It is
+[`register-offsets.json`](register-offsets.json), 82 entries with the
+revision they came from, and `tests/test_register_addresses.py` requires
+it to reproduce every address measured on the wire -- from the file in
+this repository, not from upstream's source.
+
+The numbers are Michael Forney's under ISC, like the code quoted under
+`patches/`, and the file says so.
+
 ## What this is for
 
 If oscmix stopped being maintained tomorrow, the OSC paths would be
-worth nothing and this table would still be true. That is the point of
-writing it down.
+worth nothing and this table would still address the hardware. That is
+the point of writing it down.
+
+**What it still does not give you.** oscmix also carries the SysEx
+transport, the ALSA discovery and the register-to-control mapping in the
+*read* direction. The transport is documented above; the read direction
+is not. A table of addresses is the notes, not the instrument.

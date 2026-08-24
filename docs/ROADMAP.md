@@ -2094,12 +2094,19 @@ wire rather than copied out of upstream's source. If oscmix stopped
 being maintained tomorrow, the OSC paths would be worth nothing and that
 table would still be true.
 
-*What is left:* the table covers eleven registers of 2028. Extending it
-is mechanical -- write each register its own value, trace, compare --
-but it is a measurement session per family, and the value falls off
-sharply after the ones that have already caused defects. **The honest
-target is not "all of them" but "enough to rebuild the model", and
-nobody has said what that number is.**
+**Answered, and the answer was that the question was the wrong shape.**
+2028 addresses are not 2028 facts: they are three rules over a table of
+82 control offsets. The rules are the part that can be misunderstood and
+all three are confirmed on the wire. The offsets are a table, and the
+risk in a table is availability rather than understanding -- extracted
+from upstream on demand, they were not independent of upstream, which
+was the entire point.
+
+So "enough" meant *store the table*, not *measure more registers*.
+`docs/register-offsets.json` holds all 82 with the revision they came
+from, and a test requires it to reproduce every measured address from
+the file in this repository rather than from upstream's source. One
+commit, not a measurement campaign.
 
 *What this does not do:* it does not make this project independent.
 oscmix also carries the SysEx transport, the device discovery and the

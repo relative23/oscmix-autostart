@@ -98,3 +98,82 @@ def test_the_matrix_level_address_is_a_different_block_from_pan():
     register is how a matrix write would look half-applied."""
     assert (0x2000 | (5 - 1) << 6 | (1 - 1)) == 0x2100
     assert (0x4000 | (5 - 1) << 6 | (1 - 1)) == 0x4100
+
+
+# --------------------------------------------------------------------------
+# The stored offset table, which is what "independent of oscmix" means.
+# --------------------------------------------------------------------------
+
+def offsets():
+    import json
+    return json.loads(repo_file("docs", "register-offsets.json").read_text())
+
+
+#: Which control each measured address belongs to. The addresses are not
+#: 2028 independent facts: they are three rules over 82 offsets, so this
+#: is what has to be storable rather than a list of two thousand numbers.
+CONTROL_OF = {
+    ("input", 3, "phase"): "INPUT_PHASE",
+    ("input", 3, "gain"): "INPUT_GAIN",
+    ("output", 5, "volume"): "OUTPUT_VOLUME",
+    ("output", 5, "stereo"): "OUTPUT_STEREO",
+    ("output", 5, "crossfeed"): "OUTPUT_CROSSFEED",
+    ("output", 5, "lowcut/freq"): "LOWCUT_FREQ",
+    ("output", 5, "eq/band1gain"): "EQ_BAND1GAIN",
+    ("output", 5, "dynamics/gain"): "DYNAMICS_GAIN",
+    ("output", 5, "autolevel/maxgain"): "AUTOLEVEL_MAXGAIN",
+    ("input", 1, "phase"): "INPUT_PHASE",
+    ("output", 1, "eq/band1gain"): "EQ_BAND1GAIN",
+}
+
+
+def address_from_table(family, channel, control):
+    """Apply the stored rule for a control to a channel."""
+    entry = offsets()["offsets"][control]
+    if entry["rule"] == "channel":
+        idx = (channel - 1) if family == "input" else 20 + (channel - 1)
+        return idx << 6 | entry["offset"]
+    if entry["rule"] == "roomeq":
+        return entry["offset"] + ((channel - 1) << 5)
+    raise AssertionError("unknown rule %r" % entry["rule"])
+
+
+@pytest.mark.parametrize(("key", "address"), sorted(MEASURED.items()),
+                         ids=lambda k: k if isinstance(k, int) else
+                         "%s%d/%s" % k if isinstance(k, tuple) else str(k))
+def test_the_stored_table_reproduces_every_measured_address(key, address):
+    """The point of storing it, and the only way to know it is usable.
+
+    If oscmix stopped being maintained, the OSC paths would be worth
+    nothing and this table plus the three rules would still address the
+    hardware. That claim is only worth making if the table in this
+    repository -- not the one extracted from upstream on demand --
+    produces the addresses that were measured on the wire.
+    """
+    family, channel, _option = key
+    assert address_from_table(family, channel, CONTROL_OF[key]) == address
+
+
+def test_the_room_eq_rule_reproduces_its_measured_address():
+    assert address_from_table("output", 5, "ROOMEQ_BAND1GAIN") == 0x3653
+
+
+def test_the_table_says_where_it_came_from():
+    """A table of numbers with no provenance is folklore. It also carries
+    upstream's attribution: the numbers are Michael Forney's under ISC,
+    the same as the code quoted under patches/."""
+    data = offsets()
+    assert data["revision"] == "55802a6ab865e551540ee9ad5081b8ae3276f8ca"
+    assert "device_ffucxii.c" in data["source"]
+    assert any("ISC" in line for line in data["_"])
+
+
+def test_the_table_covers_the_families_that_have_cost_something():
+    """Every family that has produced a defect must be addressable from
+    here: EQ, Room EQ, dynamics, low cut, auto level, crossfeed, and the
+    phase that is never written."""
+    stored = offsets()["offsets"]
+    for control in ("EQ_BAND1GAIN", "ROOMEQ_BAND1GAIN", "DYNAMICS_GAIN",
+                    "LOWCUT_FREQ", "AUTOLEVEL_MAXGAIN", "OUTPUT_CROSSFEED",
+                    "OUTPUT_PHASE", "INPUT_48V"):
+        assert control in stored, control
