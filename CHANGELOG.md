@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Measured
+
+- **The device pushes far more than one register**, which ADR 0013's
+  opening premise denies. Writing a register from a second client -- the
+  path a mixer GUI uses -- makes the device report the **partner channel
+  of a linked pair**, unprompted and immediately: volume, mute,
+  crossfeed, and every block of EQ, dynamics, low cut and auto level, on
+  inputs as well as outputs.
+
+  Silent: `reflevel` on either side, `input/gain`, `input/phase`. No
+  rule tested explains which. "Front end versus DSP" was the obvious
+  guess and it is wrong, since `hi-z` is front end and pushes while
+  `phase` is DSP and does not.
+
+  So an event-driven drift signal for linked pairs needs no clock and no
+  polling, which ADR 0013 ruled out for lack of one. But the registers
+  that stay silent are exactly the installation state PIN exists for, so
+  the premise changed and the question did not close. Nothing is built
+  on it.
+
 ### Added
 
 - **`--snapshot`**: every register the device reports, sorted, one per

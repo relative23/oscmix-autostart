@@ -10,7 +10,12 @@ Accepted, 0.3.0. Measured on a Fireface UCX II, serial 24216011.
 then had to admit what "pinned" could mean. The device does not announce
 its own changes -- of everything a config sets, only
 `/output/{ch}/stereo` is pushed to listeners -- so nothing can react to a
-fader being moved without polling a 2002-register dump. Pinning therefore
+fader being moved without polling a 2002-register dump.
+
+> **That premise is wrong, measured 2026-08-24.** See *What the device
+> actually pushes* at the end. It announces far more than one register,
+> and the decision below was taken without knowing it.
+ Pinning therefore
 means *the config wins while this session is looking*, and the open
 question was: **when is it looking?**
 
@@ -169,3 +174,56 @@ this paragraph is where to start.
 root install. Rejected: the runtime imports nothing outside the standard
 library, and a D-Bus client is a large dependency for a signal a
 five-line shell script already delivers.
+
+
+## What the device actually pushes (2026-08-24)
+
+The sentence this record opens with is false, and it was never measured
+the way it is stated: `/output/{ch}/stereo` was the register this
+project had *noticed* being pushed, and that became "the only one".
+
+Measured on a UCX II at 55802a6 by writing a register from a second
+client -- the same path a mixer GUI uses -- and listening on the receive
+port without asking for anything:
+
+**Pushed: the partner channel of a linked pair.**
+
+| written | reported unprompted |
+|---|---|
+| `/output/5/volume` | `/output/6/volume` |
+| `/output/5/mute` | `/output/6/mute` |
+| `/output/5/crossfeed` | `/output/6/crossfeed` |
+| `/output/5/eq` and `eq/band1{gain,freq,type}` | the same on `/output/6` |
+| `/output/5/dynamics`, `dynamics/gain` | the same on `/output/6` |
+| `/output/5/lowcut`, `lowcut/freq` | the same on `/output/6` |
+| `/output/5/autolevel`, `autolevel/maxgain` | the same on `/output/6` |
+| `/input/3/mute`, `/input/3/hi-z` | the same on `/input/4` |
+
+Enabling a DSP block also pushes `/hardware/dspload`.
+
+**Not pushed:** `/output/5/reflevel`, `/input/3/reflevel`,
+`/input/3/gain`, `/input/3/phase`.
+
+Note what is reported: the **partner**, not the channel written. And
+note that no rule tested explains the exceptions. "Analogue front end
+versus DSP" was the obvious guess and it is wrong -- `hi-z` is front end
+and pushes, `phase` is DSP and does not. Rather than write a rule that
+was not established, this records the measurement and says the
+mechanism is unknown.
+
+### What follows, and what does not
+
+**A drift signal for linked pairs needs no clock and no polling.** The
+decision below rules out a timer because "nothing can react to a fader
+being moved", and that is not the situation: a listener already sees
+volume, mute, crossfeed and every DSP block change on a linked pair, as
+one datagram, at the moment it happens.
+
+**It does not cover what pinning is mostly for.** `reflevel`, `gain`
+and the input `phase` are silent, and those are exactly the
+installation-state registers ADR 0012 says PIN exists for. A signal
+built on this would announce the settings a config mostly leaves alone
+and stay quiet about the ones it pins.
+
+So this changes the premise without settling the question. Nothing is
+built on it here.
