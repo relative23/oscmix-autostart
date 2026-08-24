@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Changed
+
+- **Mutation testing moved from every push to nightly.** It had grown to
+  72 minutes and, since the other nine jobs finish in minutes, it alone
+  decided when CI was done.
+
+  The workflow comment asked for the slowest tests to be checked before
+  the number was touched. They were, and there is no hot spot: tests
+  +42%, suite runtime +45%, mutants +16%, mutation +64%. Cost is mutants
+  times suite time and the growth is fully explained, so it will keep
+  growing multiplicatively and would pass two hours by the next release.
+
+  The score has **never failed its gate**, in any run. What was valuable
+  was reading the survivors, which found three real defects in 0.3.0 --
+  including pinning silently not working while every test stayed green.
+  A nightly score change still prompts that reading. The release
+  checklist keeps its own run.
+
 ### Added
 
 - **`--diff` exits 3 when the device and the config disagree.** 0 still

@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # For the mutation job only; see its `if:` and the comment above it.
+  # 03:41 UTC, off the hour because that is when GitHub's scheduler is
+  # least congested, and well clear of the soak at 04:17.
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -164,11 +170,32 @@ jobs:
     # is 44 minutes at 1.43 mutations/second, down from 56 with a warm
     # cache before the fix.
     #
-    # 90 stays, now with room rather than as a guess. Runner history for
-    # reference: 34, 34, 37, 37, 38, 37, 38, 38, 39, 44, 42, then two
-    # cancellations at the ceiling. Re-measure when a run passes 60 --
-    # and check the slowest tests before touching this number again.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Re-measured 2026-08-24, because runs had passed 60: three in a row
+    # at 69, 74 and 73 minutes. The comment above asked for the slowest
+    # tests to be checked first, and they were. There is no hot spot.
+    #
+    #   tests     665 -> 945    +42%
+    #   suite      73 -> 106 s  +45%   proportional, no regression
+    #   mutants  4180 -> 4866   +16%
+    #   mutation   44 -> 72 min +64%
+    #
+    # Cost is mutants x suite time: 4180*73 -> 4866*106 predicts +69%
+    # against +64% measured. Shortening the link barrier was tried and
+    # saves 1.6 s of 106 while breaking two tests, so there is nothing
+    # to reclaim. 90 minutes stays as the ceiling.
+    #
+    # This runs nightly and not on every push, and the numbers above are
+    # why. The cost grows multiplicatively with the project and would be
+    # past two hours by the next release. The value was never in the
+    # gate -- the score has never failed one, in any run. It was in
+    # *reading the survivors*, which found three real defects in 0.3.0,
+    # including pinning silently not working, while the policy was green
+    # either way. A nightly score change still prompts that reading, one
+    # day later.
+    #
+    # The release checklist requires a run of its own, which is where it
+    # has to be current rather than recent.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 90

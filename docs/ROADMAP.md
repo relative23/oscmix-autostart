@@ -2199,10 +2199,45 @@ the number meant anything at all. Since then it has moved by a
 thousandth across four register families, which is the exemption
 working -- and also the number telling us very little.
 
-*The question to ask:* what would we do differently if it moved? If the
-answer is "read the survivors", then the survivors are the artifact and
-the score is a wrapper. **A cheaper scope that runs on every push may be
-worth more than a thorough one that runs once a release.**
+**Answered, and the answer was in the history rather than in a
+measurement at the device.**
+
+The workflow's own comment said *"re-measure when a run passes 60 -- and
+check the slowest tests before touching this number"*. Three runs in a
+row had passed it, at 69, 74 and 73 minutes, so the instruction applied.
+Checked, and **there is no hot spot**:
+
+| | 0.3.0 | now | |
+|---|---|---|---|
+| tests | 665 | 945 | +42% |
+| suite | 73 s | 106 s | **+45%, proportional** |
+| mutants | 4180 | 4866 | +16% |
+| mutation | 44 min | 72 min | +64% |
+
+Cost is mutants × suite time, and `4180×73 → 4866×106` predicts +69%
+against +64% measured. The growth is entirely explained. Shortening the
+link barrier was tried: it saves 1.6 s of 106 and breaks two tests.
+
+*So the cost is not a defect, which is the problem.* It grows
+multiplicatively with the project and would be past two hours by the
+next release, for a number that **has never failed its gate in any
+run**.
+
+*What the value actually was:* reading survivors found three real
+defects in 0.3.0, including pinning silently not working while every
+test stayed green because they all used a `[pin]` override. The commit
+says it plainly: *"the policy was green either way"*. The score did not
+catch them; a score **movement** prompted somebody to look.
+
+**Moved to nightly.** A nightly change still prompts that reading, one
+day later, and the release checklist keeps its own run where the number
+has to be current rather than recent. Per-push feedback drops from 72
+minutes to about five.
+
+Three tests hold the arrangement: the mutation job must be conditioned
+on `schedule`, the workflow must actually have one -- a job conditioned
+on a trigger the workflow lacks never runs again and nothing would say
+so -- and no other job may quietly follow it off the push path.
 
 ### The limit under all of this
 

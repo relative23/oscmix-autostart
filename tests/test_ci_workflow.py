@@ -109,3 +109,50 @@ def test_a_pull_request_still_supersedes_its_own_older_revisions():
     assert "github.event_name == 'pull_request'" in group
     assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" \
         in group
+
+
+# --------------------------------------------------------------------------
+# Which jobs run when.
+# --------------------------------------------------------------------------
+
+def _job_condition(job, name="ci.yml"):
+    """The `if:` line of one job, or None when it has none."""
+    block = _jobs(name)[job]
+    match = re.search(r"^\s{4}if: (.+)$", block, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def test_the_mutation_job_runs_nightly_and_not_on_every_push():
+    """Measured 2026-08-24: 72 minutes, and the cost is mutants times
+    suite time, so it grows multiplicatively with the project.
+
+    The value was never in the gate. The score has never failed one, in
+    any run. It was in reading the survivors, which found three real
+    defects in 0.3.0 -- including pinning silently not working -- while
+    the policy was green either way. A nightly score change still
+    prompts that reading, a day later.
+    """
+    condition = _job_condition("mutation")
+    assert condition is not None
+    assert "schedule" in condition
+    assert "push" not in condition
+
+
+def test_every_other_job_still_runs_on_a_push():
+    """The nightly move is for the one expensive job, not a retreat from
+    per-push checking. Nothing else may quietly follow it."""
+    for job in WORKFLOW:
+        if job == "mutation":
+            continue
+        condition = _job_condition(job)
+        assert condition is None or "push" in condition, (
+            "%s no longer runs on a push: %s" % (job, condition))
+
+
+def test_the_workflow_is_scheduled_at_all():
+    """A job conditioned on `schedule` in a workflow with no schedule
+    never runs again, and nothing would say so."""
+    text = repo_file(".github", "workflows", "ci.yml").read_text()
+    head = text[:text.index("\njobs:")]
+    assert "schedule:" in head
+    assert re.search(r"cron:", head)

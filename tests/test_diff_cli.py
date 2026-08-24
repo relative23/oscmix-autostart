@@ -270,6 +270,11 @@ def test_the_three_outcomes_have_three_codes(session_mod, capsys, tmp_path,
 
     assert (EXIT_OK, EXIT_FAILURE, EXIT_CONFIG, EXIT_DIFFERS) == (0, 1, 2, 3)
 
+    # mutmut re-runs a covering test once per mutant, so a second spent
+    # waiting here is paid thousands of times. The read window and the
+    # quiet detection are what this test would otherwise sit through
+    # three times over, and neither is what it is about.
+    monkeypatch.setattr(cli, "DUMP_QUIET_SECONDS", 0.15)
     matched, _out, _ = run_diff(session_mod, capsys, tmp_path, IN_SYNC)
     differed, _out, _ = run_diff(session_mod, capsys, tmp_path, DRIFTED)
     monkeypatch.setattr(cli, "DUMP_READ_SECONDS", 0.6)
