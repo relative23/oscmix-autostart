@@ -17,7 +17,9 @@ changes nothing, so the desk is untouched by the measurement.
 
     channel families   idx << 6 | reg
                        idx = input index, or 20 + output index
-    input matrix       0x2000 | out << 6 | in
+    matrix pan         0x2000 | out << 6 | in
+    matrix level       0x4000 | out << 6 | idx
+                       idx = input index, or 20 + playback index
     room EQ            0x35D0 + reg + (out << 5)
 
 ## The wire format
@@ -45,28 +47,32 @@ Written on 2026-08-24, traced on the pipe `alsaseqio` forwards (fd 7).
 | `/output/5/dynamics/gain` | `0x061C` | confirmed |
 | `/output/5/autolevel/maxgain` | `0x0624` | confirmed |
 | `/mix/5/input/1` | `0x2100` | confirmed |
-| `/output/5/roomeq/band1gain` | `0x3653` | **see below** |
+| `/output/5/roomeq/band1gain` | `0x3653` | confirmed |
 
-Ten of eleven appeared verbatim. `/output/1/eq/band1gain` at `0x0511`
-and `/input/1/phase` at `0x0007` were confirmed separately, in the runs
-that produced upstream issues #33 and #34.
+All eleven appeared verbatim. `/output/1/eq/band1gain` at `0x0511` and
+`/input/1/phase` at `0x0007` were confirmed separately, in the runs that
+produced upstream issues #33 and #34.
 
-## The one that is not confirmed, and why
+## The reading that was wrong first, and why it is worth keeping
 
-Room EQ decoded as `0x6653` where the arithmetic gives `0x3653`, a
-difference of exactly `0x3000`. The same offset appears between `0x3F00`
-and `0x6F00` in the polling traffic, which upstream writes as one
-register.
+Room EQ first decoded as `0x6653` against an arithmetic of `0x3653`, and
+the polling register appeared as both `0x3F00` and `0x6F00`. A constant
+`0x3000` offset on two unrelated high addresses and on none of the nine
+below `0x3000` was the clue that the decoder was at fault rather than
+the device, and it was, twice over:
 
-**That points at the decoder used to read the trace, not at the
-device.** A systematic offset that appears on two unrelated high
-addresses and on none of the ten below `0x3000` is a reconstruction
-fault in the septet unpacking, and the honest thing is to say so rather
-than to record an address that has not been established.
+- `\v` in the trace is the byte `0x0B`. The unpacker did not know that
+  escape and fell through to the letter, `0x76`, which is why the
+  five septets reconstructed to 35 bits where four bytes can only make
+  32.
+- the register was taken as `word >> 16` without `& 0x7fff`, so bit 31
+  leaked in. Bit 31 is `setreg`'s **parity** bit, not part of the
+  address.
 
-What would settle it: decode one known high write byte by byte against
-`base128enc`, rather than through the ad-hoc unpacker used here. Not
-done.
+Both fixed, all eleven match. The lesson is the one this project keeps
+relearning: an instrument that has not been checked against something
+known is not a measurement. The tell was that the error was *constant*,
+which noise never is.
 
 ## What this is for
 

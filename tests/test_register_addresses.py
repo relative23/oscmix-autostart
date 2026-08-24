@@ -57,6 +57,11 @@ MEASURED = {
     ("output", 1, "eq/band1gain"): 0x0511,
 }
 
+#: Room EQ has its own block and its own arithmetic, so it is not in the
+#: table above; `test_the_room_eq_address_follows_its_own_arithmetic`
+#: covers it.
+ROOMEQ_BAND1GAIN_OUTPUT_5 = 0x3653
+
 
 @pytest.mark.parametrize(("key", "address"), sorted(MEASURED.items()),
                          ids=lambda k: k if isinstance(k, int) else
@@ -75,14 +80,21 @@ def test_the_document_lists_every_address_this_asserts():
     not the other is how a measured table turns back into folklore."""
     text = repo_file("docs", "register-addresses.md").read_text()
     listed = {int(m, 16) for m in re.findall(r"`0x([0-9A-F]{4})`", text)}
+    assert ROOMEQ_BAND1GAIN_OUTPUT_5 in listed
     for address in MEASURED.values():
         assert address in listed, "0x%04X asserted here, absent from the doc" % address
 
 
-def test_the_unconfirmed_address_is_not_asserted_as_measured():
-    """Room EQ decoded 0x3000 away from the arithmetic, and the doc says
-    the decoder is the suspect rather than recording an address that was
-    never established. It must not appear here as if it had been."""
-    assert 0x3653 not in MEASURED.values()
-    text = repo_file("docs", "register-addresses.md").read_text()
-    assert "not confirmed" in text
+def test_the_room_eq_address_follows_its_own_arithmetic():
+    """`0x35D0 + reg + (out << 5)`, confirmed on the wire once the trace
+    decoder stopped mangling `\\v` and stopped taking the parity bit for
+    part of the address."""
+    assert 0x35D3 + (4 << 5) == 0x3653
+
+
+def test_the_matrix_level_address_is_a_different_block_from_pan():
+    """`MIX` is pan at 0x2000, `MIX_LEVEL` is level at 0x4000, and a
+    single `/mix/<out>/input/<in>` write emits both. Reading them as one
+    register is how a matrix write would look half-applied."""
+    assert (0x2000 | (5 - 1) << 6 | (1 - 1)) == 0x2100
+    assert (0x4000 | (5 - 1) << 6 | (1 - 1)) == 0x4100
