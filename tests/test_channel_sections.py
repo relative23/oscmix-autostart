@@ -31,8 +31,10 @@ DEVICE = "[device]\nname = Fireface UCX II\n\n"
 def test_the_options_come_from_the_register_model():
     assert set(registers.settable_options(registers.UCX2, "input")) == {
         "gain", "hi-z", "mute", "phase", "reflevel"}
+    # No `phase` on outputs: oscmix cannot write it. See
+    # test_output_phase_is_reported_and_not_settable below.
     assert set(registers.settable_options(registers.UCX2, "output")) == {
-        "crossfeed", "mute", "phase", "reflevel", "volume"}
+        "crossfeed", "mute", "reflevel", "volume"}
 
 
 def test_phantom_power_is_modelled_but_not_settable():
@@ -105,7 +107,7 @@ def test_an_unknown_option_lists_what_is_valid(session_mod, tmp_path):
     with pytest.raises(session_mod.ConfigError) as excinfo:
         session_mod.load_config(write(tmp_path, DEVICE +
                                       "[output:5]\nnosuchoption = 3\n"))
-    assert "crossfeed, mute, phase, reflevel, volume" in str(excinfo.value)
+    assert "crossfeed, mute, reflevel, volume" in str(excinfo.value)
 
 
 def test_a_gain_outside_the_range_is_refused(session_mod, tmp_path):
@@ -247,3 +249,35 @@ def test_an_unbounded_quantity_is_only_checked_for_being_a_number():
     assert free.lo is None
     assert free.hi is None
     assert _parse_number("1234.5", "x", "y", free) == 1234.5
+
+
+def test_output_phase_is_reported_and_not_settable(session_mod, tmp_path):
+    """`ctltoreg` gates OUTPUT_PHASE on `INPUT_HAS_REFLEVEL`, bit 2 of the
+    *input* flags. An output only ever sets `OUTPUT_HAS_REFLEVEL`, bit 0,
+    so the guard always breaks, ctltoreg returns -1 and `setval` writes
+    nothing. Every output, not just some.
+
+    Measured rather than deduced: `/input/1/phase` goes 0 -> 1 and reads
+    back, `/output/1/phase` and `/output/9/phase` stay 0. Tracing what
+    oscmix writes to the MIDI pipe during those writes shows register
+    0x0007 twice for the input and nothing at all for the outputs, so
+    the write never leaves rather than the device refusing it.
+
+    Reported as michaelforney/oscmix#34. Until it moves, a config that
+    accepted `phase` on an output would set nothing and say it had.
+    """
+    by_path = {r.template: r for r in registers.UCX2.registers}
+    assert by_path["/output/{ch}/phase"].domain is None
+    assert by_path["/input/{ch}/phase"].domain is not None
+
+    with pytest.raises(session_mod.ConfigError) as excinfo:
+        session_mod.load_config(write(tmp_path, DEVICE +
+                                      "[output:5]\nphase = true\n"))
+    assert "phase" in str(excinfo.value)
+
+
+def test_input_phase_still_works(session_mod, tmp_path):
+    """The half that must not change with it."""
+    config = session_mod.load_config(write(tmp_path, DEVICE +
+                                           "[input:3]\nphase = true\n"))
+    assert config.channels

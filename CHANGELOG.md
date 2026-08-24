@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`phase` on an output was accepted and set nothing.** oscmix's
+  `ctltoreg` gates `OUTPUT_PHASE` on `INPUT_HAS_REFLEVEL`, bit 2 of the
+  *input* flags, while an output only ever sets `OUTPUT_HAS_REFLEVEL`,
+  bit 0. The guard therefore always breaks, `ctltoreg` returns -1 and
+  `setval` writes nothing, on every output.
+
+  Measured, not deduced: `/input/1/phase` goes 0 to 1 and reads back,
+  `/output/1/phase` and `/output/9/phase` stay 0, and a trace of what
+  oscmix writes to the MIDI pipe shows register `0x0007` twice for the
+  input and nothing at all for the outputs. So the write never leaves,
+  rather than the device refusing it. Reported as
+  michaelforney/oscmix#34.
+
+  `/output/{ch}/phase` is now declared reported-and-not-settable, the
+  line `/clock/samplerate` and Room EQ already sit on. **A config that
+  set it now fails to load instead of quietly doing nothing**, which is
+  a change in behaviour and the point of it.
+
 ## 0.4.0 (2026-08-23)
 
 The rest of the strip. 0.3.0 declared the signal path; this release

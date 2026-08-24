@@ -480,7 +480,20 @@ UCX2 = Device(
         # Verifiable, but see complete_after_cold_plug below: a cold
         # plug delivers these only for some channels.
         Register("/output/{ch}/mute", "i", VERIFIABLE, "output", BOOL),
-        Register("/output/{ch}/phase", "i", VERIFIABLE, "output", BOOL),
+        # Reported, and **not settable**: no domain, the same line
+        # `/clock/samplerate` and Room EQ sit on. `ctltoreg` gates
+        # OUTPUT_PHASE on `INPUT_HAS_REFLEVEL`, which is bit 2 of the
+        # *input* flags; an output only ever sets `OUTPUT_HAS_REFLEVEL`,
+        # bit 0. So the guard always breaks, ctltoreg returns -1, and
+        # `setval` writes nothing.
+        #
+        # Measured rather than deduced. `/input/1/phase` goes 0 -> 1 and
+        # reads back; `/output/1/phase` and `/output/9/phase` stay 0.
+        # Tracing what oscmix writes to the MIDI pipe during those three
+        # writes shows register 0x0007 twice for the input and nothing
+        # at all for the outputs -- so this is not the device refusing,
+        # it is the write never leaving. michaelforney/oscmix#34.
+        Register("/output/{ch}/phase", "i", VERIFIABLE, "output"),
         Register("/output/{ch}/reflevel", "is", VERIFIABLE, "output-reflevel", ENUM,
                  ("+4dBu", "+13dBu", "+19dBu"), policy=PIN),
         # Crossfeed: the last of 0.4.0's per-channel families and the only
