@@ -21,8 +21,8 @@ took, which is nobody's decision.
 
 import pytest
 
-from oscmix_autostart import verify
-from oscmix_autostart.registers import (
+from oscmix_desk import verify
+from oscmix_desk.registers import (
     PIN,
     POLICIES,
     REMEMBER,
@@ -176,8 +176,8 @@ def test_a_config_can_pin_what_the_table_remembers(tmp_path):
     The default is chosen for the desk in front of a person, so this has
     to be overridable rather than argued about.
     """
-    from oscmix_autostart.config import load_config
-    from oscmix_autostart.reconcile import policy_for
+    from oscmix_desk.config import load_config
+    from oscmix_desk.reconcile import policy_for
 
     path = tmp_path / "routing.conf"
     path.write_text("[pin]\noutput.volume = pin\n")
@@ -191,8 +191,8 @@ def test_a_config_can_pin_what_the_table_remembers(tmp_path):
 def test_a_config_can_remember_what_the_table_pins(tmp_path):
     # The other direction: a studio that rides input gain by hand does
     # not want the session putting it back.
-    from oscmix_autostart.config import load_config
-    from oscmix_autostart.reconcile import policy_for
+    from oscmix_desk.config import load_config
+    from oscmix_desk.reconcile import policy_for
 
     path = tmp_path / "routing.conf"
     path.write_text("[pin]\ninput.gain = remember\n")
@@ -208,7 +208,7 @@ def test_the_override_reaches_the_decision_that_re_sends(tmp_path):
     read-back. So the override is asserted where it changes behaviour,
     not where it is stored.
     """
-    from oscmix_autostart.config import load_config
+    from oscmix_desk.config import load_config
 
     path = tmp_path / "routing.conf"
     path.write_text("[pin]\noutput.volume = pin\n")
@@ -234,8 +234,8 @@ def test_a_typo_in_the_pin_section_is_an_error(tmp_path, broken, why):
     and the only symptom is a fader that does or does not come back,
     weeks later, on a machine nobody is watching.
     """
-    from oscmix_autostart import ConfigError
-    from oscmix_autostart.config import load_config
+    from oscmix_desk import ConfigError
+    from oscmix_desk.config import load_config
 
     path = tmp_path / "routing.conf"
     path.write_text(broken)
@@ -253,7 +253,7 @@ def test_an_old_version_would_ignore_the_section_not_reject_the_file(tmp_path):
     As a section it degrades to "the table defaults apply", which is
     exactly what those versions already do.
     """
-    from oscmix_autostart.config import _KNOWN_OPTIONS
+    from oscmix_desk.config import _KNOWN_OPTIONS
 
     for kind, options in _KNOWN_OPTIONS.items():
         assert not any(o.startswith("pin") for o in options), kind
@@ -271,8 +271,8 @@ def test_a_dump_emits_pinned_options_and_comments_out_remembered_ones():
     answer comes from the same column rather than from a rule inside the
     writer.
     """
-    from oscmix_autostart.config import ChannelSetting, Config
-    from oscmix_autostart.reconcile import render_config
+    from oscmix_desk.config import ChannelSetting, Config
+    from oscmix_desk.reconcile import render_config
 
     config = Config(device_name="Fireface UCX II", channels=[
         ChannelSetting("output", 5, "volume", -12.0),    # remembered
@@ -295,8 +295,8 @@ def test_a_dumped_remembered_value_is_still_shown():
     Omitting remembered options would make a channel with a hand-set
     fader look like a channel with no state at all.
     """
-    from oscmix_autostart.config import ChannelSetting, Config
-    from oscmix_autostart.reconcile import render_config
+    from oscmix_desk.config import ChannelSetting, Config
+    from oscmix_desk.reconcile import render_config
 
     text = render_config(Config(device_name="Fireface UCX II", channels=[
         ChannelSetting("output", 5, "volume", -12.0)]), UCX2)
@@ -311,8 +311,8 @@ def test_a_dumped_config_round_trips_through_the_parser(tmp_path):
     value rendered in a format the parser rejects, turns a dump into a
     file that fails at the next boot -- and the person finds out then.
     """
-    from oscmix_autostart.config import ChannelSetting, Config, load_config
-    from oscmix_autostart.reconcile import render_config
+    from oscmix_desk.config import ChannelSetting, Config, load_config
+    from oscmix_desk.reconcile import render_config
 
     config = Config(device_name="Fireface UCX II", channels=[
         ChannelSetting("output", 5, "volume", -12.0),
@@ -357,7 +357,7 @@ def test_the_dump_settle_is_bounded_from_both_sides():
     retry" in the journal. Too large and every verification, every
     profile switch and every --dump-config pays it.
     """
-    from oscmix_autostart.constants import DUMP_LISTEN_SETTLE
+    from oscmix_desk.constants import DUMP_LISTEN_SETTLE
 
     # One meter datagram at the measured rate (~880/s) is what the
     # mechanism actually needs.
@@ -365,7 +365,7 @@ def test_the_dump_settle_is_bounded_from_both_sides():
     assert 2 * one_datagram <= DUMP_LISTEN_SETTLE
     assert 100 * one_datagram >= DUMP_LISTEN_SETTLE
     # And it must stay small against the window it precedes.
-    from oscmix_autostart.constants import VERIFY_TIMEOUT
+    from oscmix_desk.constants import VERIFY_TIMEOUT
     assert DUMP_LISTEN_SETTLE < VERIFY_TIMEOUT / 20
 
 
@@ -381,7 +381,7 @@ def test_channel_state_is_reconstructed_from_a_dump():
     has produced that shape. So the reconstruction is asserted from the
     reported registers, not from a hand-built Config.
     """
-    from oscmix_autostart.reconcile import channels_from_observed
+    from oscmix_desk.reconcile import channels_from_observed
 
     seen = {
         "/output/5/volume": (-12.0,),
@@ -404,7 +404,7 @@ def test_channel_state_is_reconstructed_from_a_dump():
 def test_only_settable_options_are_reconstructed():
     # A dump that invented options would produce a file the parser
     # rejects -- and the person finds out at the next boot.
-    from oscmix_autostart.reconcile import channels_from_observed
+    from oscmix_desk.reconcile import channels_from_observed
 
     seen = {"/output/5/name": ("Monitors",), "/input/1/48v": (1,),
             "/output/5/volume": (-3.0,)}
@@ -424,7 +424,7 @@ def test_the_dump_command_passes_channel_state_to_the_renderer():
 
     from conftest import repo_file
 
-    source = repo_file("src", "oscmix_autostart", "cli.py").read_text()
+    source = repo_file("src", "oscmix_desk", "cli.py").read_text()
     tree = ast.parse(source)
     called = {node.func.id for node in ast.walk(tree)
               if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
@@ -441,7 +441,7 @@ def test_an_uncommented_remembered_line_parses(tmp_path):
     comment -- which the parser must accept, or the dump has handed them
     a file that fails at the next boot.
     """
-    from oscmix_autostart.config import load_config
+    from oscmix_desk.config import load_config
 
     path = tmp_path / "routing.conf"
     path.write_text("[output:5]\n"

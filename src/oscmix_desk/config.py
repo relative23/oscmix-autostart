@@ -395,7 +395,7 @@ def _dispatch(parser: "configparser.ConfigParser", config: "Config",
             # wrong device state nobody is told about.
             log.warning(
                 "ignoring unknown section [%s] -- this config may have been "
-                "written by a newer version of oscmix-autostart (known: %s)",
+                "written by a newer version of oscmix-desk (known: %s)",
                 section, _known_sections(config))
 
 

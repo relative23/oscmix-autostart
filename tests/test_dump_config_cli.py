@@ -16,7 +16,7 @@ import time
 
 from conftest import free_udp_port
 
-from oscmix_autostart import cli
+from oscmix_desk import cli
 
 
 class FakeBackend(threading.Thread):

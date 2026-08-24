@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# oscmix-autostart uninstaller. Removes everything install.sh created.
+# oscmix-desk uninstaller. Removes everything install.sh created.
 # The routing config is kept unless --purge is given.
 set -euo pipefail
 
 BIN_DIR="$HOME/.local/bin"
-LIB_DIR="$HOME/.local/lib/oscmix-autostart"
+LIB_DIR="$HOME/.local/lib/oscmix-desk"
+# Where this project installed itself before it was renamed. An upgrade
+# would otherwise leave a complete second copy of the package behind,
+# and `oscmix-launch` searches `../lib/*` for a package directory -- a
+# stale one there is a version nobody chose. Removed by both scripts.
+LEGACY_LIB_DIR="$HOME/.local/lib/oscmix-autostart"
+
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/oscmix"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -51,7 +57,7 @@ else
 fi
 
 info "removing installed files"
-rm -rf "$LIB_DIR"
+rm -rf "$LIB_DIR" "$LEGACY_LIB_DIR"
 rm -f "$UNIT_DIR/oscmix.service" \
       "$BIN_DIR/oscmix-session" \
       "$BIN_DIR/oscmix-launch" \

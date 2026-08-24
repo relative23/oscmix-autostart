@@ -482,7 +482,7 @@ def test_the_dump_window_ends_when_a_stop_arrives(session_mod, verify_mod):
 
 
 def test_the_session_waits_for_the_verifier_before_exiting(session_mod):
-    from oscmix_autostart import constants, session
+    from oscmix_desk import constants, session
 
     # The grace has to fit inside TimeoutStopSec next to CHILD_STOP_GRACE,
     # or systemd kills the session during exactly the wait that exists to

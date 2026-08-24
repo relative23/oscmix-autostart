@@ -10,9 +10,9 @@ things only this family knows.
 
 import pytest
 
-from oscmix_autostart.config import load_config
-from oscmix_autostart.errors import ConfigError
-from oscmix_autostart.registers import NUMBER, UCX2, register_policy, settable_nested
+from oscmix_desk.config import load_config
+from oscmix_desk.errors import ConfigError
+from oscmix_desk.registers import NUMBER, UCX2, register_policy, settable_nested
 
 
 def test_freq_carries_upstreams_bounds():

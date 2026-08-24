@@ -13,7 +13,7 @@ project can make that promise about anything it routes.
 import pytest
 from conftest import repo_file  # noqa: F401  (parity with sibling modules)
 
-from oscmix_autostart import reconcile, registers
+from oscmix_desk import reconcile, registers
 
 
 def write(tmp_path, text):
@@ -223,7 +223,7 @@ def test_an_input_route_is_planned_as_verifiable(session_mod):
 # --------------------------------------------------------------------------
 
 def test_a_muted_gain_reads_back_as_negative_infinity(session_mod):
-    from oscmix_autostart import reconcile as r
+    from oscmix_desk import reconcile as r
 
     assert r.matches("fi", (-65.0, 0), (float("-inf"), 0))
     # Anything below the floor is stored as zero too, so it matches as
@@ -235,13 +235,13 @@ def test_the_mute_floor_is_the_one_upstream_uses(session_mod):
     # Our LEVEL_MIN and upstream's `-65.f` are the same number. If they
     # ever diverge, a config value just under the floor would be written
     # as audible and read back as silent, or the reverse.
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     assert constants.LEVEL_MIN == -65.0
 
 
 def test_an_audible_gain_still_compares_normally(session_mod):
-    from oscmix_autostart import reconcile as r
+    from oscmix_desk import reconcile as r
 
     assert r.matches("fi", (-6.0, 0), (-6.2, 0))       # device quantisation
     assert not r.matches("fi", (-6.0, 0), (-12.0, 0))
@@ -256,8 +256,8 @@ def test_a_muted_input_route_verifies_instead_of_re_sending(session_mod):
     mismatched -> the verifier re-sends the whole routing, every start,
     and logs "unconfirmed after retry" forever.
     """
-    from oscmix_autostart import reconcile as r
-    from oscmix_autostart import registers as regs
+    from oscmix_desk import reconcile as r
+    from oscmix_desk import registers as regs
 
     config = session_mod.Config(
         device_name="Fireface UCX II",
@@ -279,8 +279,8 @@ def test_the_verifier_and_the_plan_share_one_definition_of_equal(session_mod):
     # They disagreed for exactly as long as it took to write this: the
     # read-back had its own comparison, which did not know about the
     # mute floor.
-    from oscmix_autostart import reconcile as r
-    from oscmix_autostart import verify as v
+    from oscmix_desk import reconcile as r
+    from oscmix_desk import verify as v
 
     for want, got in ((( -65.0, 0), (float("-inf"), 0)),
                       ((-6.0, 0), (-6.2, 0)),

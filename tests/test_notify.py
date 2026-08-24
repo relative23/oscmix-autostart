@@ -13,7 +13,7 @@ import pytest
 
 @pytest.fixture
 def notify_mod():
-    from oscmix_autostart import notify
+    from oscmix_desk import notify
 
     return notify
 

@@ -40,14 +40,14 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from oscmix_autostart import (
+from oscmix_desk import (
     decode_osc,
     discover_config_path,
     encode_osc,
     iter_osc_messages,
     load_config,
 )
-from oscmix_autostart.constants import LEVEL_MIN
+from oscmix_desk.constants import LEVEL_MIN
 
 EXIT_SKIP = 77
 # How much louder an output must be when its own side carries the tone

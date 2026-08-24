@@ -18,8 +18,8 @@ import json
 import pytest
 from conftest import repo_file
 
-from oscmix_autostart.config import load_config
-from oscmix_autostart.registers import (
+from oscmix_desk.config import load_config
+from oscmix_desk.registers import (
     BOOL,
     ENABLE_OPTION,
     NUMBER,
@@ -150,7 +150,7 @@ def write(tmp_path, text):
 def test_a_section_writes_only_paths_the_model_declares(tmp_path):
     """Point 2 of the bar: written ⊆ declared, the rule the volume bug
     produced."""
-    from oscmix_autostart import reconcile
+    from oscmix_desk import reconcile
 
     config = load_config(write(tmp_path, "[dynamics:input:3]\n"
                                "enabled = true\ncompthres = -18.0\n"
@@ -161,7 +161,7 @@ def test_a_section_writes_only_paths_the_model_declares(tmp_path):
 
 
 def test_the_ratio_is_written_as_a_float_and_the_attack_as_an_int(tmp_path):
-    from oscmix_autostart import reconcile
+    from oscmix_desk import reconcile
 
     config = load_config(write(tmp_path, "[dynamics:input:3]\n"
                                "compratio = 4.0\nattack = 5\n"))
@@ -183,7 +183,7 @@ def test_a_value_outside_the_bounds_is_refused(tmp_path, line, why):
     """And this refusal is the only one there is: oscmix reads `.min`
     and `.max` nowhere at the pinned revision, so an out-of-range value
     that gets past here goes to the register."""
-    from oscmix_autostart.errors import ConfigError
+    from oscmix_desk.errors import ConfigError
 
     with pytest.raises(ConfigError) as raised:
         load_config(write(tmp_path, "[dynamics:input:3]\n%s\n" % line))
@@ -193,7 +193,7 @@ def test_a_value_outside_the_bounds_is_refused(tmp_path, line, why):
 def test_the_dump_round_trips_a_pinned_dynamics_section(tmp_path):
     """Point 3 of the bar. Dynamics is REMEMBER, so a dump writes it as
     a comment; pinning it in `[pin]` is what puts it back in the file."""
-    from oscmix_autostart import reconcile
+    from oscmix_desk import reconcile
 
     seen = {"/input/3/dynamics": (1,),
             "/input/3/dynamics/compthres": (-18.0,),

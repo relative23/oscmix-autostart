@@ -2,7 +2,7 @@
 
 ## Layers
 
-Four layers have to cooperate for audio to work; oscmix-autostart owns the
+Four layers have to cooperate for audio to work; oscmix-desk owns the
 glue between them:
 
 ```

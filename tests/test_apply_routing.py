@@ -684,7 +684,7 @@ def test_the_dry_run_prints_exactly_the_datagrams_the_apply_sends(
     CI grepped that output to guard the defect that silenced every even
     output, so for two routes it was inspecting an artifact nothing sends.
     """
-    from oscmix_autostart import session as session_module
+    from oscmix_desk import session as session_module
 
     routes = [
         make_route(session_mod, name="main", playback=(1, 2), output=(1, 2),
@@ -765,7 +765,7 @@ def test_everything_the_config_asks_for_reaches_the_wire(session_mod,
     # what a double was handed. But the barrier is not what is being
     # tested, and at its shipped 1.5 s it was the whole cost of this
     # test; the timing tests below own that number.
-    from oscmix_autostart import routing as routing_mod
+    from oscmix_desk import routing as routing_mod
     monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.05)
 
     config = session_mod.Config(
@@ -785,7 +785,7 @@ def test_everything_the_config_asks_for_reaches_the_wire(session_mod,
     try:
         session_mod.apply_routing(config, send_port, recv_port)
         deadline = time.monotonic() + 3.0
-        from oscmix_autostart import reconcile
+        from oscmix_desk import reconcile
 
         wanted = [e.path for e in reconcile.desired(config)]
         while (len({p for p, _t, _a in device.received}) < len(wanted)
@@ -821,7 +821,7 @@ def test_nothing_takes_a_part_of_the_config_and_rebuilds_the_rest(session_mod):
     """
     import ast
 
-    package = repo_file("src", "oscmix_autostart")
+    package = repo_file("src", "oscmix_desk")
     offenders = []
     for path in sorted(package.glob("*.py")):
         tree = ast.parse(path.read_text())

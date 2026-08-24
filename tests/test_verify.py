@@ -248,8 +248,8 @@ def test_never_reported_agrees_with_the_recorded_dump(session_mod):
     """
     import json
 
-    from oscmix_autostart.registers import device_for_name
-    from oscmix_autostart.verify import register_ever_reported
+    from oscmix_desk.registers import device_for_name
+    from oscmix_desk.verify import register_ever_reported
 
     dump = json.loads(repo_file("tests", "data", "refresh-dump.json"
                                 ).read_text())
@@ -265,7 +265,7 @@ def test_the_playback_mix_matrix_is_the_family_that_is_absent(session_mod):
     # The other direction: the one exclusion that the recording supports.
     import json
 
-    from oscmix_autostart.verify import register_ever_reported
+    from oscmix_desk.verify import register_ever_reported
 
     dump = json.loads(repo_file("tests", "data", "refresh-dump.json"
                                 ).read_text())

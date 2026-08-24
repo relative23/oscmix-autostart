@@ -34,7 +34,7 @@ def test_the_launcher_no_longer_duplicates_device_detection(launch_mod):
     # udp_port_listening so it could stand alone. The package is
     # installed beside it now, so the copies bought nothing but a second
     # place for the same bug.
-    from oscmix_autostart import discovery
+    from oscmix_desk import discovery
 
     assert launch_mod.usb_device_present is discovery.usb_device_present
     assert launch_mod.udp_port_listening is discovery.udp_port_listening

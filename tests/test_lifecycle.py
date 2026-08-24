@@ -16,7 +16,7 @@ import pytest
 
 @pytest.fixture
 def session_module():
-    from oscmix_autostart import session
+    from oscmix_desk import session
 
     return session
 
@@ -81,7 +81,7 @@ def lifecycle(session_module, monkeypatch):
 
         monkeypatch.setattr(session_module, "supervise", fake_supervise)
 
-        from oscmix_autostart import Config
+        from oscmix_desk import Config
         config = Config(routes=list(routes))
         return session_module.run_session(make_args(**args), config)
 
@@ -164,7 +164,7 @@ def test_a_dry_run_starts_nothing(session_mod, lifecycle, capsys):
 def test_a_config_error_exits_two_without_restarting(session_mod, tmp_path):
     # RestartPreventExitStatus=2: a broken routing.conf must stop the unit
     # rather than loop, because no restart can fix a typo.
-    from oscmix_autostart import cli
+    from oscmix_desk import cli
 
     path = tmp_path / "routing.conf"
     path.write_text("[route:x]\nplayback = 1/2\noutput = nonsense\n")

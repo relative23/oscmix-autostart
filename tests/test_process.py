@@ -13,7 +13,7 @@ import pytest
 
 @pytest.fixture
 def process_mod():
-    from oscmix_autostart import process
+    from oscmix_desk import process
 
     return process
 
@@ -183,7 +183,7 @@ def test_supervise_does_not_kill_while_no_stop_was_requested(process_mod,
 def test_resolve_binary_prefers_the_environment_override(process_mod,
                                                          tmp_path,
                                                          monkeypatch):
-    from oscmix_autostart import discovery
+    from oscmix_desk import discovery
 
     binary = tmp_path / "oscmix"
     binary.write_text("#!/bin/sh\n")
@@ -198,7 +198,7 @@ def test_a_broken_override_fails_loudly_instead_of_falling_back(tmp_path,
     # An override names a specific binary. Quietly using a different one
     # would start something the operator did not ask for; refusing sends
     # the session down the "run install.sh first" path with a reason.
-    from oscmix_autostart import discovery
+    from oscmix_desk import discovery
 
     monkeypatch.setenv("OSCMIX_BIN_BACKEND", str(tmp_path / "missing"))
     monkeypatch.setattr(discovery.shutil, "which",
@@ -211,7 +211,7 @@ def test_a_broken_override_fails_loudly_instead_of_falling_back(tmp_path,
 def test_resolve_binary_falls_back_to_the_standard_locations(monkeypatch):
     # The systemd user manager's PATH need not contain ~/.local/bin,
     # which is exactly where install.sh puts the backend.
-    from oscmix_autostart import discovery
+    from oscmix_desk import discovery
 
     home_bin = os.path.expanduser("~/.local/bin/oscmix")
     monkeypatch.delenv("OSCMIX_BIN_BACKEND", raising=False)
@@ -222,7 +222,7 @@ def test_resolve_binary_falls_back_to_the_standard_locations(monkeypatch):
 
 
 def test_resolve_binary_returns_none_when_nothing_is_found(monkeypatch):
-    from oscmix_autostart import discovery
+    from oscmix_desk import discovery
 
     monkeypatch.delenv("OSCMIX_BIN_BACKEND", raising=False)
     monkeypatch.setattr(discovery.shutil, "which", lambda name: None)

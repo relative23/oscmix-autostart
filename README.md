@@ -1,33 +1,60 @@
-# oscmix-autostart
+# oscmix-desk
 
-[![CI](https://github.com/relative23/oscmix-autostart/actions/workflows/ci.yml/badge.svg)](https://github.com/relative23/oscmix-autostart/actions/workflows/ci.yml)
+[![CI](https://github.com/relative23/oscmix-desk/actions/workflows/ci.yml/badge.svg)](https://github.com/relative23/oscmix-desk/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Plug-and-play RME Fireface UCX II on Linux.** Plug the interface in, the
-mixer backend starts automatically, your routing is applied, and the mixer
-GUI is one click away in your app menu. No terminal required after install.
+**Your RME Fireface, described in a text file.** Write down what the desk
+should look like -- routing, faders, EQ, dynamics, reverb, the clock -- and
+it is applied every time the interface is plugged in or the machine boots.
+Then `--diff` tells you whether it still looks that way.
 
-[oscmix] by Michael Forney already does the hard part: it speaks the
-Fireface's MIDI SysEx protocol and exposes the hardware mixer via OSC,
-with a GTK GUI similar to TotalMix FX. What oscmix deliberately does not
-ship is the desktop integration -- and that is exactly what this project
-adds:
+It started as an autostart, and it still is one: plug the interface in, the
+backend comes up, the mixer GUI is one click away in the app menu. What it
+grew into is a state layer. **2028 registers are declared**, each with its
+type, its bounds and its verification class, every one of them measured
+against a real UCX II rather than copied from a datasheet.
+
+[oscmix] by Michael Forney does the hard part: it speaks the Fireface's
+MIDI SysEx protocol and exposes the hardware mixer over OSC, with a GTK
+GUI similar to TotalMix FX. This project makes the desk *declarative*, and
+makes the desktop integration disappear.
 
 | Piece | What it does |
 |---|---|
+| `routing.conf` | the desk as a text file: routes, faders, per-channel state, EQ, dynamics, low cut, auto level, crossfeed, reverb, echo, control room, clock |
+| `--diff` | what an apply would change, without changing it |
+| `--dump-config` | the desk you have, as the file that reproduces it |
+| `--snapshot` | every register the device reports, for comparing two moments |
+| profiles | named alternatives, switched as a transaction |
+| `[pin]` | which settings the file owns and which the device keeps |
 | udev rule | starts the backend on hotplug, disables Fireface USB autosuspend, and keeps affected ASM4242 host controllers awake |
-| systemd user service | supervises the backend, restarts it on failure (`Type=notify`: "started" means "audio works") |
-| `oscmix-session` | finds the ALSA MIDI port, launches `alsaseqio` + `oscmix`, applies your routing and verifies it against the device state |
-| `routing.conf` | your default mixer routing, applied on every start |
-| `--pipewire-sinks` | optional: named outputs ("Monitors", "Headphones") in your desktop's sound settings |
+| systemd user service | supervises the backend (`Type=notify`: "started" means "audio works") |
+| `--pipewire-sinks` | named outputs ("Monitors", "Headphones") in your desktop's sound settings |
 | desktop entry + launcher | "RME Fireface Mixer" in the app menu, with sanity checks and notifications |
-| `install.sh` | builds oscmix from source and installs everything per-user |
+| `install.sh` | builds oscmix at a pinned revision and installs everything per-user |
 
 [oscmix]: https://github.com/michaelforney/oscmix
 
 ![oscmix-gtk showing the Fireface UCX II hardware mixer](docs/img/oscmix-gtk.png)
-*The upstream oscmix-gtk mixer on a UCX II -- this project makes it a
-one-click, always-configured part of your desktop.*
+*The upstream oscmix-gtk mixer on a UCX II. This project keeps that desk in
+a file, and keeps the file and the desk agreeing.*
+
+## Measured, not asserted
+
+Every claim here was taken off a real device, and the ones that did not
+survive were removed rather than softened. Three defects in 0.1.3 were
+invisible at message level and only showed up by playing a tone and reading
+the device's own meters; that set the standard the project has been held to
+since.
+
+- Each release attaches a **hardware evidence artifact**: the routes
+  measured, the levels, the device serial and the exact oscmix revision.
+- The upstream backend is **pinned to a full commit SHA**, and the pin only
+  moves together with a fresh measurement.
+- Sixteen [decision records](docs/decisions/) carry the reasoning and the
+  measurement behind anything non-obvious, including the ones that say *we
+  looked and there was nothing to fix*.
+- Four issues have gone upstream from this work, two of them fixed.
 
 ## Why you want this
 
@@ -38,7 +65,7 @@ in. PipeWire also maps the 8 analog outputs as "7.1 surround", so stereo
 audio only reaches outputs 1/2 -- if your monitors are connected elsewhere,
 you get silence.
 
-oscmix-autostart makes the state predictable: every time the device is
+oscmix-desk makes the state predictable: every time the device is
 plugged in or the machine boots, the routing you declared in a small config
 file is applied to the hardware mixer. Zero-latency hardware routing,
 independent of the audio server.
@@ -63,8 +90,8 @@ independent of the audio server.
 ## Install
 
 ```sh
-git clone https://github.com/relative23/oscmix-autostart
-cd oscmix-autostart
+git clone https://github.com/relative23/oscmix-desk
+cd oscmix-desk
 ./install.sh
 ```
 
@@ -98,11 +125,47 @@ Apply with `systemctl --user restart oscmix.service`. Mono routes
 stereo audio to playback channels 1/2, so most setups only route 1/2 to
 wherever their speakers are connected.
 
+### The rest of the strip
+
+Since 0.4.0 the file is not limited to routing. Anything the device
+exposes and oscmix can write can be declared:
+
+```ini
+[input:3]                 # per-channel state
+gain = 12.0
+hi-z = true
+
+[eq:input:3]              # three-band EQ, per channel
+enabled = true
+band1freq = 80
+band1gain = -3.0
+band1type = Low Shelf
+
+[dynamics:output:5]       # compressor and expander
+compthres = -18.0
+compratio = 4.0
+
+[clock]                   # settings with no channel at all
+source = Internal
+
+[pin]                     # who wins after the first write
+output.volume = pin
+```
+
+Bounds come from the device: `compratio = 12.0` is refused because the
+register stops at 10, and the message says so. Values are checked before
+anything reaches the hardware.
+
+`oscmix-session --dump-config` writes the desk you already have as a file
+in exactly this shape, which is usually the easiest way to start.
+
 **A route rewrites exactly the registers it declares, and nothing else.**
-So mute, EQ and the output faders keep whatever you set in the mixer, and
-survive every restart. The one exception is opt-in: adding `volume = <dB>`
-to a route pins that output's fader, and every backend start forces it
-back to that value. That is what you want for a fixed installation, and
+Everything not named keeps whatever you set in the mixer and survives
+every restart. That is the default for *every* setting above, including
+the ones you can now express: writing them in the file shows them, a
+`[pin]` entry makes the file own them. The one route-level exception is
+opt-in: adding `volume = <dB>` to a route pins that output's fader, and
+every backend start forces it back to that value. That is what you want for a fixed installation, and
 what you do not want if you set your monitor level by hand -- in which
 case just leave the line out. Note that `level` is a different thing: it
 is the routing itself, the mix-matrix gain, and is always written.
@@ -324,4 +387,4 @@ the standard library, so it runs before any package manager is involved.
 
 All the actual protocol work happens in [oscmix] (ISC license) -- this
 project is just the glue that makes it feel native on a Linux desktop.
-oscmix-autostart is MIT licensed, see [LICENSE](LICENSE).
+oscmix-desk is MIT licensed, see [LICENSE](LICENSE).

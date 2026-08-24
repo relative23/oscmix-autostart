@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### Changed
+
+- **Renamed to `oscmix-desk`.** The old name described 0.1.0 exactly and
+  names one of two halves now: it is still an autostart, and it is also a
+  state layer over 2028 declared registers. "Desk" covers both, and
+  keeping `oscmix` in the name keeps the project findable by the people
+  who would want it.
+
+  **Nothing a user touches changes.** The unit is still `oscmix.service`,
+  the config still lives in `~/.config/oscmix/`, the commands are still
+  `oscmix-session` and `oscmix-launch`. What moved is the Python package
+  (`oscmix_autostart` to `oscmix_desk`), the install directory and the
+  repository name; GitHub redirects the old URLs, so existing clones keep
+  working.
+
+  `install.sh` removes a pre-rename install at
+  `~/.local/lib/oscmix-autostart`, and `uninstall.sh` cleans both paths.
+  Without that an upgrade leaves a complete second copy of the package
+  behind, and `oscmix-launch` searches `../lib/*` for a package directory:
+  a stale one there is a version nobody chose.
+
+- **The README is rewritten.** It still opened with "what oscmix does not
+  ship is the desktop integration", which was true in July and says
+  nothing about declaring an EQ in a text file. It now leads with the
+  file, lists what 0.4.0 can express, and has a section on how the claims
+  in it were arrived at.
+
+- **`LICENSE` and `patches/README.md` say whose code is whose.** A diff
+  quotes the lines it changes, so the context in `patches/` is Michael
+  Forney's work under ISC while this repository is MIT. The two are
+  compatible and nothing is relicensed; the attribution was simply
+  missing.
+
 ### Measured
 
 - **The device pushes far more than one register**, which ADR 0013's
@@ -364,7 +397,7 @@ multiplies the register surface by roughly ten.
 ### Architecture
 
 - The 1386-line `bin/oscmix-session` is now a package in
-  `src/oscmix_autostart/` (15 modules, 2119 lines) with both executables
+  `src/oscmix_desk/` (15 modules, 2119 lines) with both executables
   reduced to shims of 52 and 42 lines; `run_session` went from 106 lines
   to ~40, and the longest function left is 66.
 - `tests/test_architecture.py` enforces the properties that motivated the

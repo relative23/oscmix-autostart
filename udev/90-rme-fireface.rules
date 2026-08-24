@@ -1,4 +1,4 @@
-# RME Fireface UCX II (2a39:3fd9) -- oscmix-autostart
+# RME Fireface UCX II (2a39:3fd9) -- oscmix-desk
 #
 # The ASMedia ASM4242 xHCI controller (1b21:2426) can fail its runtime
 # suspend and remain in power/runtime_status=error.  Keep that controller

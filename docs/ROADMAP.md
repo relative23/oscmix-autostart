@@ -5,7 +5,7 @@ against this repository or a Fireface UCX II (24216011), not estimated.
 
 ## What this project is
 
-oscmix-autostart is the **state layer** for a Fireface on Linux. Upstream
+oscmix-desk is the **state layer** for a Fireface on Linux. Upstream
 [oscmix] speaks the device's MIDI SysEx protocol and offers a live mixer
 GUI; this project makes the resulting state *declarative, reproducible and
 verified* -- applied on every boot and hotplug, checked against what the
@@ -20,7 +20,7 @@ Not at DSP, metering or breadth of controls -- that is RME's and
 upstream's ground. At **state management**, and at being *provably*
 correct:
 
-| | TotalMix FX | oscmix-autostart |
+| | TotalMix FX | oscmix-desk |
 |---|---|---|
 | Configuration | GUI, opaque blob | text file, reviewable, diffable |
 | Version control | no | yes |
@@ -225,7 +225,7 @@ one test.
 *Closed late:* the ratchet sat at 84 while the suite measured 91, and
 `bin/oscmix-launch` sat outside the package, the architecture test and
 the mutation scope. Both are fixed: the launcher is
-`src/oscmix_autostart/launcher.py` at 100%, and the gate is 94 against a
+`src/oscmix_desk/launcher.py` at 100%, and the gate is 94 against a
 measured 94 -- no margin left to erode unnoticed.
 
 ### 4. Provability -- **done**
@@ -1082,7 +1082,7 @@ cost is owning register decoding for devices that cannot be tested here,
 which is why it is not worth doing today -- and exactly why the seam and
 the register model go in while the surface is still small.
 
-*Done:* `src/oscmix_autostart/backend.py`. Six places used to open their
+*Done:* `src/oscmix_desk/backend.py`. Six places used to open their
 own socket and know the address; a test asserts none remain outside the
 seam, because the seventh is what makes the option above expensive again.
 
@@ -1117,7 +1117,7 @@ casts this one interface into the data structure and puts the untested 802
 permanently out of reach -- in the very refactor that could have brought
 it closer.
 
-*Done:* `src/oscmix_autostart/registers.py`. Every channel range was read
+*Done:* `src/oscmix_desk/registers.py`. Every channel range was read
 out of `tests/data/refresh-dump.json` rather than typed from the manual,
 and `tests/test_registers.py` holds each claim against that recording and
 against the cold-plug timeline. The 802 is listed and declares nothing --
@@ -1153,7 +1153,7 @@ of registers, and everything above -- validation, verification, the pin
 and remember rule -- becomes a property of an entry in that table rather
 than a branch in the routing code.
 
-*Landed:* `src/oscmix_autostart/reconcile.py`, pure -- no socket, no
+*Landed:* `src/oscmix_desk/reconcile.py`, pure -- no socket, no
 clock, asserted. `desired(config)`, `observed(reports)`,
 `plan(desired, observed)`, with the verification class read from the
 register model rather than branched on in the routing code.

@@ -19,7 +19,7 @@ import re
 import pytest
 from conftest import repo_file
 
-from oscmix_autostart import registers
+from oscmix_desk import registers
 
 
 @pytest.fixture(scope="module")
@@ -299,7 +299,7 @@ def test_the_global_registers_are_declared_once_not_per_channel():
     declared in the table and never checked against a recording -- the
     quietest way to be wrong about a device.
     """
-    from oscmix_autostart.registers import (
+    from oscmix_desk.registers import (
         GLOBAL,
         declared_paths,
         device_for_name,
@@ -325,7 +325,7 @@ def test_every_declared_echo_register_is_in_the_recording(warm):
     somebody's desk. `/echo` is the first family declared without a
     channel, so it is the first chance for that check to pass vacuously.
     """
-    from oscmix_autostart.registers import GLOBAL, device_for_name
+    from oscmix_desk.registers import GLOBAL, device_for_name
 
     device = device_for_name("Fireface UCX II")
     declared = {r.template for r in device.registers
@@ -343,7 +343,7 @@ def test_the_echo_family_is_complete_against_the_recording(warm):
     `--dump-config` would emit the half it knows and silently drop the
     rest, which reads as "the device has no echo settings".
     """
-    from oscmix_autostart.registers import device_for_name
+    from oscmix_desk.registers import device_for_name
 
     device = device_for_name("Fireface UCX II")
     declared = {r.template for r in device.registers}
@@ -362,8 +362,8 @@ def test_the_echo_bounds_are_upstreams_and_not_invented():
     none here. Asserting that is the point: a range invented to look
     tidy would reject values the device accepts.
     """
-    from oscmix_autostart.constants import LEVEL_MAX, LEVEL_MIN
-    from oscmix_autostart.registers import device_for_name
+    from oscmix_desk.constants import LEVEL_MAX, LEVEL_MIN
+    from oscmix_desk.registers import device_for_name
 
     by_path = {r.template: r for r in device_for_name("Fireface UCX II").registers}
     assert (by_path["/echo/delay"].lo, by_path["/echo/delay"].hi) == (0.0, 2.0)

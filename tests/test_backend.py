@@ -14,7 +14,7 @@ import socket
 import pytest
 from conftest import free_udp_port, repo_file
 
-from oscmix_autostart import backend
+from oscmix_desk import backend
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +47,7 @@ def test_the_link_state_trait_is_why_the_barrier_exists():
     barrier goes -- in that order (ADR 0008), and this is the flag that
     says so rather than a search through the control flow.
     """
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     assert backend.OSCMIX.reports_link_state_on_write is False
     # The constants that exist only because of it. If the trait ever
@@ -181,7 +181,7 @@ def test_the_seam_is_the_only_place_that_opens_a_device_socket():
     """
     import ast
 
-    package = repo_file("src", "oscmix_autostart")
+    package = repo_file("src", "oscmix_desk")
     offenders = []
     for path in sorted(package.glob("*.py")):
         if path.name in ("backend.py", "notify.py", "discovery.py"):

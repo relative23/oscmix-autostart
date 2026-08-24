@@ -244,7 +244,7 @@ def test_config_discovery_returns_none_when_there_is_nothing(session_mod,
                                                              tmp_path,
                                                              monkeypatch):
     # No config is a supported state: the defaults leave the mixer alone.
-    from oscmix_autostart import config as config_mod
+    from oscmix_desk import config as config_mod
 
     monkeypatch.delenv("OSCMIX_CONFIG", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
@@ -398,7 +398,7 @@ def test_the_known_surface_is_stated_rather_than_discovered(session_mod):
     alternative -- putting input routes in a new *section*, which would
     only warn -- was rejected for exactly that reason.
     """
-    from oscmix_autostart import config as config_mod
+    from oscmix_desk import config as config_mod
 
     assert {
         "device": {"name", "usb-id"},

@@ -22,7 +22,7 @@ a live desk is that a typo costs you a message, not your monitoring.
 import pytest
 from conftest import write_config
 
-from oscmix_autostart import profiles
+from oscmix_desk import profiles
 
 GOOD = """
 [route:main]
@@ -180,7 +180,7 @@ def test_an_unverifiable_switch_names_what_it_could_not_confirm(
     # barrier, so this is the one profile test that pays a real wait.
     # Shortened here because the outcome is under test, not the
     # duration -- tests/test_apply_routing.py owns the timing.
-    from oscmix_autostart import routing as routing_mod
+    from oscmix_desk import routing as routing_mod
     monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.01)
 
     write_config(tmp_path / "profiles" / "tracking.conf", GOOD)
@@ -219,13 +219,13 @@ def test_every_outcome_answers_whether_the_device_was_written_to(tmp_path):
 def test_profiles_are_listed_by_name_sorted(tmp_path):
     for name in ("mixdown", "tracking", "podcast"):
         write_config(tmp_path / "profiles" / ("%s.conf" % name), GOOD)
-    from oscmix_autostart import config as config_mod
+    from oscmix_desk import config as config_mod
     assert config_mod.list_profiles(tmp_path / "routing.conf") == [
         "mixdown", "podcast", "tracking"]
 
 
 def test_no_profiles_directory_is_empty_not_an_error(tmp_path):
-    from oscmix_autostart import config as config_mod
+    from oscmix_desk import config as config_mod
     assert config_mod.list_profiles(tmp_path / "routing.conf") == []
 
 
@@ -249,7 +249,7 @@ def test_load_profile_parses_without_touching_a_device(tmp_path):
 def test_load_profile_raises_for_a_bad_one(tmp_path):
     # switch() turns this into an Outcome; the raising form is what makes
     # that translation a single place rather than a convention.
-    from oscmix_autostart import ConfigError
+    from oscmix_desk import ConfigError
 
     write_config(tmp_path / "profiles" / "bad.conf",
                  "[route:x]\noutput = 99\nplayback = 1\n")
@@ -281,7 +281,7 @@ def test_describe_profiles_reports_a_broken_one_instead_of_raising(tmp_path):
 
 
 def test_profile_path_maps_a_name_to_a_file(tmp_path):
-    from oscmix_autostart import config as config_mod
+    from oscmix_desk import config as config_mod
 
     path = config_mod.profile_path("tracking", tmp_path / "routing.conf")
     assert path == tmp_path / "profiles" / "tracking.conf"
@@ -336,7 +336,7 @@ def test_a_profile_that_states_a_port_keeps_its_own(tmp_path):
 def test_stating_the_default_explicitly_still_counts_as_stating_it(tmp_path):
     # "equals the default" cannot distinguish "said 7222" from "said
     # nothing", which is why the check reads the file.
-    from oscmix_autostart.constants import DEFAULT_OSC_PORT
+    from oscmix_desk.constants import DEFAULT_OSC_PORT
 
     write_config(tmp_path / "routing.conf", "[osc]\nport = 9001\n")
     write_config(tmp_path / "profiles" / "pinned.conf",
@@ -392,7 +392,7 @@ def test_every_machine_level_field_on_config_is_inherited(tmp_path):
     """
     import dataclasses
 
-    from oscmix_autostart.config import Config
+    from oscmix_desk.config import Config
 
     # `policies` is the desk's, not the machine's: "should my monitor
     # faders come back after a restart" is a statement about how this

@@ -168,8 +168,8 @@ def test_the_installed_session_runs_from_the_installed_tree(tmp_path):
     assert run("install.sh", ["--no-build", "--no-udev"], env).returncode == 0
 
     # The package has to be where the shim looks for it: ~/.local/bin is
-    # next to ~/.local/lib/oscmix-autostart, not next to a src/.
-    lib = home / ".local" / "lib" / "oscmix-autostart" / "oscmix_autostart"
+    # next to ~/.local/lib/oscmix-desk, not next to a src/.
+    lib = home / ".local" / "lib" / "oscmix-desk" / "oscmix_desk"
     assert (lib / "__init__.py").is_file()
     assert (lib / "launcher.py").is_file(), \
         "the launcher moved into the package but install.sh did not follow"
@@ -225,17 +225,17 @@ def test_the_installed_launcher_resolves_its_package(tmp_path):
 
 
 def test_the_installed_tree_carries_every_runtime_module(tmp_path):
-    # install.sh globs src/oscmix_autostart/*.py. A module added in a
+    # install.sh globs src/oscmix_desk/*.py. A module added in a
     # subdirectory, or one that stops matching the glob, would be missing
     # only at runtime on a user's machine.
     home, env, _ = make_fake_home(tmp_path)
     assert run("install.sh", ["--no-build", "--no-udev"], env).returncode == 0
 
     source = {path.name for path in
-              (PROJECT_ROOT / "src" / "oscmix_autostart").glob("*.py")}
+              (PROJECT_ROOT / "src" / "oscmix_desk").glob("*.py")}
     installed = {path.name for path in
-                 (home / ".local" / "lib" / "oscmix-autostart"
-                  / "oscmix_autostart").glob("*.py")}
+                 (home / ".local" / "lib" / "oscmix-desk"
+                  / "oscmix_desk").glob("*.py")}
     assert source == installed, "not installed: %s" % sorted(source - installed)
 
 

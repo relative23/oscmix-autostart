@@ -1,4 +1,4 @@
-"""oscmix-autostart -- declarative, verified mixer state for RME Fireface.
+"""oscmix-desk -- declarative, verified mixer state for RME Fireface.
 
 The public surface of this package is what ``__all__`` lists below.
 Anything else is an implementation detail and may change without notice.

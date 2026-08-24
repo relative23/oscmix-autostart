@@ -1,6 +1,6 @@
 PYTHON ?= python3
 SCRIPTS = bin/oscmix-session bin/oscmix-launch
-PACKAGE = src/oscmix_autostart
+PACKAGE = src/oscmix_desk
 SHELL_SCRIPTS = install.sh uninstall.sh scripts/verify-unit.sh systemd/system-sleep/oscmix
 # Repeats for the flakiness gate. The suite binds real UDP sockets and
 # runs background threads, so a single green run proves little.

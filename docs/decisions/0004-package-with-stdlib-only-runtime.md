@@ -4,7 +4,7 @@
 
 ## Decision
 
-The logic lives in `src/oscmix_autostart/`, a layered package.
+The logic lives in `src/oscmix_desk/`, a layered package.
 `bin/oscmix-session` locates it and calls `cli.main()`, nothing more.
 The package imports nothing outside the standard library, and
 `tests/test_architecture.py` enforces both properties.
@@ -26,7 +26,7 @@ What forced the change was measurement, not taste:
 
 So the package ships **alongside** the executable rather than replacing
 it. Nothing about the deployment story changes: `install.sh` copies the
-modules to `~/.local/lib/oscmix-autostart`, the shim finds them there or
+modules to `~/.local/lib/oscmix-desk`, the shim finds them there or
 in a checkout, and there is still nothing to pip install.
 
 ## What this rules out

@@ -15,7 +15,7 @@ import socket
 from conftest import free_udp_port
 from test_dump_config_cli import FakeBackend, dump_of
 
-from oscmix_autostart import cli
+from oscmix_desk import cli
 
 CONFIG = ("[device]\nname = Fireface UCX II\n\n"
           "[route:main]\nplayback = 1/2\noutput = 5/6\nlevel = 0.0\n\n"
@@ -131,8 +131,8 @@ def test_the_playback_matrix_is_counted_apart_from_real_differences():
     difference would answer "has the desk drifted?" with a number that
     is never zero.
     """
-    from oscmix_autostart.reconcile import REWRITE, desired, plan
-    from oscmix_autostart.registers import UCX2
+    from oscmix_desk.reconcile import REWRITE, desired, plan
+    from oscmix_desk.registers import UCX2
 
     config_paths = {"/mix/5/playback/1"}
     entries = [e for e in desired(_config()) if e.path in config_paths]
@@ -142,7 +142,7 @@ def test_the_playback_matrix_is_counted_apart_from_real_differences():
 
 
 def _config():
-    from oscmix_autostart.config import Config, Route
+    from oscmix_desk.config import Config, Route
     return Config(device_name="Fireface UCX II",
                   routes=[Route(name="main", playback=(1, 2), output=(5, 6),
                                 level=0.0)])

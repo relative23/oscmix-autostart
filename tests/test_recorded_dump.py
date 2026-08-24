@@ -23,8 +23,8 @@ from conftest import repo_file
 
 # Aliased: `registers` is already a local name in the fixtures below,
 # for the dict a recording holds.
-from oscmix_autostart import registers as model
-from oscmix_autostart import verify
+from oscmix_desk import registers as model
+from oscmix_desk import verify
 
 # Registers this project writes, in the families it cares about.
 ROUTED = [
@@ -88,7 +88,7 @@ def test_a_register_called_prompt_really_does_arrive_in_the_window(
     classified prompt that arrives after it would be reported as lost on
     every run -- a warning about nothing.
     """
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     registers = dump["registers"]
     for path in ROUTED:
@@ -236,7 +236,7 @@ def test_the_link_registers_arrive_long_before_the_blind_delay_expires(cold):
     mix. That wait is only honest if it outlasts the device -- and only
     useful if it does not outlast it by an order of magnitude.
     """
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     reports = cold["first_report_seconds"]
     links = {p: t for p, t in reports.items()
@@ -323,7 +323,7 @@ def test_the_blind_delay_is_derived_from_the_timeline_not_from_folklore(cold):
     the constant without a new recording fails, and so does a pin bump
     that makes the device slower without anyone re-recording.
     """
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     slowest_link = max(t for p, t in cold["first_report_seconds"].items()
                        if p.startswith("/output/") and p.endswith("/stereo"))
@@ -347,7 +347,7 @@ def test_the_blind_delay_still_fits_the_shutdown_budget(cold):
     # interruptible, so the delay never gates shutdown -- but if it were
     # ever made a plain sleep again, this is the number that would
     # matter.
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     assert constants.LINK_SYNC_BLIND_DELAY < 10.0, (
         "a blind delay longer than TimeoutStopSec is only survivable "

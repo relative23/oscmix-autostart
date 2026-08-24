@@ -24,16 +24,16 @@ reader saw half the stream.
 
 import pytest
 
-from oscmix_autostart.config import load_config
-from oscmix_autostart.errors import ConfigError
-from oscmix_autostart.registers import (
+from oscmix_desk.config import load_config
+from oscmix_desk.errors import ConfigError
+from oscmix_desk.registers import (
     NUMBER,
     REMEMBER,
     UCX2,
     register_policy,
     settable_options,
 )
-from oscmix_autostart.verify import register_promptly_reported
+from oscmix_desk.verify import register_promptly_reported
 
 
 def test_it_is_a_flat_output_option_not_a_sub_family():
@@ -91,7 +91,7 @@ def test_a_value_outside_the_bounds_is_refused(tmp_path, value, why):
 
 
 def test_a_value_inside_the_bounds_is_written(tmp_path):
-    from oscmix_autostart import reconcile
+    from oscmix_desk import reconcile
 
     path = tmp_path / "routing.conf"
     path.write_text("[device]\nname = Fireface UCX II\n\n"

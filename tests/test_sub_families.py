@@ -18,9 +18,9 @@ import re
 import pytest
 from conftest import repo_file
 
-from oscmix_autostart import reconcile
-from oscmix_autostart.config import Config, load_config
-from oscmix_autostart.registers import (
+from oscmix_desk import reconcile
+from oscmix_desk.config import Config, load_config
+from oscmix_desk.registers import (
     BOOL,
     ENABLE_OPTION,
     NUMBER,
@@ -74,7 +74,7 @@ def test_a_read_only_family_offers_no_config_section(tmp_path, family, sub):
     modelled so the surface is described, and it must not grow a section
     that would accept settings and deliver none.
     """
-    from oscmix_autostart.errors import ConfigError
+    from oscmix_desk.errors import ConfigError
 
     assert settable_nested(UCX2, sub, family) == {}
     path = tmp_path / "routing.conf"

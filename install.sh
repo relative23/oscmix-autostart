@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oscmix-autostart installer.
+# oscmix-desk installer.
 #
 # Everything is installed per-user (~/.local, ~/.config); root is only
 # needed for the udev hotplug rule. Existing files are backed up before
@@ -20,7 +20,13 @@ USB_PRODUCT="3fd9"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$PROJECT_DIR/build/oscmix"
 BIN_DIR="$HOME/.local/bin"
-LIB_DIR="$HOME/.local/lib/oscmix-autostart"
+LIB_DIR="$HOME/.local/lib/oscmix-desk"
+# Where this project installed itself before it was renamed. An upgrade
+# would otherwise leave a complete second copy of the package behind,
+# and `oscmix-launch` searches `../lib/*` for a package directory -- a
+# stale one there is a version nobody chose. Removed by both scripts.
+LEGACY_LIB_DIR="$HOME/.local/lib/oscmix-autostart"
+
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/oscmix"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -178,18 +184,23 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# Install oscmix-autostart components
+if [ -d "$LEGACY_LIB_DIR" ]; then
+    info "removing the pre-rename install at $LEGACY_LIB_DIR"
+    rm -rf "$LEGACY_LIB_DIR"
+fi
+
+# Install oscmix-desk components
 # --------------------------------------------------------------------------
 
 # The runtime package sits next to the entry point, which locates it as
-# <bin>/../lib/oscmix-autostart. Stale modules from an earlier version
+# <bin>/../lib/oscmix-desk. Stale modules from an earlier version
 # would be importable and silently win, so the directory is replaced
 # wholesale rather than merged into.
 info "installing the runtime package to $LIB_DIR"
-rm -rf "$LIB_DIR/oscmix_autostart"
-mkdir -p "$LIB_DIR/oscmix_autostart"
-for module in "$PROJECT_DIR/src/oscmix_autostart/"*.py; do
-    install -m 644 "$module" "$LIB_DIR/oscmix_autostart/$(basename "$module")"
+rm -rf "$LIB_DIR/oscmix_desk"
+mkdir -p "$LIB_DIR/oscmix_desk"
+for module in "$PROJECT_DIR/src/oscmix_desk/"*.py; do
+    install -m 644 "$module" "$LIB_DIR/oscmix_desk/$(basename "$module")"
 done
 
 info "installing scripts to $BIN_DIR"

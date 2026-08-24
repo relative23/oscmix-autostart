@@ -18,7 +18,7 @@ particular binary (ADR 0008).
 ## 1. The tree is what it claims to be
 
 - [ ] `git status` is clean and on `main`.
-- [ ] `src/oscmix_autostart/constants.py::__version__` matches the tag
+- [ ] `src/oscmix_desk/constants.py::__version__` matches the tag
       to be created.
 - [ ] `CHANGELOG.md` has a section for this version with a date, and no
       `## Unreleased` heading above it.

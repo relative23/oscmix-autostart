@@ -12,7 +12,7 @@ and independently agrees with upstream's own device table.
 
 import pytest
 
-from oscmix_autostart import reconcile, registers, verify
+from oscmix_desk import reconcile, registers, verify
 
 
 def write(tmp_path, text):
@@ -209,7 +209,7 @@ def test_a_quantity_carries_its_own_bounds_and_unit(session_mod):
     The bounds come from upstream's node table, so a value this rejects
     is one the device would reject too.
     """
-    from oscmix_autostart.registers import NUMBER, device_for_name
+    from oscmix_desk.registers import NUMBER, device_for_name
 
     device = device_for_name("Fireface UCX II")
     by_path = {r.template: r for r in device.registers}
@@ -227,8 +227,8 @@ def test_a_quantity_carries_its_own_bounds_and_unit(session_mod):
 def test_a_quantity_out_of_range_names_the_range(tmp_path):
     import pytest
 
-    from oscmix_autostart import ConfigError
-    from oscmix_autostart.config import load_config
+    from oscmix_desk import ConfigError
+    from oscmix_desk.config import load_config
 
     path = tmp_path / "routing.conf"
     path.write_text("[input:3]\ngain = 80.0\n")
@@ -242,8 +242,8 @@ def test_an_unbounded_quantity_is_only_checked_for_being_a_number():
     A range invented here would reject values the device accepts, and a
     config that will not load is worse than an error the device reports.
     """
-    from oscmix_autostart.config import _parse_number
-    from oscmix_autostart.registers import NUMBER, Register
+    from oscmix_desk.config import _parse_number
+    from oscmix_desk.registers import NUMBER, Register
 
     free = Register("/x", "i", "verifiable", "global", NUMBER)
     assert free.lo is None

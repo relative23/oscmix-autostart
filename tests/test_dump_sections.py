@@ -19,9 +19,9 @@ state). The shapes still come from the device; only the numbers are ours.
 
 import pytest
 
-from oscmix_autostart import reconcile
-from oscmix_autostart.config import Config, load_config
-from oscmix_autostart.registers import (
+from oscmix_desk import reconcile
+from oscmix_desk.config import Config, load_config
+from oscmix_desk.registers import (
     BOOL,
     ENUM,
     device_for_name,

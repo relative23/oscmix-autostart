@@ -13,10 +13,10 @@ while adding this family, and both were silent.
 import pytest
 from conftest import repo_file
 
-from oscmix_autostart import ConfigError
-from oscmix_autostart.config import load_config
-from oscmix_autostart.reconcile import desired
-from oscmix_autostart.registers import (
+from oscmix_desk import ConfigError
+from oscmix_desk.config import load_config
+from oscmix_desk.reconcile import desired
+from oscmix_desk.registers import (
     ENABLE_OPTION,
     device_for_name,
     nested_families,
@@ -38,7 +38,7 @@ def _conf(tmp_path, body):
 # --------------------------------------------------------------------------
 
 def test_the_eq_is_declared_for_both_families():
-    from oscmix_autostart.registers import declared_paths
+    from oscmix_desk.registers import declared_paths
 
     # Membership rather than equality: the tuple grows with every nested
     # family, and pinning it here would make this EQ test fail for
@@ -165,8 +165,8 @@ def test_the_wire_type_comes_from_the_declared_tag_not_the_value(tmp_path):
 
 def test_no_register_is_written_in_a_type_the_device_will_not_read():
     """The general form, over every settable register in the model."""
-    from oscmix_autostart.reconcile import _encode
-    from oscmix_autostart.registers import ENUM
+    from oscmix_desk.reconcile import _encode
+    from oscmix_desk.registers import ENUM
 
     for register in UCX2.registers:
         if register.domain is None:
@@ -200,7 +200,7 @@ def test_the_declared_eq_registers_are_all_in_the_recording():
 
     warm = json.loads(repo_file("tests", "data",
                                 "refresh-dump.json").read_text())
-    from oscmix_autostart.registers import declared_paths
+    from oscmix_desk.registers import declared_paths
 
     declared = {p for p in declared_paths(UCX2) if "/eq" in p}
     assert sorted(declared - set(warm["registers"])) == []

@@ -5,6 +5,16 @@ see, kept here so the reasoning survives whether or not they are
 accepted, and so the measurement that justifies each one is in the
 repository rather than in a pull request thread.
 
+**These files carry oscmix's code, not this project's.** A diff quotes
+the lines it changes, so the surrounding context here is Michael
+Forney's work under [ISC][isc], the licence oscmix ships. This
+repository is MIT and that does not extend to what is quoted in this
+directory. The two licences are compatible and no relicensing is needed
+or implied; the point is only that the attribution belongs where the
+code came from.
+
+[isc]: https://github.com/michaelforney/oscmix/blob/master/LICENSE
+
 The pin is now `55802a6ab865e551540ee9ad5081b8ae3276f8ca`. Patch 0001 is
 against it and still needed -- PR #31 is open. **Patch 0002 was merged
 upstream as `55802a6` and is kept only as a record**; applying it now

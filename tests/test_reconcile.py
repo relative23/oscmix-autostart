@@ -16,7 +16,7 @@ the audible path. Until both hold, nothing switches over.
 
 import pytest
 
-from oscmix_autostart import reconcile, registers
+from oscmix_desk import reconcile, registers
 
 
 def make_config(session_mod, *routes, device="Fireface UCX II"):

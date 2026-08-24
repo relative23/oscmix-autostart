@@ -229,7 +229,7 @@ def corrupted_messages(draw):
     never reach the argument decoder. Starting from something well-formed
     puts the damage where the parsing actually happens.
     """
-    from oscmix_autostart import osc as osc_mod
+    from oscmix_desk import osc as osc_mod
 
     path, tags, args = draw(osc_messages())
     data = bytearray(osc_mod.encode_osc(path, tags, *args))

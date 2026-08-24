@@ -1,6 +1,6 @@
 """Shared test fixtures.
 
-Unit tests import the ``oscmix_autostart`` package directly; the thin
+Unit tests import the ``oscmix_desk`` package directly; the thin
 executables in bin/ are covered end to end by the integration tests,
 which run them as real subprocesses.
 
@@ -58,9 +58,9 @@ def load_executable(name):
 @pytest.fixture(scope="session")
 def session_mod():
     """The runtime package: its public surface, as ``__all__`` defines it."""
-    import oscmix_autostart
+    import oscmix_desk
 
-    return oscmix_autostart
+    return oscmix_desk
 
 
 @pytest.fixture(scope="session")
@@ -71,21 +71,21 @@ def routing_mod():
     module that reads them -- patching the package re-export would set an
     attribute nobody consults.
     """
-    from oscmix_autostart import routing
+    from oscmix_desk import routing
 
     return routing
 
 
 @pytest.fixture(scope="session")
 def verify_mod():
-    from oscmix_autostart import verify
+    from oscmix_desk import verify
 
     return verify
 
 
 @pytest.fixture(scope="session")
 def pipewire_mod():
-    from oscmix_autostart import pipewire
+    from oscmix_desk import pipewire
 
     return pipewire
 
@@ -93,7 +93,7 @@ def pipewire_mod():
 @pytest.fixture(scope="session")
 def launch_mod():
     """The launcher, now a package module rather than a standalone script."""
-    from oscmix_autostart import launcher
+    from oscmix_desk import launcher
 
     return launcher
 
@@ -238,7 +238,7 @@ def _echo_link_flags_only(sent):
 @pytest.fixture
 def recording_backend():
     """Records the wire, and answers the link barrier like a device does."""
-    from oscmix_autostart import backend as backend_mod
+    from oscmix_desk import backend as backend_mod
     _RecordingBackend.traits = backend_mod.OSCMIX
     return _RecordingBackend(reports=_echo_link_flags_only)
 
@@ -246,7 +246,7 @@ def recording_backend():
 @pytest.fixture
 def silent_backend():
     """The desktop case: the receive port is held, so nothing can be read."""
-    from oscmix_autostart import backend as backend_mod
+    from oscmix_desk import backend as backend_mod
     _RecordingBackend.traits = backend_mod.OSCMIX
     return _RecordingBackend(reports=None)
 
@@ -270,6 +270,6 @@ def _echo_within_traits(sent):
 @pytest.fixture
 def confirming_backend():
     """A device that echoes back what its traits say it can report."""
-    from oscmix_autostart import backend as backend_mod
+    from oscmix_desk import backend as backend_mod
     _RecordingBackend.traits = backend_mod.OSCMIX
     return _RecordingBackend(reports=_echo_within_traits)

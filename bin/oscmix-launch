@@ -8,7 +8,7 @@ Invoked by the "RME Fireface Mixer" desktop entry. It
   3. waits briefly until the backend listens on its OSC port, and
   4. replaces itself with oscmix-gtk.
 
-The logic lives in the ``oscmix_autostart`` package next to this file;
+The logic lives in the ``oscmix_desk`` package next to this file;
 this is only the entry point. Only the Python standard library is used.
 """
 
@@ -17,26 +17,26 @@ from pathlib import Path
 
 
 def _package_root() -> Path:
-    """Locate the directory holding ``oscmix_autostart``.
+    """Locate the directory holding ``oscmix_desk``.
 
     Two layouts have to work with no install step in between: a git
     checkout (``<repo>/bin`` next to ``<repo>/src``) and the installed
-    tree (``~/.local/bin`` next to ``~/.local/lib/oscmix-autostart``).
+    tree (``~/.local/bin`` next to ``~/.local/lib/oscmix-desk``).
     """
     here = Path(__file__).resolve().parent
     for candidate in (here.parent / "src",
-                      here.parent / "lib" / "oscmix-autostart"):
-        if (candidate / "oscmix_autostart" / "__init__.py").is_file():
+                      here.parent / "lib" / "oscmix-desk"):
+        if (candidate / "oscmix_desk" / "__init__.py").is_file():
             return candidate
     raise SystemExit(
-        "oscmix-launch: cannot find the oscmix_autostart package near %s "
+        "oscmix-launch: cannot find the oscmix_desk package near %s "
         "-- run install.sh, or start it from a checkout" % here
     )
 
 
 sys.path.insert(0, str(_package_root()))
 
-from oscmix_autostart.launcher import main  # noqa: E402  (needs the path above)
+from oscmix_desk.launcher import main  # noqa: E402  (needs the path above)
 
 if __name__ == "__main__":
     sys.exit(main())

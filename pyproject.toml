@@ -1,4 +1,4 @@
-# Tool configuration only -- oscmix-autostart is installed by install.sh,
+# Tool configuration only -- oscmix-desk is installed by install.sh,
 # not by pip, so there is no [project] table and nothing to build here.
 
 [tool.pytest.ini_options]
@@ -76,7 +76,7 @@ ignore = [
 
 [tool.coverage.run]
 branch = true
-source = ["src/oscmix_autostart", "bin"]
+source = ["src/oscmix_desk", "bin"]
 # The integration tests run oscmix-session as a real subprocess. Without
 # this the branches they exercise look untested, which understates the
 # suite and hides which of them genuinely are.
@@ -113,5 +113,5 @@ fail_under = 95
 # time, which mutmut cannot attribute to a covering test, so it scored
 # as though nothing tested it while the recordings check it harder than
 # a mutant would. ADR 0015 has the measurement.
-source_paths = ["src/oscmix_autostart/"]
+source_paths = ["src/oscmix_desk/"]
 pytest_add_cli_args_test_selection = ["tests/"]

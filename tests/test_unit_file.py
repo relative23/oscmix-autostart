@@ -124,7 +124,7 @@ def test_the_stop_timeout_outlasts_the_kill_escalation(unit, session_mod):
     # supervise() waits CHILD_STOP_GRACE before SIGKILL. If systemd gave
     # up first it would kill the session instead, and a clean shutdown
     # would be reported as a failure.
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     stop_timeout = next(int(line.split("=")[1].rstrip("s"))
                         for line in unit.splitlines()
@@ -166,7 +166,7 @@ def test_the_service_declares_no_writable_path(unit):
 # --------------------------------------------------------------------------
 
 def test_the_worst_case_path_to_ready_fits_inside_the_start_deadline(unit):
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     budget = constants.startup_budget()
     start_deadline = seconds(directive(unit, "TimeoutStartSec"))
@@ -188,7 +188,7 @@ def test_the_units_own_execstart_stays_inside_the_budget(unit):
     # If ExecStart ever grows a --timeout, it is the number that decides
     # the budget, not DEFAULT_DEVICE_TIMEOUT. Parse what is actually
     # there rather than what the default happens to be.
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     exec_start = directive(unit, "ExecStart").split()
     device_timeout = constants.DEFAULT_DEVICE_TIMEOUT
@@ -202,7 +202,7 @@ def test_the_largest_device_timeout_that_still_fits_is_stated(unit):
     # The number an operator actually needs when editing ExecStart: how
     # far --timeout may be raised before the unit starts killing itself
     # mid-apply. Derived, so it cannot go stale against the constants.
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     start_deadline = seconds(directive(unit, "TimeoutStartSec"))
     overhead = constants.startup_budget(0.0)
@@ -218,7 +218,7 @@ def test_the_stop_grace_fits_inside_the_stop_deadline(unit):
     # The other direction, and the one that was already covered: systemd
     # must not give up before supervise() has escalated to SIGKILL, or a
     # clean shutdown is reported as a failure.
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     stop_deadline = seconds(directive(unit, "TimeoutStopSec"))
     assert stop_deadline > constants.CHILD_STOP_GRACE
@@ -231,7 +231,7 @@ def test_the_budget_names_every_wait_on_the_path(unit):
     # A wait added to the startup path and not to startup_budget makes
     # the assertions above pass while the real path grows. This ties the
     # sum to its terms, so adding one without the other fails here.
-    from oscmix_autostart import constants
+    from oscmix_desk import constants
 
     expected = (constants.DEFAULT_DEVICE_TIMEOUT
                 + constants.STALE_BACKEND_SETTLE
@@ -258,7 +258,7 @@ def test_verification_is_off_the_startup_path_structurally(unit):
     import ast
     import inspect
 
-    from oscmix_autostart import session
+    from oscmix_desk import session
 
     tree = ast.parse(inspect.getsource(session._apply_and_verify))
     starts_a_thread = any(

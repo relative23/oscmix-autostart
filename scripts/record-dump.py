@@ -45,11 +45,11 @@ from typing import Dict, Optional, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from oscmix_autostart.constants import (
+from oscmix_desk.constants import (
     DEFAULT_OSC_PORT,
     DEFAULT_OSC_RECV_PORT,
 )
-from oscmix_autostart.osc import decode_osc, encode_osc, iter_osc_messages
+from oscmix_desk.osc import decode_osc, encode_osc, iter_osc_messages
 
 EXIT_SKIP = 77
 # Long enough to catch a meter cycle, short enough not to be a wait.

@@ -168,7 +168,7 @@ def test_the_signal_handler_only_sets_a_flag():
     """
     import ast
 
-    source = repo_file("src", "oscmix_autostart", "session.py").read_text()
+    source = repo_file("src", "oscmix_desk", "session.py").read_text()
     tree = ast.parse(source)
     handler = next(
         node for node in ast.walk(tree)
@@ -191,7 +191,7 @@ def test_a_reload_request_is_cleared_before_it_is_served(session_mod):
     arrived while one was running -- so holding the key down, or two
     wake-ups close together, would lose the last one.
     """
-    from oscmix_autostart import process
+    from oscmix_desk import process
 
     seen = []
 
@@ -225,7 +225,7 @@ def test_a_stop_wins_over_a_pending_reload(session_mod, monkeypatch):
     to a backend that is being torn down is both pointless and the exact
     "half-applied mix" the two-phase design exists to prevent.
     """
-    from oscmix_autostart import process
+    from oscmix_desk import process
 
     # The escalation grace, not the property under test.
     monkeypatch.setattr(process, "CHILD_STOP_GRACE", 0.05)
@@ -267,7 +267,7 @@ def test_a_broken_config_on_reload_keeps_the_running_one(tmp_path, session_mod,
     """
     import argparse
 
-    from oscmix_autostart import session as session_module
+    from oscmix_desk import session as session_module
 
     path = tmp_path / "routing.conf"
     path.write_text("[route:x]\noutput = 99\nplayback = 1\n")
@@ -323,7 +323,7 @@ volume = -6.0
 
 
 def _config(tmp_path, extra=""):
-    from oscmix_autostart.config import load_config
+    from oscmix_desk.config import load_config
 
     path = tmp_path / "routing.conf"
     path.write_text(CONF + extra)
@@ -336,7 +336,7 @@ class _Device:
     def __init__(self, reports):
         self.sent = []
         self._reports = reports
-        from oscmix_autostart import backend as backend_mod
+        from oscmix_desk import backend as backend_mod
         self.traits = backend_mod.OSCMIX
 
     def send(self, messages):
@@ -374,7 +374,7 @@ def test_a_reconcile_leaves_a_remembered_value_alone(tmp_path, monkeypatch):
     logged "1 left to the device (/output/1/volume)" and the device still
     read -20.0 afterwards. This is that, in a form CI can run.
     """
-    from oscmix_autostart import routing, verify
+    from oscmix_desk import routing, verify
 
     monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
     monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
@@ -397,7 +397,7 @@ def test_a_reconcile_leaves_a_remembered_value_alone(tmp_path, monkeypatch):
 
 
 def test_a_reconcile_corrects_a_pinned_value(tmp_path, monkeypatch):
-    from oscmix_autostart import routing, verify
+    from oscmix_desk import routing, verify
 
     monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
     monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
@@ -421,7 +421,7 @@ def test_a_reconcile_refuses_rather_than_writing_blind(tmp_path):
     exists to end, so a held receive port is a refusal -- and it says so
     rather than reporting success.
     """
-    from oscmix_autostart import verify
+    from oscmix_desk import verify
 
     class Deaf(_Device):
         def listen(self):
@@ -434,7 +434,7 @@ def test_a_reconcile_refuses_rather_than_writing_blind(tmp_path):
 
 
 def test_a_stop_during_a_reconcile_writes_nothing(tmp_path):
-    from oscmix_autostart import verify
+    from oscmix_desk import verify
 
     device = _Device([("/output/1/stereo", "i", (1,))])
     assert verify.reconcile_now(_config(tmp_path), "test",
@@ -458,7 +458,7 @@ def test_a_reconcile_corrects_what_the_register_table_pins(tmp_path,
     Nothing overrides it here, so this fails if the model is not
     consulted.
     """
-    from oscmix_autostart import routing, verify
+    from oscmix_desk import routing, verify
 
     monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
     monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
@@ -488,7 +488,7 @@ def test_a_reconcile_leaves_what_the_register_table_remembers(tmp_path,
     This pairs with the one above: same run, same backend, one register
     corrected and one left alone, decided only by the table.
     """
-    from oscmix_autostart import routing, verify
+    from oscmix_desk import routing, verify
 
     monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
     monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
@@ -517,7 +517,7 @@ def test_the_reconcile_log_does_not_claim_to_be_selective(tmp_path,
     """
     import logging
 
-    from oscmix_autostart import routing, verify
+    from oscmix_desk import routing, verify
 
     monkeypatch.setattr(routing, "LINK_ECHO_TIMEOUT", 0.01)
     monkeypatch.setattr(routing, "LINK_SETTLE", 0.01)
@@ -544,7 +544,7 @@ def test_the_reconcile_log_does_not_claim_to_be_selective(tmp_path,
 
 def _reconciled(monkeypatch, args, running):
     """Run the SIGHUP path and return the Config it reconciled with."""
-    from oscmix_autostart import session as session_module
+    from oscmix_desk import session as session_module
 
     seen = []
     monkeypatch.setattr(session_module, "reconcile_now",
@@ -564,7 +564,7 @@ def test_a_reload_with_no_config_file_reconciles_what_is_running(
     """
     import argparse
 
-    from oscmix_autostart import session as session_module
+    from oscmix_desk import session as session_module
 
     monkeypatch.setattr(session_module, "discover_config_path", lambda: None)
     running = session_mod.Config(device_name="Fireface UCX II")
@@ -631,7 +631,7 @@ def test_no_sample_rate_trigger_exists_and_that_is_deliberate():
     # exists. Declaring is not reacting. Anywhere else, naming this path
     # in code means something is watching it.
     handlers = []
-    for path in sorted(repo_file("src", "oscmix_autostart").rglob("*.py")):
+    for path in sorted(repo_file("src", "oscmix_desk").rglob("*.py")):
         if path.name == "registers.py":
             continue
         for node in ast.walk(ast.parse(path.read_text())):

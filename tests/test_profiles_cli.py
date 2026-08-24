@@ -11,8 +11,8 @@ landed at 53% on cli.py and was found by the gate, on a push.
 
 from conftest import free_udp_port, write_config
 
-from oscmix_autostart import cli
-from oscmix_autostart.constants import EXIT_CONFIG, EXIT_OK
+from oscmix_desk import cli
+from oscmix_desk.constants import EXIT_CONFIG, EXIT_OK
 
 GOOD = """
 [route:main]
@@ -101,8 +101,8 @@ def test_an_applied_but_unverifiable_switch_still_exits_ok(tmp_path, capsys,
     # mutant, which is what pushed the mutation job past a 90-minute
     # CI timeout. The outcome is what is under test here, not the
     # durations; ADR 0010's timing tests own those.
-    from oscmix_autostart import profiles as profiles_mod
-    from oscmix_autostart import routing as routing_mod
+    from oscmix_desk import profiles as profiles_mod
+    from oscmix_desk import routing as routing_mod
     monkeypatch.setattr(routing_mod, "LINK_ECHO_TIMEOUT", 0.05)
     monkeypatch.setattr(routing_mod, "LINK_SETTLE", 0.05)
     monkeypatch.setattr(profiles_mod, "VERIFY_TIMEOUT", 0.3)

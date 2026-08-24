@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PACKAGE = PROJECT_ROOT / "src" / "oscmix_autostart"
+PACKAGE = PROJECT_ROOT / "src" / "oscmix_desk"
 
 # These assertions describe the *source* tree. A mutation run deliberately
 # rewrites it -- mutmut inserts its own import into every mutated module --
@@ -183,7 +183,7 @@ def test_public_surface_matches_dunder_all(session_mod):
     exported = {name for name in vars(session_mod)
                 if not name.startswith("_")
                 and getattr(vars(session_mod)[name], "__module__", "")
-                .startswith("oscmix_autostart")}
+                .startswith("oscmix_desk")}
     declared = set(session_mod.__all__)
     assert exported <= declared, (
         "re-exported but not declared in __all__: %s" % sorted(exported - declared))

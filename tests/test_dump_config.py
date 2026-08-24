@@ -14,7 +14,7 @@ stayed quiet about that would lose half a config on the first use.
 
 import pytest
 
-from oscmix_autostart import reconcile, registers
+from oscmix_desk import reconcile, registers
 
 
 def observed_from(config, session_mod, *, linked=True):

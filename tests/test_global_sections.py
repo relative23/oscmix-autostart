@@ -16,8 +16,8 @@ import json
 import pytest
 from conftest import repo_file
 
-from oscmix_autostart.config import GlobalSetting, load_config
-from oscmix_autostart.registers import (
+from oscmix_desk.config import GlobalSetting, load_config
+from oscmix_desk.registers import (
     ENABLE_OPTION,
     GLOBAL,
     device_for_name,
@@ -111,7 +111,7 @@ highcut = 8kHz
     ("[echo]\nenabled = perhaps\n", "not a boolean"),
 ])
 def test_a_bad_global_value_is_refused(tmp_path, body, why):
-    from oscmix_autostart import ConfigError
+    from oscmix_desk import ConfigError
 
     with pytest.raises(ConfigError):
         load_config(_conf(tmp_path, body))
@@ -139,7 +139,7 @@ def test_every_global_setting_becomes_a_register_to_write(tmp_path):
     two defects already fixed here. A new section is exactly where it
     happens again.
     """
-    from oscmix_autostart.reconcile import desired
+    from oscmix_desk.reconcile import desired
 
     config = load_config(_conf(tmp_path, """
 [echo]
@@ -159,7 +159,7 @@ def test_an_enum_goes_out_as_its_index(tmp_path):
     draws no reply. One encoder for both section kinds is what keeps
     that rule in one place.
     """
-    from oscmix_autostart.reconcile import desired
+    from oscmix_desk.reconcile import desired
 
     config = load_config(_conf(tmp_path, "[echo]\ntype = Pong Echo\n"))
     entry, = [e for e in desired(config) if e.path == "/echo/type"]
@@ -167,7 +167,7 @@ def test_an_enum_goes_out_as_its_index(tmp_path):
 
 
 def test_global_settings_are_read_back_like_any_other(tmp_path):
-    from oscmix_autostart.verify import expected_registers
+    from oscmix_desk.verify import expected_registers
 
     config = load_config(_conf(tmp_path, "[echo]\nvolume = -12.0\n"))
     assert "/echo/volume" in expected_registers(config)
@@ -209,7 +209,7 @@ def test_reverb_declares_no_bounds_because_upstream_declares_none():
     Every reverb number is unbounded upstream, so every one is unbounded
     here.
     """
-    from oscmix_autostart.registers import ENUM, NUMBER
+    from oscmix_desk.registers import ENUM, NUMBER
 
     numbers = [r for r in UCX2.registers
                if r.template.startswith("/reverb/") and r.domain == NUMBER]
@@ -230,7 +230,7 @@ def test_the_control_room_reductions_cannot_go_above_unity():
     part worth asserting, because -65 alone would look like a fader and
     read as one.
     """
-    from oscmix_autostart.constants import LEVEL_MIN
+    from oscmix_desk.constants import LEVEL_MIN
 
     by_path = {r.template: r for r in UCX2.registers}
     for path in ("/controlroom/dimreduction", "/controlroom/recallvolume"):
@@ -239,7 +239,7 @@ def test_the_control_room_reductions_cannot_go_above_unity():
 
 
 def test_a_reduction_above_zero_is_refused(tmp_path):
-    from oscmix_autostart import ConfigError
+    from oscmix_desk import ConfigError
 
     with pytest.raises(ConfigError, match=r"out of range -65\.0\.\.0\.0"):
         load_config(_conf(tmp_path, "[controlroom]\ndimreduction = 3.0\n"))
@@ -253,7 +253,7 @@ def test_the_control_room_splits_setup_from_buttons():
     are buttons somebody presses while working, and a session that put
     them back would be arguing with the person at the desk.
     """
-    from oscmix_autostart.registers import PIN, REMEMBER, register_policy
+    from oscmix_desk.registers import PIN, REMEMBER, register_policy
 
     for path in ("/controlroom/mainout", "/controlroom/dimreduction",
                  "/controlroom/recallvolume"):
@@ -292,7 +292,7 @@ def test_selecting_no_main_out_writes_minus_one_and_not_ten():
     the register to 10, which is not a main out and not "none" either --
     accepted, on the wire, device wrong.
     """
-    from oscmix_autostart.reconcile import _enum_value
+    from oscmix_desk.reconcile import _enum_value
 
     by_path = {r.template: r for r in UCX2.registers}
     mainout = by_path["/controlroom/mainout"]
@@ -378,7 +378,7 @@ def test_the_read_only_registers_are_absent_from_the_sections():
 
 
 def test_a_config_cannot_name_a_read_only_register(tmp_path):
-    from oscmix_autostart import ConfigError
+    from oscmix_desk import ConfigError
 
     with pytest.raises(ConfigError, match="unknown option"):
         load_config(_conf(tmp_path, "[clock]\nsamplerate = 44100\n"))
@@ -391,7 +391,7 @@ def test_the_box_and_the_clock_are_pinned():
     terminated, what the optical port carries and what the box does with
     no computer attached are all installation, in ADR 0012's sense.
     """
-    from oscmix_autostart.registers import PIN, register_policy
+    from oscmix_desk.registers import PIN, register_policy
 
     for register in UCX2.registers:
         if register.channels != GLOBAL or register.domain is None:

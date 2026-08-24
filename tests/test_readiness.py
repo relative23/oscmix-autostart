@@ -71,7 +71,7 @@ def test_find_stale_backends_skips_unreadable_entries(session_mod, tmp_path):
     (proc / "200").mkdir(parents=True)
     (proc / "200" / "comm").write_text("oscmix\n")
     (proc / "200" / "cmdline").write_bytes(b"oscmix\x00")
-    from oscmix_autostart import process
+    from oscmix_desk import process
 
     real_stat = process.Path.stat
 

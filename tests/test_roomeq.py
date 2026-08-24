@@ -14,9 +14,9 @@ sub-families. This file is what only Room EQ knows.
 
 import pytest
 
-from oscmix_autostart.config import load_config
-from oscmix_autostart.errors import ConfigError
-from oscmix_autostart.registers import (
+from oscmix_desk.config import load_config
+from oscmix_desk.errors import ConfigError
+from oscmix_desk.registers import (
     UCX2,
     declared_paths,
     nested_families,
