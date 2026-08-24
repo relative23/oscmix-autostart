@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- **`--diff` exits 3 when the device and the config disagree.** 0 still
+  means they match and 1 still means the read failed, and keeping those
+  three apart is the point: `diff(1)` returns 1 for "differing", which is
+  not available here because 1 already means a failure. A monitoring
+  check that cannot tell *the desk drifted* from *the backend never
+  answered* reports healthy silence while the backend is down.
+
+  A rewrite does not count as a difference. `/mix/<out>/playback/<pb>` is
+  never reported and is written on every apply, so counting it would pin
+  the code at 3 for ever.
+
+  Measured against the device: matching config exits 0, a config asking
+  for `volume = -6.0` against a desk at 0.0 exits 3 and names both
+  values, and an OSC port nobody answers exits 1 with *no reply from the
+  backend*.
+
 ### Changed
 
 - **Renamed to `oscmix-desk`.** The old name described 0.1.0 exactly and

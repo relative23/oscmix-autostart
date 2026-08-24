@@ -15,6 +15,7 @@ from .constants import (
     DEFAULT_DEVICE_TIMEOUT,
     DUMP_LISTEN_SETTLE,
     EXIT_CONFIG,
+    EXIT_DIFFERS,
     EXIT_FAILURE,
     EXIT_OK,
     __version__,
@@ -225,12 +226,22 @@ def _diff(config: Config) -> int:
     runs on every start -- so this prints its result instead of sending
     it. Nothing is written and no register is touched.
 
-    Exit stays 0 whenever the read succeeded, differences or not. A
-    `diff(1)`-style "1 means differing" would be more scriptable, but 1
-    is already EXIT_FAILURE here and a caller could not tell "the desk
-    drifted" from "the backend never answered" -- which are opposite
-    situations. The counts are on stdout for anyone who wants to gate on
-    them.
+    Exit codes, and the middle one is why this is worth stating:
+
+        0  the device matches the config
+        3  it does not (`EXIT_DIFFERS`)
+        1  the read failed, so nothing is known either way
+
+    `diff(1)` uses 1 for "differing", and that is not available here: 1
+    already means EXIT_FAILURE, and a caller has to be able to tell "the
+    desk drifted" from "the backend never answered". Those are opposite
+    situations, and conflating them makes a monitoring check report
+    healthy silence when the backend is down.
+
+    **A rewrite is not a difference.** `/mix/<out>/playback/<pb>` is
+    never reported (ADR 0002) and is written on every apply whatever the
+    device holds, so counting it would make the exit code permanently 3
+    and worth nothing.
     """
     seen = _read_device(config)
     if seen is None:
@@ -269,7 +280,7 @@ def _diff(config: Config) -> int:
             "%d more would be rewritten regardless: a dump never reports "
             "them, so\nan apply cannot tell whether they are already "
             "right (ADR 0002).\n" % len(rewritten))
-    return EXIT_OK
+    return EXIT_DIFFERS if differing else EXIT_OK
 
 
 def _diff_line(write: Write, seen: Dict[str, Tuple[object, ...]]) -> str:

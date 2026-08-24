@@ -2125,11 +2125,29 @@ state ADR 0012 says PIN exists for. A signal built on this would
 announce the settings a config mostly leaves alone and say nothing about
 the ones it pins.
 
-*What has to be decided, not measured:* whether a partial signal is
-worth having. "The desk changed, and I can tell you about most of it"
-may be more useful than silence, or it may be the kind of half-promise
-this project keeps deleting. **That is a judgement and it has not been
-made.**
+**Decided, once the measurement was finished: do not build it.** The
+half that had never been measured turned out to settle it. Fourteen of
+the eighteen settable PIN registers have no channel -- clock, control
+room, hardware -- and **all fourteen are silent**. Together with
+`input/gain` and both `reflevel`s, that is **one of eighteen** pinned
+registers that announces itself: `input/hi-z`.
+
+Meanwhile everything that *does* announce itself -- volume, mute,
+crossfeed, EQ, dynamics, low cut, auto level -- is REMEMBER by default,
+which is to say precisely what a config leaves to the device.
+
+So a signal built on pushes would report what the file does not own and
+stay silent for seventeen of eighteen things it does. That is worse than
+no signal, because it is believed: somebody who knows it exists and
+hears nothing concludes their pinned reference level still stands, and
+it may not. Not a close call; at ten of eighteen it would have been.
+
+**What was built instead:** `--diff` exits 3 when the device and the
+config disagree, so the question can be asked by a script rather than
+guessed at by a listener. 0 still means they match and 1 still means the
+read failed, and keeping those apart is the whole value -- a check that
+cannot tell drift from a dead backend reports healthy silence at exactly
+the wrong moment.
 
 ### C. Security is as closed as it can be here
 

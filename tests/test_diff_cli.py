@@ -107,7 +107,7 @@ def test_it_writes_nothing_to_the_device(session_mod, capsys, tmp_path):
 def test_a_drifted_register_is_reported_with_both_values(session_mod, capsys,
                                                          tmp_path):
     code, out, _ = run_diff(session_mod, capsys, tmp_path, DRIFTED)
-    assert code == 0
+    assert code == 3
     assert "/input/3/gain" in out
     assert "12.0" in out          # what the config asks for
     assert "3.0" in out           # what the device holds
@@ -251,3 +251,47 @@ def test_silence_is_an_error_not_an_empty_snapshot(session_mod, capsys,
     code, out = run_snapshot(session_mod, capsys, tmp_path, [])
     assert code == 1
     assert out == ""
+
+
+# --------------------------------------------------------------------------
+# The exit-code contract, which is the reason --diff is scriptable at all.
+# --------------------------------------------------------------------------
+
+def test_the_three_outcomes_have_three_codes(session_mod, capsys, tmp_path,
+                                             monkeypatch):
+    """0 matches, 3 differs, 1 nothing was learned.
+
+    `diff(1)` uses 1 for "differing" and that is not available: 1 already
+    means EXIT_FAILURE here. Conflating them makes a monitoring check
+    report healthy silence while the backend is down, which is the one
+    outcome such a check exists to prevent.
+    """
+    from oscmix_desk.constants import EXIT_CONFIG, EXIT_DIFFERS, EXIT_FAILURE, EXIT_OK
+
+    assert (EXIT_OK, EXIT_FAILURE, EXIT_CONFIG, EXIT_DIFFERS) == (0, 1, 2, 3)
+
+    matched, _out, _ = run_diff(session_mod, capsys, tmp_path, IN_SYNC)
+    differed, _out, _ = run_diff(session_mod, capsys, tmp_path, DRIFTED)
+    monkeypatch.setattr(cli, "DUMP_READ_SECONDS", 0.6)
+    silent, _out, _ = run_diff(session_mod, capsys, tmp_path, [])
+
+    assert (matched, differed, silent) == (EXIT_OK, EXIT_DIFFERS, EXIT_FAILURE)
+
+
+def test_a_rewrite_alone_does_not_make_it_differ(session_mod, capsys,
+                                                 tmp_path):
+    """`/mix/<out>/playback/<pb>` is never reported and is written on
+    every apply. Counting it would pin the exit code at 3 for ever and
+    make it worth nothing."""
+    code, out, _ = run_diff(session_mod, capsys, tmp_path, IN_SYNC)
+    assert "rewritten regardless" in out      # there are some
+    assert code == 0                          # and they do not count
+
+
+def test_only_diff_can_return_it(session_mod, capsys, tmp_path):
+    """The service runs `oscmix-session` with no flag, so systemd never
+    sees a 3. If it ever did, `Restart=on-failure` would treat it as a
+    failure, which is the safe direction for "the state is not what was
+    asked for"."""
+    code, _out = run_snapshot(session_mod, capsys, tmp_path, MIXED)
+    assert code == 0

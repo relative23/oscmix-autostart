@@ -161,6 +161,12 @@ channel map and no registers, because oscmix cannot drive it.
 | 0 | device absent, clean shutdown, or clean backend exit | none |
 | 1 | runtime failure | restart after 3 s (max 5 per 2 min) |
 | 2 | routing.conf error | **no** restart (`RestartPreventExitStatus=2`) |
+| 3 | `--diff` only: the device and the config disagree | never seen; the service runs no flag |
+
+`diff(1)` returns 1 for "differing" and that is not available here,
+because 1 already means a failure. A caller has to be able to tell *the
+desk drifted* from *the backend never answered*: conflating them makes a
+monitoring check report healthy silence while the backend is down.
 
 ## Design decisions
 

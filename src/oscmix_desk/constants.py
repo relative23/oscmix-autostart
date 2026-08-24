@@ -106,6 +106,18 @@ EXIT_OK = 0
 EXIT_FAILURE = 1
 EXIT_CONFIG = 2
 
+# `--diff` found the device and the config disagreeing. A separate code
+# because 1 already means "something went wrong", and a caller has to be
+# able to tell "the desk drifted" from "the backend never answered" --
+# those are opposite situations and the second one makes the first
+# unknowable.
+#
+# Only `--diff` ever returns it. The service never runs that flag, so
+# systemd never sees a 3; if it ever did, `Restart=on-failure` would
+# treat it as a failure, which is the safe direction for a code that
+# means "the state is not what was asked for".
+EXIT_DIFFERS = 3
+
 # How long the session waits for the background verifier to stop before
 # exiting anyway. The verifier checks for a stop between every phase and
 # before every write, so it normally returns within one socket timeout
