@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- **`--snapshot`**: every register the device reports, sorted, one per
+  line, meters excluded. Not a config and holds nothing back.
+
+  `--dump-config` renders a *config*, so it can only show what a config
+  can express: registers with a value domain. The link flags, phantom
+  power, Room EQ and `/clock/samplerate` are invisible in it, and a diff
+  of two dumps therefore cannot prove they are unchanged.
+
+  Found the hard way, and against this project's own practice. A
+  measurement here left `/output/9/stereo` unlinked on a working desk
+  and two dumps compared equal. The link flags are the register class
+  that produced every defect in 0.1.3, so a restoration proof blind to
+  them is not one. A snapshot shows `/output/9/stereo 1` becoming `0`
+  directly; 2252 registers against the dump's 1680 lines.
+
 ### Security
 
 - **The unit is hardened as far as a user manager allows**, measured

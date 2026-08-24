@@ -65,6 +65,10 @@ def build_arg_parser() -> ArgumentParser:
                         help="UDP port oscmix listens on (overrides config)")
     parser.add_argument("--dry-run", action="store_true",
                         help="show what would be started and sent, then exit")
+    parser.add_argument("--snapshot", action="store_true",
+                        help="print every register the device reports, for "
+                             "comparing two moments; unlike --dump-config "
+                             "this is not a config and holds nothing back")
     parser.add_argument("--diff", action="store_true",
                         help="compare the running device against the config "
                              "and print what an apply would write, without "
@@ -120,6 +124,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.profile:
         return _switch_profile(args.profile, config_path)
 
+    if args.snapshot:
+        return _snapshot(config)
+
     if args.diff:
         return _diff(config)
 
@@ -173,6 +180,42 @@ def _switch_profile(name: str, config_path: Optional[Path]) -> int:
 _PHASE_NAMES = ((PHASE_LINK, "links"),
                 (PHASE_MIX, "mix matrix"),
                 (PHASE_CHANNEL, "channel and global state"))
+
+
+#: Registers that stream on their own. A snapshot exists to be diffed,
+#: and a level meter changes between any two reads.
+_STREAMING_SUFFIXES = ("/level", "/meter")
+
+
+def _snapshot(config: Config) -> int:
+    """Print every register the device reports, verbatim and sorted.
+
+    `--dump-config` renders a *config*, so it can only show registers a
+    config can express: everything with a value domain. That leaves the
+    link flags, phantom power, Room EQ and the rest invisible, and a
+    diff of two dumps therefore cannot prove they are unchanged.
+
+    This was found the hard way. A measurement left `/output/9/stereo`
+    unlinked on a working desk and two dumps compared equal, because
+    `stereo` has no domain and no dump ever carried it. The link flags
+    are the register class that produced every defect in 0.1.3.
+
+    Meters are excluded because they change between any two reads, which
+    would make every comparison noisy and none of them wrong.
+    """
+    seen = _read_device(config)
+    if seen is None:
+        return EXIT_FAILURE
+
+    rows = [(path, args) for path, args in seen.items()
+            if not path.endswith(_STREAMING_SUFFIXES)]
+    log.info("read %d registers; %d in the snapshot, %d streaming and left out",
+             len(seen), len(rows), len(seen) - len(rows))
+    sys.stdout.write("# oscmix-session --snapshot: %d registers\n" % len(rows))
+    for path, args in sorted(rows):
+        sys.stdout.write("%s %s\n" % (path, " ".join(_one_value(a)
+                                                     for a in args)))
+    return EXIT_OK
 
 
 def _diff(config: Config) -> int:

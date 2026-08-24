@@ -180,3 +180,74 @@ def test_silence_is_an_error_not_an_empty_diff(session_mod, capsys, tmp_path,
     code, out, _ = run_diff(session_mod, capsys, tmp_path, [])
     assert code == 1
     assert "matches the config" not in out
+
+
+# --------------------------------------------------------------------------
+# `--snapshot`: what a dump cannot show.
+# --------------------------------------------------------------------------
+
+def run_snapshot(session_mod, capsys, tmp_path, registers):
+    send_port, recv_port = free_udp_port(), free_udp_port()
+    path = tmp_path / "routing.conf"
+    path.write_text(CONFIG + "\n[osc]\nport = %d\nrecv-port = %d\n"
+                    % (send_port, recv_port))
+    config = session_mod.load_config(path)
+    backend = RecordingBackend(session_mod, send_port, recv_port,
+                               dump_of(session_mod, registers))
+    backend.start()
+    try:
+        code = cli._snapshot(config)
+    finally:
+        backend.stop()
+        backend.join(timeout=3)
+        backend.sock.close()
+    return code, capsys.readouterr().out
+
+
+#: A device that reports a link flag, a level meter and a setting.
+MIXED = [
+    ("/output/9/stereo", "i", (1,)),          # no value domain: no dump line
+    ("/output/5/volume", "f", (0.0,)),        # a setting: dumped
+    ("/output/5/level", "f", (-42.0,)),       # streams: excluded
+    ("/input/1/48v", "i", (0,)),              # withheld from configs
+]
+
+
+def test_it_carries_what_a_config_cannot_express(session_mod, capsys, tmp_path):
+    """The reason this exists, and it was found the hard way.
+
+    A measurement left `/output/9/stereo` unlinked on a working desk and
+    two `--dump-config` runs compared equal, because `stereo` has no
+    value domain and no dump ever carried it. The link flags are the
+    register class that produced every defect in 0.1.3, so a restoration
+    proof blind to them is not one.
+    """
+    code, out = run_snapshot(session_mod, capsys, tmp_path, MIXED)
+    assert code == 0
+    assert "/output/9/stereo 1" in out
+    assert "/input/1/48v 0" in out
+    assert "/output/5/volume 0.0" in out
+
+
+def test_streaming_registers_are_left_out(session_mod, capsys, tmp_path):
+    """A meter changes between any two reads. Including it would make
+    every comparison differ and none of them mean anything."""
+    _code, out = run_snapshot(session_mod, capsys, tmp_path, MIXED)
+    assert "/output/5/level" not in out
+    assert "streaming and left out" not in out      # that line goes to the log
+
+
+def test_the_output_is_sorted_so_two_runs_can_be_diffed(session_mod, capsys,
+                                                        tmp_path):
+    _code, out = run_snapshot(session_mod, capsys, tmp_path, MIXED)
+    paths = [line.split(" ")[0] for line in out.splitlines()
+             if not line.startswith("#")]
+    assert paths == sorted(paths)
+
+
+def test_silence_is_an_error_not_an_empty_snapshot(session_mod, capsys,
+                                                   tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "DUMP_READ_SECONDS", 0.6)
+    code, out = run_snapshot(session_mod, capsys, tmp_path, [])
+    assert code == 1
+    assert out == ""
