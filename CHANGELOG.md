@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Security
+
+- **The unit is hardened as far as a user manager allows**, measured
+  rather than assumed: `systemd-analyze security --user` went from
+  **8.3 EXPOSED to 5.4 MEDIUM**. Added `UMask=0077`,
+  `KeyringMode=private`, `RestrictNamespaces`, `RestrictSUIDSGID`,
+  `RestrictRealtime`, `ProtectKernelTunables`, `ProtectControlGroups`
+  and `SystemCallFilter=@system-service`. Each was started against a
+  probe unit and then against the real service; the routing still
+  verifies and a tone still lands on every configured output.
+
+  Three of those had been listed as impossible in a user unit since
+  0.2.0 and are not. `ProtectKernelTunables`, `ProtectControlGroups` and
+  `RestrictSUIDSGID` all start. They were assumptions that had never
+  been run.
+
+  Three directives the manager *accepts* are now forbidden with reasons,
+  which is the half a probe unit cannot tell you: `PrivateNetwork` cuts
+  the mixer GUI off from the backend, `ProcSubset` hides
+  `/proc/asound/seq/clients` from device discovery, and `PrivateUsers`
+  is untested against ALSA device access.
+
+- **ADR 0017 states the trust boundary.** The OSC port has no
+  authentication: any local process can set any register, including the
+  phantom power this project withholds from config files. That guard is
+  in the config parser, not on the port, and it cannot be moved there.
+  Written down rather than left as an unstated gap.
+
+  No separate source hash was added for `install.sh`, and the ADR says
+  why: a git commit SHA already is one, and the checkout is verified
+  against the pinned 40 characters. What is missing is authenticity, not
+  integrity, and a second hash of the same content would look like it
+  closed that.
+
 ### Fixed
 
 - **`phase` on an output was accepted and set nothing.** oscmix's

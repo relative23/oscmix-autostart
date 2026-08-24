@@ -24,16 +24,33 @@ REQUIRED = [
     "MemoryDenyWriteExecute=yes",
     "SystemCallArchitectures=native",
     "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+    # Added in 0.4.x, each one started against a probe unit and then
+    # against the real service. `systemd-analyze security --user` went
+    # from 8.3 EXPOSED to 5.4 MEDIUM, and a tone still lands on every
+    # configured output.
+    "UMask=0077",
+    "KeyringMode=private",
+    "RestrictNamespaces=yes",
+    "RestrictSUIDSGID=yes",
+    "RestrictRealtime=yes",
+    "ProtectKernelTunables=yes",
+    "ProtectControlGroups=yes",
+    "SystemCallFilter=@system-service",
 ]
 
-# Each of these fails a user unit: the first group implies dropping
-# capabilities, the second needs a delegated cgroup controller.
+# Directives this unit may not carry, and the reason is not the same for
+# all of them. Measured on systemd 259 by starting a probe unit with each
+# one in turn, because three entries here were listed as impossible and
+# are not: `ProtectKernelTunables`, `ProtectControlGroups` and
+# `RestrictSUIDSGID` were rejected in this list from 0.2.0 and start
+# fine, which is why they moved to REQUIRED above. An assumption that
+# has never been run is not a constraint.
+#
+# The user manager refuses these outright (probe unit fails to start):
 FORBIDDEN = [
-    "ProtectKernelTunables",
+    "ProtectKernelModules",
     "ProtectKernelLogs",
     "ProtectClock",
-    "ProtectControlGroups",
-    "RestrictSUIDSGID",
     "CapabilityBoundingSet",
     "AmbientCapabilities",
     "DeviceAllow",
@@ -44,6 +61,21 @@ FORBIDDEN = [
     "Group=",
 ]
 
+# These the user manager accepts and this service still must not have,
+# which is the more interesting half: a probe unit proves nothing about
+# a workload.
+FORBIDDEN_THOUGH_ACCEPTED = {
+    "PrivateNetwork":
+        "the mixer GUI reaches the backend over 127.0.0.1; a private "
+        "network namespace cuts it off and the meters go dead",
+    "ProcSubset":
+        "device discovery reads /proc/asound/seq/clients, which is not "
+        "a process file",
+    "PrivateUsers":
+        "untested against ALSA device access, and an untested "
+        "restriction on the audio path is not a hardening",
+}
+
 
 @pytest.fixture(scope="module")
 def unit():
@@ -53,6 +85,20 @@ def unit():
 @pytest.mark.parametrize("directive", REQUIRED)
 def test_the_hardening_that_works_is_present(unit, directive):
     assert directive in unit
+
+
+@pytest.mark.parametrize("directive", sorted(FORBIDDEN_THOUGH_ACCEPTED))
+def test_directives_the_workload_cannot_survive_stay_out(unit, directive):
+    """Accepted by the user manager and still wrong here.
+
+    The distinction matters: a probe unit that starts proves the manager
+    allows the directive, not that this service works under it.
+    """
+    lines = [line.strip() for line in unit.splitlines()
+             if not line.strip().startswith("#")]
+    offenders = [line for line in lines if line.startswith(directive)]
+    assert offenders == [], "%s: %s" % (directive,
+                                        FORBIDDEN_THOUGH_ACCEPTED[directive])
 
 
 @pytest.mark.parametrize("directive", FORBIDDEN)

@@ -48,6 +48,15 @@ SystemCallArchitectures=native
 # OSC is UDP on loopback and readiness is a UNIX datagram; nothing here
 # has any business opening another kind of socket.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+KeyringMode=private
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 # The config lives under ~/.config and is only ever read.
 ReadWritePaths=
 
