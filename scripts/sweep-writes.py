@@ -63,6 +63,16 @@ UNBOUNDED_STEPS = (1.0, 10.0, 50.0)
 #: measurement rather than an estimate.
 ECHO_TIMEOUT = 0.25
 
+#: Seconds between writes inside a pass. A burst is dropped: oscmix
+#: turns each write into a MIDI SysEx message, and that wire carries
+#: roughly a thousand registers a second -- the measured rate of a
+#: refresh dump. Sending 295 writes in a few milliseconds lost 40 of
+#: them here, and those losses read as `ignored` on registers that
+#: accept the write perfectly well when asked one at a time. Pacing is
+#: what makes the difference between measuring the device and measuring
+#: this tool's own overrun.
+WRITE_PACE = 0.010
+
 #: Registers this tool refuses to touch, matched on the last path
 #: segment. See ADR 0016.
 DANGEROUS = ("reflevel",)
@@ -229,42 +239,6 @@ def as_tag(value: object, tags: str) -> object:
     return value
 
 
-def _write_once(device, listener, path: str, tags: str,
-                value: object) -> Tuple[object, float]:
-    """Write one value and wait for the device to answer it.
-
-    Returns the reported value, or None when nothing came back inside
-    `ECHO_TIMEOUT`, and how long the attempt took. That timing is the
-    whole point of the first run: a register that answers costs a round
-    trip, one that does not costs the timeout, and the mix of the two is
-    what the sweep's runtime actually is.
-    """
-    started = time.monotonic()
-    device.send([(path, tags, (as_tag(value, tags),))])
-    deadline = started + ECHO_TIMEOUT
-    while time.monotonic() < deadline:
-        for got, _tags, args in listener.messages(0.02):
-            if got == path and args:
-                return args[0], time.monotonic() - started
-    return None, time.monotonic() - started
-
-
-def probe(device, listener, path: str, register: R.Register,
-          current: object) -> Dict[str, object]:
-    """Try a register's escalating candidates and judge the result."""
-    attempts: List[Tuple[object, float, object]] = []
-    started = time.monotonic()
-    for value, step in candidates(register, current):
-        reported, _elapsed = _write_once(device, listener, path,
-                                         register.tags[:1], value)
-        attempts.append((value, step, reported))
-        if reported is not None:
-            break
-    finding = verdict(path, current, attempts)
-    finding["seconds"] = round(time.monotonic() - started, 4)
-    return finding
-
-
 def settable(limit: Optional[int] = None,
              match: str = "") -> List[Tuple[str, R.Register]]:
     """Every register a config can set, in declaration order."""
@@ -279,26 +253,118 @@ def settable(limit: Optional[int] = None,
     return out[:limit] if limit else out
 
 
-def sweep(device, listener, targets: Sequence[Tuple[str, R.Register]],
-          state: Dict[str, object]) -> List[Dict[str, object]]:
-    """Probe each register and put it back the way it was.
+def channel_of(path: str) -> Optional[int]:
+    """The channel number in a path, or None for a global register."""
+    parts = path.split("/")
+    for part in parts[2:3]:
+        if part.isdigit():
+            return int(part)
+    return None
 
-    Restoration happens per register rather than in a pass at the end, so
-    the desk is never more than one register away from where it started.
-    A crash halfway through then costs one control, not a session.
+
+def _unchanged(before: object, after: object) -> bool:
+    """True when a register reads back exactly where it started."""
+    if after is None:
+        return True
+    try:
+        return abs(float(after) - float(before)) < 1e-6
+    except (TypeError, ValueError):
+        return after == before
+
+
+def write_batch(device, writes: Sequence[Tuple[str, R.Register, object]],
+                pace: float = WRITE_PACE) -> None:
+    """Put a pass of writes on the wire, slowly enough to survive.
+
+    One datagram at a time with a gap between them. The gap is the whole
+    reason this works: see `WRITE_PACE`.
     """
+    for path, register, value in writes:
+        device.send([(path, register.tags[:1],
+                      (as_tag(value, register.tags),))])
+        time.sleep(pace)
+
+
+def _pass(device, listener, group: Sequence[Tuple[str, R.Register]],
+          state: Dict[str, object], step: int,
+          attempts: Dict[str, list]) -> Tuple[Dict[str, object], List[str]]:
+    """Write one candidate to each register in a group, then read back.
+
+    Reading back is the only way to see the result. Waiting for an echo
+    on the path just written cannot work here: the device answers a
+    linked pair on the *partner* path and stays silent on the one
+    addressed, and a register with no linked partner draws no reply at
+    all even though the value lands. Measured on a UCX II -- writing
+    `/output/3/volume` reports `/output/4/volume`, and a dump afterwards
+    shows both moved.
+    """
+    writes = []
+    for path, register in group:
+        options = candidates(register, state[path])
+        if not options:
+            continue
+        # A bool has exactly one legal alternative, so it cannot
+        # escalate -- and a single dropped datagram would condemn it as
+        # deaf on its only attempt. Repeating the last candidate gives
+        # every register the same three tries. Rewriting a value the
+        # device already holds is harmless: it reports only on change.
+        value, size = options[min(step, len(options) - 1)]
+        writes.append((path, register, value, size))
+    if not writes:
+        return state, []
+    write_batch(device, [(p, r, v) for p, r, v, _s in writes])
+    after = read_all(device, listener)
+    settled = []
+    for path, _register, value, size in writes:
+        got = after.get(path)
+        reported = None if _unchanged(state[path], got) else got
+        attempts[path].append((value, size, reported))
+        if reported is not None:
+            settled.append(path)
+    write_batch(device, [(p, r, state[p]) for p, r, _v, _s in writes])
+    return read_all(device, listener), settled
+
+
+def sweep(device, listener, targets: Sequence[Tuple[str, R.Register]],
+          state: Dict[str, object],
+          note=None) -> List[Dict[str, object]]:
+    """Probe every register, escalating only where nothing moved.
+
+    Passes are split by channel parity because a linked pair moves
+    together: writing channel 3 drags channel 4 with it, so writing both
+    in one batch would leave the first looking like it landed somewhere
+    it was not asked to go. Odd and even never share a pass, and no pair
+    is ever written against itself.
+
+    Each pass restores what it wrote before the next one starts, so the
+    desk is never more than one pass from where it began.
+    """
+    say = note or (lambda _text: None)
     findings = []
+    pending = []
     for path, register in targets:
         if is_dangerous(path):
             findings.append(skipped(path, "dangerous: ADR 0016"))
-            continue
-        if path not in state:
+        elif path not in state:
             findings.append(skipped(path, "device did not report it"))
-            continue
-        current = state[path]
-        finding = probe(device, listener, path, register, current)
-        _write_once(device, listener, path, register.tags[:1], current)
-        findings.append(finding)
+        else:
+            pending.append((path, register))
+    attempts: Dict[str, list] = {path: [] for path, _r in pending}
+    for step in range(max(len(STEPS), len(UNBOUNDED_STEPS))):
+        for odd in (True, False):
+            group = [(p, r) for p, r in pending
+                     if bool((channel_of(p) or 1) % 2) is odd]
+            if not group:
+                continue
+            state, settled = _pass(device, listener, group, state, step,
+                                   attempts)
+            say("step %d, %s: %d written, %d answered"
+                 % (step + 1, "odd" if odd else "even", len(group),
+                    len(settled)))
+            pending = [(p, r) for p, r in pending if p not in set(settled)]
+    for path in [p for p, _r in targets]:
+        if path in attempts:
+            findings.append(verdict(path, state.get(path), attempts[path]))
     return findings
 
 
@@ -353,7 +419,8 @@ def main() -> int:
         sys.stderr.write("probing %d of %d settable registers\n"
                          % (len(targets), len(settable())))
         started = time.monotonic()
-        findings = sweep(device, listener, targets, before)
+        findings = sweep(device, listener, targets, before,
+                         lambda text: sys.stderr.write(text + "\n"))
         elapsed = time.monotonic() - started
         after = read_all(device, listener)
     finally:
