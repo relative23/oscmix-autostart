@@ -970,14 +970,28 @@ def settable_options(device: Optional[Device], family: str) -> Dict[str, Registe
     (ADR 0014). Both live in `settable_nested` instead, the switch under
     ``ENABLE_OPTION``.
     """
+    return dict(settable_option_rows(device, family))
+
+
+def settable_option_rows(device: Optional[Device],
+                         family: str) -> Tuple[Tuple[str, Register], ...]:
+    """The same options, one entry per *row* rather than per name.
+
+    `settable_options` is keyed by option name, which is right for "what
+    may a `[input:N]` section say" and wrong for "walk everything that is
+    settable": `/input/{ch}/gain` is three rows and a dict keeps one of
+    them. Walking the dict dropped inputs 1-2 out of `--dump-config`
+    entirely, because the surviving row's capability was the instrument
+    channels.
+    """
     if device is None:
-        return {}
+        return ()
     prefix = "/%s/{ch}/" % family
     parents = {r.template.rsplit("/", 1)[0] for r in device.registers}
-    return {r.template[len(prefix):]: r for r in device.registers
-            if r.domain is not None and r.template.startswith(prefix)
-            and "/" not in r.template[len(prefix):]
-            and r.template not in parents}
+    return tuple((r.template[len(prefix):], r) for r in device.registers
+                 if r.domain is not None and r.template.startswith(prefix)
+                 and "/" not in r.template[len(prefix):]
+                 and r.template not in parents)
 
 
 def nested_families(device: Optional[Device], family: str) -> Tuple[str, ...]:

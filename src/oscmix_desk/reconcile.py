@@ -62,11 +62,12 @@ from .registers import (
     device_for_name,
     global_families,
     nested_families,
+    option_register,
     register_at,
     register_policy,
     settable_globals,
     settable_nested,
-    settable_options,
+    settable_option_rows,
     verify_class,
 )
 
@@ -257,7 +258,8 @@ def channel_entries(config: Config) -> Tuple[Entry, ...]:
         return ()
     out = []
     for setting in config.channels:
-        register = _register_for(device, setting.family, setting.option)
+        register = _register_for(device, setting.family, setting.option,
+                                 setting.channel)
         if register is None:
             continue
         path = "/%s/%d/%s" % (setting.family, setting.channel, setting.option)
@@ -265,8 +267,8 @@ def channel_entries(config: Config) -> Tuple[Entry, ...]:
     return tuple(out)
 
 
-def _register_for(device: Device, family: str,
-                  option: str) -> Optional["Register"]:
+def _register_for(device: Device, family: str, option: str,
+                  channel: int) -> Optional["Register"]:
     """The register a channel setting names, flat or nested.
 
     A nested option carries the rest of the path -- `eq/band1freq`, or
@@ -280,9 +282,15 @@ def _register_for(device: Device, family: str,
     instance of that shape in this release, and the first one caught by
     looking rather than by a failing gate.
     """
-    flat = settable_options(device, family)
-    if option in flat:
-        return flat[option]
+    # By channel, because one option name can have several rows when the
+    # device's limits differ per channel -- `/input/{ch}/gain` is three.
+    # They agree on domain and tag today, so `_encode` would produce the
+    # same entry either way; the day two rows disagree on `choices` this
+    # would write the wrong enum value and draw no reply to notice it
+    # by. Resolving properly now costs one argument.
+    flat = option_register(device, family, option, channel)
+    if flat is not None:
+        return flat
     sub = option.split("/", 1)[0]
     return settable_nested(device, sub, family).get(
         ENABLE_OPTION if option == sub else option.split("/", 1)[1])
@@ -550,12 +558,16 @@ def channels_from_observed(seen: Mapping[str, Args],
         return ()
     found: List[ChannelSetting] = []
     for family in ("input", "output"):
-        wanted = dict(settable_options(device, family))
+        # Rows, not names: one option can have several registers when
+        # the device's limits differ per channel, and a dict keyed by
+        # name keeps only the last -- which dropped /input/1-2/gain out
+        # of every dump, because the surviving row covered 3-4.
+        wanted = list(settable_option_rows(device, family))
         for sub in nested_families(device, family):
             for option, register in settable_nested(device, sub, family).items():
                 key = sub if option == ENABLE_OPTION else "%s/%s" % (sub, option)
-                wanted[key] = register
-        for option, register in sorted(wanted.items()):
+                wanted.append((key, register))
+        for option, register in sorted(wanted, key=lambda row: row[0]):
             for channel in device.channels.get(register.channels, ()):
                 args = seen.get(register.path(ch=channel))
                 if args:

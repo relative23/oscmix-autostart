@@ -252,3 +252,25 @@ def test_the_module_stays_pure(session_mod):
             imported.add(node.module.split(".")[0])
     assert not imported & {"socket", "time", "subprocess", "os"}, (
         "reconcile grew a side effect: %s" % sorted(imported))
+
+
+def test_a_channel_setting_resolves_to_its_own_channels_register():
+    """One option name, three rows, and the channel decides which.
+
+    `/input/{ch}/gain` splits by what the device accepts: 0..75 dB on the
+    two mic preamps, 0..24 on the two instrument channels, nothing on
+    Analog 5-8. Resolving by name alone returned whichever row came last
+    in the table.
+
+    Today the two settable rows agree on domain and tag, so the entry
+    `_encode` builds is the same either way and nothing is visibly
+    broken. This test exists for the day they do not agree: two rows
+    differing in `choices` would write the wrong enum value, and a write
+    draws no reply to notice it by.
+    """
+    from oscmix_desk.reconcile import _register_for
+    from oscmix_desk.registers import UCX2
+
+    assert _register_for(UCX2, "input", "gain", 1).hi == 75.0
+    assert _register_for(UCX2, "input", "gain", 3).hi == 24.0
+    assert _register_for(UCX2, "input", "gain", 5) is None

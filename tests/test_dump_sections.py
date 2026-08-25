@@ -270,3 +270,24 @@ def test_that_dump_still_parses(seen, tmp_path):
     path = tmp_path / "dumped.conf"
     path.write_text(dumped(unnamed))
     assert load_config(path).globals
+
+
+def test_a_dump_keeps_every_row_of_a_multi_row_option(seen):
+    """The bug a dict keyed by option name hides.
+
+    `/input/{ch}/gain` is three rows -- mic 0..75, instrument 0..24, and
+    Analog 5-8 with no value domain. `settable_options` is keyed by name
+    and so keeps one of them, and walking that dict to build a dump
+    iterated only the surviving row's channels. Inputs 1 and 2 vanished
+    from `--dump-config` while the device reported them perfectly well:
+    1198 channel settings where there should have been 1200.
+
+    Caught against the hardware rather than here, which is why this test
+    exists.
+    """
+    settings = reconcile.channels_from_observed(seen, UCX2)
+    gains = sorted(s.channel for s in settings
+                   if s.family == "input" and s.option == "gain")
+    assert gains == [1, 3], (
+        "channel 1 is a mic row and channel 3 an instrument row; "
+        "keying by option name keeps one of them and drops the other")

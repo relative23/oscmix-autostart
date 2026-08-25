@@ -379,3 +379,79 @@ def test_the_echo_bounds_are_upstreams_and_not_invented():
     assert by_path["/echo/feedback"].lo is None
     assert by_path["/echo/feedback"].hi is None
     assert (by_path["/echo/width"].lo, by_path["/echo/width"].hi) == (0.0, 1.0)
+
+
+def test_an_unmodelled_device_has_no_opinion_about_options():
+    """The `device is None` path, which is a supported state.
+
+    `device_for_name` answers None for hardware this project has no
+    register table for, and the whole config layer is built so that such
+    a device constrains nothing rather than refusing everything. The
+    three lookups added for the multi-row gain split have to agree with
+    that, or an unmodelled device would start raising instead of
+    shrugging.
+    """
+    from oscmix_desk.registers import (
+        option_channels,
+        option_register,
+        settable_option_rows,
+        settable_options,
+    )
+
+    assert settable_option_rows(None, "input") == ()
+    assert settable_options(None, "input") == {}
+    assert option_register(None, "input", "gain", 1) is None
+    assert option_channels(None, "input", "gain") == ()
+
+
+def test_rows_sharing_a_template_never_overlap():
+    """The invariant that makes a multi-row option safe.
+
+    `/input/{ch}/gain` is three rows because the device's limits differ
+    by channel. That only works while their capabilities are disjoint:
+    two rows claiming the same channel would make `register_at` answer
+    by table order, which is not a decision anyone made, and would put
+    the same path in `declared_paths` twice.
+
+    Nothing enforced this when the split was written. It held by
+    inspection, which is the state a test is for.
+    """
+    import collections
+
+    from oscmix_desk import registers
+
+    for device in registers.DEVICES:
+        if not device.registers:
+            continue
+        by_template = collections.defaultdict(list)
+        for register in device.registers:
+            by_template[register.template].append(register)
+        for template, rows in by_template.items():
+            if len(rows) == 1:
+                continue
+            seen: set = set()
+            for register in rows:
+                channels = set(device.channels_for(register.channels))
+                assert not (seen & channels), (
+                    "%s on %s: rows overlap on %s"
+                    % (template, device.key, sorted(seen & channels)))
+                seen |= channels
+        paths = list(registers.declared_paths(device))
+        assert len(paths) == len(set(paths)), "%s declares a path twice" % device.key
+
+
+def test_the_gain_rows_together_cover_what_the_device_reports():
+    """Split by what it accepts, complete against what it reports.
+
+    The three rows have to add up to `input-gain`, the capability the
+    recording test checks against the dump. A split that quietly lost a
+    channel would leave a register the device reports and the model does
+    not describe at all.
+    """
+    from oscmix_desk.registers import UCX2
+
+    rows = [r for r in UCX2.registers if r.template == "/input/{ch}/gain"]
+    covered: set = set()
+    for register in rows:
+        covered |= set(UCX2.channels_for(register.channels))
+    assert covered == set(UCX2.channels_for("input-gain"))
