@@ -440,7 +440,12 @@ UCX2 = Device(
         "meter": _seq(1, 22),
         "48v": (1, 2),
         "hi-z": (3, 4),
+        # Reported on all eight. What each channel *accepts* is
+        # narrower, and splits three ways -- see the three gain rows.
         "input-gain": _seq(1, 8),
+        "input-gain-mic": (1, 2),
+        "input-gain-inst": (3, 4),
+        "input-gain-line": _seq(5, 8),
         "input-reflevel": _seq(3, 8),
         "output-reflevel": _seq(1, 8),
     },
@@ -470,8 +475,24 @@ UCX2 = Device(
         Register("/input/{ch}/48v", "i", VERIFIABLE, "48v", policy=PIN),
         Register("/input/{ch}/hi-z", "i", VERIFIABLE, "hi-z", BOOL,
                  policy=PIN),
-        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain", NUMBER,
-                 lo=0.0, hi=75.0, unit="dB", policy=PIN),
+        # Gain is one register to the protocol and three to the device.
+        # Upstream's channel table carries the ranges, and `setinputgain`
+        # clamps to them silently: `.gain={0, 750}` on the two mic
+        # preamps, `{0, 240}` on the two instrument channels, and *no
+        # range at all* on Analog 5-8, which leaves those clamped to
+        # {0, 0}. Measured 2026-08-25 by the write sweep: 1-4 take a
+        # value, 5-8 never move off zero however often they are written.
+        #
+        # So 5-8 are readable and not settable -- the same shape as 48v
+        # and the output phase, and for the same reason. One row with
+        # `hi=75` would have promised a config 75 dB on a channel that
+        # silently gives 24, or gain on a channel that has none.
+        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain-mic",
+                 NUMBER, lo=0.0, hi=75.0, unit="dB", policy=PIN),
+        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain-inst",
+                 NUMBER, lo=0.0, hi=24.0, unit="dB", policy=PIN),
+        Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain-line",
+                 policy=PIN),
         Register("/input/{ch}/reflevel", "is", VERIFIABLE, "input-reflevel", ENUM,
                  ("+13dBu", "+19dBu"), policy=PIN),
         Register("/input/{ch}/mute", "i", VERIFIABLE, "input", BOOL),
@@ -791,6 +812,19 @@ def _matches(template: str, path: str) -> bool:
     return True
 
 
+def _channel_in(template: str, path: str) -> Optional[int]:
+    """The channel a concrete path names, or None for a global register.
+
+    The *first* placeholder is the one the capability describes: a matrix
+    row is indexed by its output, and its second index is a different
+    capability entirely.
+    """
+    for part_want, part_got in zip(template.split("/"), path.split("/")):
+        if part_want.startswith("{") and part_want.endswith("}"):
+            return int(part_got)
+    return None
+
+
 def register_at(device: Optional[Device], path: str) -> Optional[Register]:
     """The register a concrete path is an instance of, or None.
 
@@ -803,8 +837,12 @@ def register_at(device: Optional[Device], path: str) -> Optional[Register]:
     if device is None:
         return None
     for register in device.registers:
-        if _matches(register.template, path):
-            return register
+        if not _matches(register.template, path):
+            continue
+        channel = _channel_in(register.template, path)
+        if channel is not None and not device.has(register.channels, channel):
+            continue
+        return register
     return None
 
 
@@ -942,6 +980,40 @@ def nested_families(device: Optional[Device], family: str) -> Tuple[str, ...]:
         rest = register.template[len(prefix):]
         if "/" in rest:
             found.add(rest.split("/", 1)[0])
+    return tuple(sorted(found))
+
+
+def option_register(device: Optional[Device], family: str, option: str,
+                    channel: int) -> Optional[Register]:
+    """The register a ``[family:channel]`` section's option resolves to.
+
+    One option name can have several rows when the device's own limits
+    differ by channel: `/input/{ch}/gain` is three rows, because upstream
+    clamps the two mic preamps at 75 dB, the two instrument channels at
+    24, and Analog 5-8 at nothing at all. Picking by name alone returns
+    whichever row happens to be last and validates a config against the
+    wrong ceiling.
+    """
+    if device is None:
+        return None
+    template = "/%s/{ch}/%s" % (family, option)
+    for register in device.registers:
+        if (register.template == template and register.domain is not None
+                and device.has(register.channels, channel)):
+            return register
+    return None
+
+
+def option_channels(device: Optional[Device], family: str,
+                    option: str) -> Tuple[int, ...]:
+    """Every channel that can set this option, across all its rows."""
+    if device is None:
+        return ()
+    template = "/%s/{ch}/%s" % (family, option)
+    found: set = set()
+    for register in device.registers:
+        if register.template == template and register.domain is not None:
+            found.update(device.channels_for(register.channels))
     return tuple(sorted(found))
 
 

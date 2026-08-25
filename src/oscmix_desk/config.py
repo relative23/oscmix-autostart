@@ -33,6 +33,8 @@ from .registers import (
     device_for_name,
     global_families,
     nested_families,
+    option_channels,
+    option_register,
     settable_globals,
     settable_nested,
     settable_options,
@@ -623,9 +625,12 @@ def _parse_channel_section(parser: "configparser.ConfigParser", section: str,
 
     settings = []
     for option in parser.options(section):
-        register = known[option]
-        valid = device.channels_for(register.channels)  # type: ignore[attr-defined]
-        if channel not in valid:
+        # By channel, not by name: an option can have several rows when
+        # the device's limits differ per channel, and the wrong row
+        # validates against the wrong ceiling. See `option_register`.
+        register = option_register(device, family, option, channel)
+        if register is None:
+            valid = option_channels(device, family, option)
             raise ConfigError(
                 "[%s] %s: channel %d does not have it on a %s (it has %s "
                 "on %d..%d)"

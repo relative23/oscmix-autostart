@@ -209,7 +209,7 @@ def test_a_quantity_carries_its_own_bounds_and_unit(session_mod):
     The bounds come from upstream's node table, so a value this rejects
     is one the device would reject too.
     """
-    from oscmix_desk.registers import NUMBER, device_for_name
+    from oscmix_desk.registers import NUMBER, device_for_name, register_at
 
     device = device_for_name("Fireface UCX II")
     by_path = {r.template: r for r in device.registers}
@@ -219,9 +219,15 @@ def test_a_quantity_carries_its_own_bounds_and_unit(session_mod):
     assert (volume.lo, volume.hi, volume.unit) == (
         session_mod.LEVEL_MIN, session_mod.LEVEL_MAX, "dB")
 
-    gain = by_path["/input/{ch}/gain"]
-    assert gain.domain == NUMBER
-    assert (gain.lo, gain.hi, gain.unit) == (0.0, 75.0, "dB")
+    # Gain has three rows, so a template lookup is ambiguous by design:
+    # the two mic preamps reach 75 dB, the two instrument channels 24,
+    # and Analog 5-8 take no gain at all. Ask per channel.
+    mic = register_at(device, "/input/1/gain")
+    assert mic.domain == NUMBER
+    assert (mic.lo, mic.hi, mic.unit) == (0.0, 75.0, "dB")
+    inst = register_at(device, "/input/3/gain")
+    assert (inst.lo, inst.hi) == (0.0, 24.0)
+    assert register_at(device, "/input/5/gain").domain is None
 
 
 def test_a_quantity_out_of_range_names_the_range(tmp_path):
@@ -231,7 +237,13 @@ def test_a_quantity_out_of_range_names_the_range(tmp_path):
     from oscmix_desk.config import load_config
 
     path = tmp_path / "routing.conf"
+    # Input 3 is an instrument channel: upstream clamps it at 24 dB, and
+    # a config that promised 75 there would be silently cut down by
+    # `setinputgain` rather than refused. Measured by the write sweep.
     path.write_text("[input:3]\ngain = 80.0\n")
+    with pytest.raises(ConfigError, match=r"80\.0 dB out of range 0\.0\.\.24\.0"):
+        load_config(path)
+    path.write_text("[input:1]\ngain = 80.0\n")
     with pytest.raises(ConfigError, match=r"80\.0 dB out of range 0\.0\.\.75\.0"):
         load_config(path)
 
@@ -281,3 +293,35 @@ def test_input_phase_still_works(session_mod, tmp_path):
     config = session_mod.load_config(write(tmp_path, DEVICE +
                                            "[input:3]\nphase = true\n"))
     assert config.channels
+
+
+def test_gain_resolves_per_channel_not_per_name(tmp_path):
+    """The three gain rows, as a config sees them.
+
+    Upstream's channel table is the authority and it disagrees with
+    itself by channel: `.gain={0, 750}` on the mic preamps, `{0, 240}`
+    on the instrument channels, and no range at all on Analog 5-8, which
+    `setinputgain` then clamps to {0, 0}. The write sweep measured the
+    consequence on 2026-08-25: inputs 1-4 take a value, 5-8 never move.
+
+    Resolving the option by name alone returned whichever row came last,
+    so `[input:1] gain` was validated against the instrument ceiling and
+    refused outright.
+    """
+    import pytest
+
+    from oscmix_desk import ConfigError
+    from oscmix_desk.config import load_config
+
+    path = tmp_path / "routing.conf"
+    path.write_text("[input:1]\ngain = 60.0\n")
+    assert load_config(path).channels
+
+    path.write_text("[input:3]\ngain = 60.0\n")
+    with pytest.raises(ConfigError, match=r"out of range 0\.0\.\.24\.0"):
+        load_config(path)
+
+    # Analog 5-8 are readable and not settable, the same shape as 48v.
+    path.write_text("[input:5]\ngain = 6.0\n")
+    with pytest.raises(ConfigError, match=r"channel 5 does not have it"):
+        load_config(path)
