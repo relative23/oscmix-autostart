@@ -2260,72 +2260,127 @@ qualify every sentence.
 
 ## 0.5.0 -- the write direction, proven
 
-**Every one of the 1242 settable registers is declared `verifiable`**,
-and that word is a promise: write it, and the device reports the new
-value back. About a dozen of those promises have been checked against a
-Fireface. Two of the unchecked ones were false.
+**Every settable register is declared `verifiable`**, and that word is a
+promise: write it, and the device reports the new value back. The read
+half of that promise was measured -- the recordings prove the model
+matches the dump. The write half never had been, and the verification
+apparatus this project is built on runs entirely in the read direction.
+**What nobody had ever asked the device is whether a register it reports
+is a register it accepts.**
 
-- **Room EQ** (upstream #33): the write is accepted and ignored. Found
-  while measuring something else.
-- **Output phase** (upstream #34): oscmix never puts the write on the
-  wire. Found by reading upstream's source.
+That was the release. Not new surface -- the surface is finished -- but
+the other half of a claim already made about it.
 
-Neither was found by a test, because no test writes. The verification
-apparatus this project is built on runs entirely in the read direction:
-the dump says what the device holds, `plan` compares it against the
-config, and the recordings prove the model matches the dump. **What
-nobody has ever asked the device is whether a register it reports is a
-register it accepts.**
+**Result: 1224 of 1238 confirmed, 14 skipped as dangerous, none
+ignored, nothing left unrestored, in 101 seconds.** The per-register
+verdict is in `docs/evidence/write-sweep-ucx2.json` with the device
+serial and the oscmix pin, and two tests check that file against the
+model rather than trusting it.
 
-That is the release. Not new surface -- the surface is finished -- but
-the other half of the claim already made about it.
+### The design the plan called for could not work
 
-### What the sweep does
+The plan said: write a register, wait for the device's report, compare.
+That is impossible here, and the first trial run said so by reporting
+`/output/1/volume` as deaf -- a register this project sets on every
+start.
 
-For each settable register, in order:
+**A write is never echoed on the path it was written to.** Measured on
+the UCX II:
 
-1. read the current value from a snapshot taken first;
-2. write a different legal value, chosen from the register's own
-   declared domain (`lo`/`hi`, `choices`, `values`);
-3. wait for the device's report;
-4. compare;
-5. write the original value back.
+| written | reported |
+|---|---|
+| `/output/3/volume` | `/output/4/volume`, carrying the value written |
+| `/output/4/volume` | `/output/3/volume` |
+| `/input/1/mute` | `/input/2/mute` |
+| `/input/1/gain` | nothing at all |
 
-Then a second full snapshot, compared against the first. That comparison
-is the restoration proof, and it is the reason this is affordable now
-rather than in 0.3.0: `--snapshot` covers all 2252 registers including
-those with no value domain, where the dump-versus-dump comparison of
-0.3.0 was blind and left `/output/9/stereo` unlinked while reporting
-equality.
+A dump afterwards shows both channels of a linked pair moved, and that
+`/input/1/gain` took its value. So the writes land and only the
+*reporting* is partial -- most likely oscmix suppressing what matches
+its own cache, which it updates optimistically on the write. Combined
+with the device reporting only on change, the path just written is the
+one message systematically missing.
+
+So the sweep writes a pass and reads the result back from a refresh
+dump. That turned out to be far cheaper than the plan assumed, because
+the cost is per *pass* and not per register: 1238 registers cost the
+same twelve dumps as twenty would.
+
+### Three false verdicts, and what each one taught
+
+Every one of them said "deaf" about a healthy register, and every one
+was caught the same way -- by testing the unbelievable result alone and
+unhurried instead of reporting it. Delivering the first run would have
+filed 44 device defects that do not exist.
+
+**Bursting a pass loses writes.** oscmix turns each write into a MIDI
+SysEx message and that wire carries about a thousand registers a
+second; 295 writes in a few milliseconds lost 40. The lost ones read as
+`ignored` -- including every `lowcut` and `autolevel` switch, whose
+upstream setter and register mapping both check out perfectly. Writing
+`/input/1/lowcut` alone takes the value. Writes are now paced, and
+every register gets three attempts rather than a bool being condemned
+by its single dropped datagram.
+
+**A linked pair written against itself looks clamped.** Writing channel
+3 drags channel 4 with it, so a batch containing both leaves the first
+reading a value it was never asked for. Passes are split by channel
+parity; no pair is ever written against itself.
+
+**Absolute steps on an unbounded register probe outside it.**
+`/reverb/width` sits at 0.6 on a scale that stops at 1.0, and with no
+declared range the probe fell back to absolute steps and asked for 1.6,
+10.6 and 50.6. The device *rejects* rather than clamps, so it refused
+all three without a word. The sweep no longer calls that `ignored`:
+where no range is declared, a deaf register and a probe that never
+landed inside one are indistinguishable, and saying so is
+`undetermined`.
+
+### What it found, once it was right
+
+Not deaf registers. **Two defects in this repository's own model**, both
+of the kind that makes a config silently ineffective while behaving
+perfectly on the read side.
+
+**Input gain is three registers, not one.** Upstream's channel table
+gives `.gain={0, 750}` to the two mic preamps, `{0, 240}` to the two
+instrument channels, and *no range at all* to Analog 5-8, which leaves
+`setinputgain` clamping them to `{0, 0}` -- a control present in the OSC
+tree that can never do anything. The model declared one row, 0..75 dB
+on channels 1-8, promising a config 75 dB where the device silently
+gives 24, and gain on four channels that have none. Now three rows: mic
+0..75, instrument 0..24, and line readable with no value domain, the
+same shape as `48v` and the output phase.
+
+Two lookups had to become channel-aware to carry it, and one of them
+was already wrong: `register_at` answered `/input/9/gain` with a
+register whose capability stops at 8.
+
+**Three global registers had no bounds while the device enforces
+some.** `/echo/width`, `/reverb/width` and `/reverb/smooth` are
+unbounded in upstream's node table, so they were unbounded here under
+the standing rule that an invented range would reject values the device
+accepts. But the device refuses an out-of-range write outright -- no
+clamp, no report -- so a config asking for `width = 1.02` would have
+been ignored in silence. The bounds were bracketed against the hardware
+(0.0 and 1.0 accepted, -0.01 and 1.02 refused; 0 and 100 on smooth, -1
+and 101 refused) and are declared now.
+
+That narrows the rule rather than repealing it: ten reverb numbers stay
+unbounded because nobody measured them, and `/reverb/volume` still
+carries no ceiling copied from `/echo/volume`.
 
 ### The step size is the discriminator, not a parameter
 
-A register that reports nothing after a write is ambiguous. Either the
-new value quantised onto the old one, in which case silence is correct
-and the device is behaving exactly as documented -- it reports only on
-change -- or the write was ignored.
+A register that does not move after a write is ambiguous. Either the new
+value quantised onto the old one, in which case stillness is correct and
+the device is behaving exactly as documented, or the write was ignored.
 
-**A second, larger step separates them.** If the larger step reports,
-the first was quantisation. If nothing reports at any step inside the
-declared domain, the register is deaf. So the sweep does not need a
-step size guessed in advance; it needs an escalation, and the step a
-register required is itself a recorded result. A control that only
-answers to coarse changes is worth knowing about before a config
-promises it.
-
-This also fixes the audibility problem the obvious design has. Starting
-small and escalating only where necessary keeps the sweep quiet on the
-families that are actually in the signal path, instead of stepping every
-fader through ten percent of its range.
-
-### What it costs is the first thing to measure
-
-**Not estimated here.** The refresh dump moves 2002 registers in 1.9 s,
-so the wire is not the constraint; the wait for each individual echo
-is, and that wait is what `LINK_ECHO_TIMEOUT` exists for. Whether 1242
-sequential writes take two minutes or twenty is a measurement, and
-putting a number in this document before taking it would be the exact
-mistake ADR 0010 was written about.
+**A second, larger step separates them.** Of the 1224 confirmed, 1164
+answered the first step and 60 needed the third -- so the escalation was
+not decoration. Starting small also keeps the sweep quiet on families
+that sit in the signal path, instead of stepping every fader through ten
+percent of its range.
 
 ### reflevel is named, not measured
 
@@ -2335,21 +2390,8 @@ domain, so a config cannot reach it and neither can the sweep. Changing
 a reference level on a live output is audible and potentially loud.
 
 **They are skipped, and the artifact says so per register.** "Skipped,
-dangerous" is a result. Quietly omitting them and reporting 1228 of 1228
+dangerous" is a result. Quietly omitting them and reporting 1224 of 1224
 would not be.
-
-### What the artifact holds
-
-One line per register, with a verdict from a closed set: `confirmed`,
-`confirmed at step N`, `ignored`, `skipped-dangerous`. Same shape and
-same place as the release evidence artifacts, so a claim in the README
-has a file behind it rather than a memory of a session.
-
-An `ignored` verdict is a defect somewhere in the stack, and the sweep
-does not decide where. Room EQ and phase failed identically from this
-side and for entirely different reasons, one in the device's firmware
-and one in oscmix's write path. Attribution needs a trace, which is the
-work the finding starts rather than the work it completes.
 
 ### What it does not prove
 
@@ -2358,12 +2400,18 @@ value round-trips; it does not prove `/output/5/crossfeed = 3` changes
 anything anyone can hear. That is `verify-hardware`'s ground, and it
 covers routing only.
 
-**So this release closes a class of defect, not the gap between
-declared and audible.** The declared surface is 1242 registers; the
+**So this release closed a class of defect, not the gap between declared
+and audible.** The declared surface is 1238 settable registers; the
 audible evidence is a handful of routes. Naming that ratio is more
 useful than narrowing it, because narrowing it means an audio
 measurement per register family and this project has one room, one
 device and one pair of ears.
+
+Nor does the artifact stay true by itself -- but it cannot rot unseen:
+`test_the_artifact_covers_every_settable_register` compares it against
+the model, so a new settable register fails the suite until the sweep
+has run again.
+
 
 ## Explicit non-goals
 
@@ -2407,6 +2455,25 @@ All measured, all things the design has to live with:
 - **The device reports a register only when it changes.** Writing a value
   it already holds produces no report, so "wait for the echo" cannot be
   the only synchronisation mechanism.
+- **A write is never echoed on the path it was written to**, which is
+  the stronger form of the line above and was measured while building
+  the 0.5.0 sweep. A stereo-linked pair answers on the *partner* path
+  carrying the value written (`/output/3/volume` reports
+  `/output/4/volume`), and a register with no linked partner draws no
+  reply at all (`/input/1/gain`) even though a dump shows the value
+  landed. So a write is confirmed by re-reading a `/refresh` dump,
+  never by waiting on the path just written.
+- **Bursting writes loses them.** oscmix turns each into a MIDI SysEx
+  message, and that wire carries roughly a thousand registers a second
+  -- the measured rate of a refresh dump. 295 writes in a few
+  milliseconds lost 40 of them; the same registers take the value when
+  written one at a time. Bulk writes have to be paced
+  (`WRITE_PACE` in `scripts/sweep-writes.py`).
+- **An out-of-range write is refused, not clamped.** `/reverb/width =
+  1.02` on a 0..1 register leaves the value where it was and reports
+  nothing, so a config asking for it would be ignored in silence. This
+  is why the three registers upstream leaves unbounded were bracketed
+  against the hardware rather than left open.
 - **`unexpected enum value -1`** on every start (42 times in 24 h),
   from `/controlroom/mainout`: the device reports `-1`, which is outside
   the ten values `CTLROOM_MAINOUT` names, most likely meaning the
