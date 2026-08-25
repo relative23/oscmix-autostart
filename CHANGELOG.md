@@ -1,6 +1,96 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-08-25)
+
+### Added
+
+- **Every settable register is proven to accept a write.** 1224 of 1238
+  confirmed against the device, 14 skipped as dangerous, none ignored,
+  nothing left unrestored, in 101 seconds. `scripts/sweep-writes.py`
+  writes each register a different legal value from its own declared
+  domain and reads the result back; the per-register verdict is in
+  `docs/evidence/write-sweep-ucx2.json` with the device serial and the
+  oscmix pin, and two tests check that file against the model rather
+  than trusting it. A new settable register fails the suite until the
+  sweep has run again.
+
+  Until now the whole verification apparatus ran in the read direction.
+  `verifiable` is a promise that a write comes back, and nobody had
+  asked the device to keep it.
+
+  **The obvious design cannot work here**: waiting for an echo on the
+  path just written waits for the one message that never arrives. See
+  *Measured* below. The sweep reads back from a refresh dump instead,
+  in passes split by channel parity so a linked pair is never written
+  against itself, with the writes paced because a burst is dropped.
+
+### Fixed
+
+- **`--dump-config` silently omitted `/input/1/gain` and
+  `/input/2/gain`.** The dump built its worklist as a dict keyed by
+  option name, and a dict keeps one row per name. Once gain became
+  three rows the survivor was the instrument row, so the loop walked
+  only channels 3-4: 1198 channel settings where there should have been
+  1200. The device reported all four the whole time.
+
+  Found by running `--dump-config` against the desk while auditing for
+  the release, not by a test. There is a test now.
+
+- **Input gain is three registers, not one.** Upstream's channel table
+  gives `.gain={0, 750}` to the two mic preamps, `{0, 240}` to the two
+  instrument channels, and no range at all to Analog 5-8, which leaves
+  `setinputgain` clamping them to `{0, 0}` -- a control present in the
+  OSC tree that can never do anything. The model declared one row,
+  0..75 dB on channels 1-8, so a config could ask for 75 dB on a
+  channel that silently gives 24, or gain on four channels that have
+  none.
+
+  Now mic 0..75, instrument 0..24, and line readable with no value
+  domain, the same shape as `48v` and the output phase. `register_at`
+  and the config lookup resolve by channel; the first of those already
+  answered `/input/9/gain` with a register whose capability stops at 8.
+
+- **`/echo/width`, `/reverb/width` and `/reverb/smooth` had no bounds
+  while the device enforces some.** They are unbounded in upstream's
+  node table, and the standing rule is that an invented range would
+  reject values the device accepts. But this device *rejects* an
+  out-of-range write outright rather than clamping it -- no change, no
+  report -- so a config asking for `width = 1.02` would have been
+  ignored in silence.
+
+  Bracketed against the hardware: 0.0 and 1.0 accepted on both width
+  registers, -0.01 and 1.02 refused; 0 and 100 on smooth, -1 and 101
+  refused. Ten reverb numbers stay unbounded because nobody measured
+  them, and `/reverb/volume` still carries no ceiling copied from
+  `/echo/volume`.
+
+### Measured
+
+- **Three properties of the write path**, all found while building the
+  sweep and all now in the roadmap's standing constraints, because any
+  future design has to meet them.
+
+  **A write is never echoed on the path it was written to.** A linked
+  pair answers on the *partner* path carrying the value written
+  (`/output/3/volume` reports `/output/4/volume`), and a register with
+  no linked partner draws no reply at all (`/input/1/gain`) even though
+  a dump shows the value landed. So a write is confirmed by re-reading
+  a dump, never by waiting on the path just written. This is the same
+  behaviour the *Measured* note above describes from the other side,
+  and it supplies the rule that note was missing.
+
+  **Bursting writes loses them.** oscmix turns each into a MIDI SysEx
+  message and that wire carries roughly a thousand registers a second.
+  295 writes in a few milliseconds lost 40; the same registers take the
+  value when written one at a time.
+
+  **An out-of-range write is refused, not clamped.** The value stays
+  where it was and nothing is reported.
+
+  Each of the three first appeared as a false verdict -- the sweep
+  calling a healthy register deaf -- and each was caught by testing the
+  unbelievable result alone rather than reporting it. The first full
+  run would have filed 44 device defects that do not exist.
 
 ### Changed
 
@@ -80,10 +170,19 @@
   crossfeed, and every block of EQ, dynamics, low cut and auto level, on
   inputs as well as outputs.
 
-  Silent: `reflevel` on either side, `input/gain`, `input/phase`. No
-  rule tested explains which. "Front end versus DSP" was the obvious
-  guess and it is wrong, since `hi-z` is front end and pushes while
-  `phase` is DSP and does not.
+  Silent: `reflevel` on either side, `input/gain`, `input/phase`.
+  "Front end versus DSP" was the obvious guess and it is wrong, since
+  `hi-z` is front end and pushes while `phase` is DSP and does not.
+
+  **The rule turned up while building the 0.5.0 write sweep, and it is
+  not about the register at all: what gets reported is the *partner
+  channel*.** A register reports exactly when writing it also moves the
+  other half of a linked pair, because the device reports only on
+  change and the written channel is the one oscmix has already updated
+  in its own cache. Checked in both directions across four families:
+  `mute`, `volume`, `eq/band1gain` and `lowcut/freq` move the partner
+  and report; `phase` and `gain` leave the partner alone and stay
+  silent. That accounts for every entry in both lists above.
 
   So an event-driven drift signal for linked pairs needs no clock and no
   polling, which ADR 0013 ruled out for lack of one. But the registers

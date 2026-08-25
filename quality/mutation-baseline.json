@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-24",
+  "recorded": "2026-08-25",
   "note": [
     "A ratio, not a count. Absolute survivor counts rise with every",
     "line added -- new code means new mutants, so a healthy change",
@@ -94,25 +94,36 @@
     "moves the number is assertions rather than data."
   ],
   "measured": {
+    "total": 4996,
+    "killed": 3490,
+    "survived": 1424,
+    "not_covered": 82,
+    "score": 0.71,
+    "run_minutes": 79,
+    "cache": "cleared before the run, as CI does",
+    "scope": "register table exempt (ADR 0015)",
+    "note": [
+      "The 0.5.0 release measurement. 130 more mutants than 0.4.0, from",
+      "the write sweep and the channel-aware option lookups, and the",
+      "score carried them: 0.711 to 0.710.",
+      "",
+      "A first attempt read 0.543 with not_covered at 3246 instead of",
+      "82. That run was worthless and the cause was local: `make",
+      "coverage` was started alongside it, and its first step is",
+      "`coverage erase`. mutmut reads that file to decide which tests",
+      "cover which mutant, so two thirds of the mutants looked",
+      "uncovered. Never run the two concurrently."
+    ]
+  },
+  "previous": {
+    "recorded": "2026-08-24",
     "total": 4866,
     "killed": 3402,
     "survived": 1382,
     "not_covered": 82,
     "score": 0.711,
-    "run_minutes": 64,
-    "cache": "cleared before the run, as CI does",
-    "scope": "register table exempt (ADR 0015)",
-    "note": "the 0.4.0 release measurement"
-  },
-  "previous": {
-    "recorded": "2026-08-22",
-    "total": 4741,
-    "killed": 3319,
-    "survived": 1340,
-    "not_covered": 82,
-    "score": 0.712,
     "why_it_moved": [
-      "The run that ADR 0015's exemption was measured on."
+      "The 0.4.0 release measurement."
     ]
   },
   "confirmed_by_ci": {
