@@ -164,7 +164,8 @@ def _followed(written: object, reported: object, step: float) -> bool:
 
 
 def verdict(path: str, current: object,
-            attempts: Sequence[Tuple[object, float, object]]) -> Dict[str, object]:
+            attempts: Sequence[Tuple[object, float, object]],
+            bounded: bool = True) -> Dict[str, object]:
     """What a register's attempts mean.
 
     Four outcomes, and the two in the middle are why this is worth
@@ -193,6 +194,19 @@ def verdict(path: str, current: object,
         finding["step"] = index + 1
         finding["wrote"] = written
         finding["reported"] = reported
+        return finding
+    if not bounded:
+        # Nothing moved, and the probe values came from UNBOUNDED_STEPS
+        # rather than from a declared range -- so "deaf" and "every
+        # value I tried was out of range" are indistinguishable here.
+        # This is not hypothetical: /reverb/width sits at 0.6 on a 0..1
+        # scale, the absolute steps asked for 1.6, 10.6 and 50.6, and
+        # the device refused all three without a word. Calling that
+        # `ignored` reported a defect that did not exist.
+        finding["verdict"] = "undetermined"
+        finding["detail"] = ("no declared range; every probe value was "
+                             "refused, which may mean out of range")
+        finding["wrote"] = [a[0] for a in attempts]
         return finding
     finding["verdict"] = "ignored"
     finding["wrote"] = [a[0] for a in attempts]
@@ -362,9 +376,13 @@ def sweep(device, listener, targets: Sequence[Tuple[str, R.Register]],
                  % (step + 1, "odd" if odd else "even", len(group),
                     len(settled)))
             pending = [(p, r) for p, r in pending if p not in set(settled)]
+    known = dict(targets)
     for path in [p for p, _r in targets]:
         if path in attempts:
-            findings.append(verdict(path, state.get(path), attempts[path]))
+            register = known[path]
+            findings.append(verdict(
+                path, state.get(path), attempts[path],
+                bounded=register.domain != R.NUMBER or register.lo is not None))
     return findings
 
 

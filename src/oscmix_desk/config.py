@@ -628,9 +628,10 @@ def _parse_channel_section(parser: "configparser.ConfigParser", section: str,
         # By channel, not by name: an option can have several rows when
         # the device's limits differ per channel, and the wrong row
         # validates against the wrong ceiling. See `option_register`.
-        register = option_register(device, family, option, channel)
+        register = option_register(device, family, option,  # type: ignore[arg-type]
+                                   channel)
         if register is None:
-            valid = option_channels(device, family, option)
+            valid = option_channels(device, family, option)  # type: ignore[arg-type]
             raise ConfigError(
                 "[%s] %s: channel %d does not have it on a %s (it has %s "
                 "on %d..%d)"

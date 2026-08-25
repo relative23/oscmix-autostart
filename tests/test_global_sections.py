@@ -206,17 +206,24 @@ def test_reverb_declares_no_bounds_because_upstream_declares_none():
     control and are not, and copying the echo's -65..+6 onto the reverb
     would have looked consistent while rejecting values the device takes.
 
-    Every reverb number is unbounded upstream, so every one is unbounded
-    here.
+    Every reverb number is unbounded upstream. Ten of the twelve are
+    unbounded here too, and the two exceptions were not reasoned into
+    existence -- `width` and `smooth` were bracketed against the device
+    after the write sweep found them silently refusing out-of-range
+    values. The rule stands for everything nobody measured.
     """
     from oscmix_desk.registers import ENUM, NUMBER
 
     numbers = [r for r in UCX2.registers
                if r.template.startswith("/reverb/") and r.domain == NUMBER]
     assert len(numbers) == 12
+    measured = {"/reverb/width", "/reverb/smooth"}
     for register in numbers:
+        if register.template in measured:
+            continue
         assert register.lo is None, register.template
         assert register.hi is None, register.template
+    assert {r.template for r in numbers} >= measured
     kind, = [r for r in UCX2.registers if r.template == "/reverb/type"]
     assert kind.domain == ENUM
     assert len(kind.choices) == 15
@@ -399,3 +406,40 @@ def test_the_box_and_the_clock_are_pinned():
         if register.template.startswith(("/clock/", "/hardware/")):
             assert register_policy(UCX2, register.template) == PIN, \
                 register.template
+
+
+def test_the_three_registers_whose_bounds_had_to_be_measured():
+    """Upstream declares no range for these; the device enforces one.
+
+    The standing rule is that a range invented here would reject values
+    the device accepts, so an unbounded register in upstream's node
+    table stays unbounded in the model. These three are the measured
+    exception, and the reason is the direction of the failure: the
+    device *rejects* an out-of-range write outright rather than clamping
+    it. `/reverb/width = 1.02` leaves the register at its old value and
+    reports nothing at all, so a config asking for it would be silently
+    ignored -- which is the failure mode this project exists to prevent.
+
+    Bracketed on a UCX II, 2026-08-25: 0.0 and 1.0 accepted on both
+    width registers, -0.01 and 1.02 refused; 0 and 100 accepted on
+    smooth, -1 and 101 refused.
+    """
+    from oscmix_desk.registers import UCX2, register_at
+
+    for path in ("/echo/width", "/reverb/width"):
+        register = register_at(UCX2, path)
+        assert (register.lo, register.hi) == (0.0, 1.0), path
+    smooth = register_at(UCX2, "/reverb/smooth")
+    assert (smooth.lo, smooth.hi) == (0.0, 100.0)
+
+
+def test_reverb_volume_stays_unbounded():
+    """The rule the three exceptions above did not repeal.
+
+    `/reverb/volume` has no bound upstream and none was measured, so it
+    keeps none. An `hi` copied from `/echo/volume` because the two look
+    alike would reject values this device takes.
+    """
+    from oscmix_desk.registers import UCX2, register_at
+
+    assert register_at(UCX2, "/reverb/volume").hi is None

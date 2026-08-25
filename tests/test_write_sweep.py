@@ -165,3 +165,61 @@ def test_reflevel_is_refused_and_48v_is_out_of_reach(sweep):
     assert not sweep.is_dangerous("/output/1/volume")
     reachable = [p for p, _r in sweep.settable() if "48v" in p]
     assert reachable == [], "48v must have no value domain"
+
+
+def test_silence_on_an_unbounded_register_is_not_a_defect(sweep):
+    """The false `ignored` the full sweep produced, as a case.
+
+    `/reverb/width` sits at 0.6 on a scale that stops at 1.0, but the
+    model had no bounds for it, so the probe fell back to absolute steps
+    and asked for 1.6, 10.6 and 50.6. The device refused all three
+    without a word -- it rejects rather than clamps -- and three
+    perfectly healthy registers were reported as deaf.
+
+    Where no range is declared, "nothing moved" cannot tell a deaf
+    register from a probe that never landed inside one.
+    """
+    attempts = [(1.6, 1.0, None), (10.6, 10.0, None), (50.6, 50.0, None)]
+    assert sweep.verdict("/reverb/width", 0.6, attempts,
+                         bounded=False)["verdict"] == "undetermined"
+    assert sweep.verdict("/reverb/width", 0.6, attempts,
+                         bounded=True)["verdict"] == "ignored"
+
+
+def test_the_artifact_covers_every_settable_register(sweep):
+    """The evidence file in this repository, checked against the model.
+
+    An artifact that silently stopped short would still look like a
+    clean result. Every settable register has to appear, and the only
+    verdicts allowed are the ones the sweep can actually reach.
+    """
+    import json
+
+    from conftest import repo_file
+
+    artifact = json.loads(
+        repo_file("docs", "evidence", "write-sweep-ucx2.json").read_text())
+    covered = {f["path"] for f in artifact["findings"]}
+    declared = {path for path, _r in sweep.settable()}
+    assert covered == declared
+    assert artifact["not_restored"] == []
+    assert set(artifact["summary"]) <= {
+        "confirmed", "clamped", "ignored", "skipped", "undetermined"}
+
+
+def test_the_artifact_names_the_device_and_the_pin(sweep):
+    """A measurement without its device and revision is an anecdote.
+
+    The register offsets file learned this first: provenance is what
+    makes a recorded number checkable later, and the pin is what says
+    *which* oscmix produced it.
+    """
+    import json
+
+    from conftest import repo_file
+
+    artifact = json.loads(
+        repo_file("docs", "evidence", "write-sweep-ucx2.json").read_text())
+    assert "24216011" in artifact["device"]
+    assert len(artifact["oscmix_revision"]) == 40
+    assert artifact["taken"].startswith("20")

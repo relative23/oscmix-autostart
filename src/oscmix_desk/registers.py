@@ -29,7 +29,7 @@ questions.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Dict, Mapping, Optional, Sequence, Tuple
+from typing import Dict, Mapping, Optional, Sequence, Set, Tuple
 
 from .constants import LEVEL_MAX, LEVEL_MIN
 
@@ -554,7 +554,16 @@ UCX2 = Device(
                  ("Off", "16kHz", "12kHz", "8kHz", "4kHz", "2kHz")),
         Register("/echo/volume", "f", VERIFIABLE, GLOBAL, NUMBER,
                  lo=LEVEL_MIN, hi=LEVEL_MAX, unit="dB"),
-        Register("/echo/width", "f", VERIFIABLE, GLOBAL, NUMBER),
+        # Bounds upstream does not declare, measured here because the
+        # device *rejects* rather than clamps: 1.02 leaves the register
+        # where it was and reports nothing, so a config that asked for
+        # it would be silently ignored. That is the failure this project
+        # exists to prevent, and it outweighs the standing rule against
+        # inventing a range -- these are not invented. Measured
+        # 2026-08-25 by the write sweep and then bracketed: 1.0 and 0.0
+        # accepted, 1.02 and -0.01 refused, on both width registers.
+        Register("/echo/width", "f", VERIFIABLE, GLOBAL, NUMBER,
+                 lo=0.0, hi=1.0),
 
         # The control room section. `dimreduction` and `recallvolume` are
         # `.scale=0.1, .min=-650, .max=0` -- dB down to the same floor a
@@ -603,11 +612,14 @@ UCX2 = Device(
         Register("/reverb/attack", "i", VERIFIABLE, GLOBAL, NUMBER),
         Register("/reverb/hold", "i", VERIFIABLE, GLOBAL, NUMBER),
         Register("/reverb/release", "i", VERIFIABLE, GLOBAL, NUMBER),
-        Register("/reverb/smooth", "i", VERIFIABLE, GLOBAL, NUMBER),
+        # 0 and 100 accepted, -1 and 101 refused. Same measurement.
+        Register("/reverb/smooth", "i", VERIFIABLE, GLOBAL, NUMBER,
+                 lo=0.0, hi=100.0),
         Register("/reverb/roomscale", "f", VERIFIABLE, GLOBAL, NUMBER),
         Register("/reverb/time", "f", VERIFIABLE, GLOBAL, NUMBER),
         Register("/reverb/volume", "f", VERIFIABLE, GLOBAL, NUMBER),
-        Register("/reverb/width", "f", VERIFIABLE, GLOBAL, NUMBER),
+        Register("/reverb/width", "f", VERIFIABLE, GLOBAL, NUMBER,
+                 lo=0.0, hi=1.0),
 
         # The clock. All PIN: which clock a room runs on, and whether the
         # word clock output is terminated, describe the installation.
@@ -1010,7 +1022,7 @@ def option_channels(device: Optional[Device], family: str,
     if device is None:
         return ()
     template = "/%s/{ch}/%s" % (family, option)
-    found: set = set()
+    found: Set[int] = set()
     for register in device.registers:
         if register.template == template and register.domain is not None:
             found.update(device.channels_for(register.channels))

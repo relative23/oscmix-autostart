@@ -358,9 +358,15 @@ def test_the_echo_bounds_are_upstreams_and_not_invented():
     `volume` is `.scale=0.1, .min=-650, .max=60`, which is exactly
     LEVEL_MIN..LEVEL_MAX, the range a fader already has.
 
-    `feedback` and `width` declare no bounds upstream, so they declare
-    none here. Asserting that is the point: a range invented to look
-    tidy would reject values the device accepts.
+    `feedback` declares no bounds upstream and declares none here.
+    Asserting that is the point: a range invented to look tidy would
+    reject values the device accepts.
+
+    `width` used to sit beside it and no longer does. Not because a
+    tidier range won the argument, but because the write sweep found the
+    device refusing 1.02 outright -- no clamp, no report, a config
+    silently ignored -- and the bound was then bracketed at 0.0..1.0
+    against the hardware. Measured beats both invented and absent.
     """
     from oscmix_desk.constants import LEVEL_MAX, LEVEL_MIN
     from oscmix_desk.registers import device_for_name
@@ -370,6 +376,6 @@ def test_the_echo_bounds_are_upstreams_and_not_invented():
     assert by_path["/echo/delay"].unit == "s"
     assert (by_path["/echo/volume"].lo, by_path["/echo/volume"].hi) == (
         LEVEL_MIN, LEVEL_MAX)
-    for open_ended in ("/echo/feedback", "/echo/width"):
-        assert by_path[open_ended].lo is None, open_ended
-        assert by_path[open_ended].hi is None, open_ended
+    assert by_path["/echo/feedback"].lo is None
+    assert by_path["/echo/feedback"].hi is None
+    assert (by_path["/echo/width"].lo, by_path["/echo/width"].hi) == (0.0, 1.0)
