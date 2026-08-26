@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The nested-options fallback in `reconcile` is gone.** `_register_for`
+  carried a second lookup for `eq/band1freq`-style options behind
+  `option_register`. Reading the mutation survivors in the code added
+  since 0.4.0 put all 17 of that function's mutants in the fallback
+  branch, and they were not test gaps: the branch was unreachable.
+  `option_register` assembles a nested option's template from its name,
+  and the parser refuses an invalid channel before reconcile sees it.
+  Verified at the device (`[eq:input:25]` refused at load,
+  `[eq:input:3]` resolved and on the wire). `channel_entries` now calls
+  `option_register` directly; nothing that reaches the wire changed.
+
+- **Two behaviours of `built_backend_revision` are asserted that nothing
+  tested.** The revision is a `str`, not bytes: without `text=True` the
+  length check still passes on `b"..."` and `json.dumps` of the sweep
+  artifact crashes. And a broken `build/oscmix/.git` answers `None`
+  instead of raising, so evidence collection degrades to "revision
+  unknown" rather than aborting the measurement. Both assertions were
+  checked to kill their mutants; `registers._channel_in` keeps its one
+  survivor, equivalent over every real template.
+
+- **Docs.** `docs/upstream-issues.md` records #35 as filed, the 802
+  rework in huddx01's fork, and the rewrite of #29 and PR #31 after
+  reading them as the maintainer would. The release checklist gained
+  the write-sweep item it predated, TROUBLESHOOTING gained `--diff` and
+  `--snapshot`, and the scratch-home install/uninstall cycle
+  (checklist section 5) ran clean from the renamed directory.
+
 ## 0.5.1 (2026-08-26)
 
 A cleanup release: everything the 0.5.0 audit left behind, found by
