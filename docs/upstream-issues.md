@@ -251,15 +251,26 @@ until it moves.
 
 ## 4. Filed: `/output/N/phase` writes never leave oscmix
 
-**Status:** filed as [michaelforney/oscmix#34][34] on 2026-08-24.
+**Status:** filed as [michaelforney/oscmix#34][34] on 2026-08-24; a fix
+is proposed as [oscmix#36][36pr] on 2026-08-27 (entry 8).
 
-The output tree's `phase` node has `.new` but no `.set`, so an OSC
-write is parsed and dropped without reaching the device. The input
-phase works. Found by reading the node table while declaring the
-register model; confirmed on the device. Declared **reported and not
-settable** here, same as Room EQ.
+`ctltoreg` gates `OUTPUT_PHASE` on `INPUT_HAS_REFLEVEL` (bit 2 of the
+input flags), but an output only ever carries `OUTPUT_HAS_REFLEVEL`
+(bit 0), so the guard always breaks, `ctltoreg` returns -1, and the
+write is dropped on every output. Input phase, which is ungated, works.
+Found by reading the node table while declaring the register model;
+confirmed on the device by tracing that nothing reached the MIDI pipe.
+
+(An earlier draft of this entry blamed a missing `.set` on the output
+`phase` node. That was wrong -- the node has `.set=setbool` and has
+since early 2025; the filed issue named the `ctltoreg` gate, which is
+the real cause, and this entry now matches it.)
+
+Declared **reported and not settable** here, same as Room EQ, until the
+fix lands upstream and the pin moves to carry it (ADR 0008).
 
 [34]: https://github.com/michaelforney/oscmix/issues/34
+[36pr]: https://github.com/michaelforney/oscmix/pull/36
 
 ## 5. Filed: `/input/5..8/gain` accepts writes but can never change
 
@@ -416,3 +427,32 @@ no fake typos as a disguise; that is a watermark too.
 [31]: https://github.com/michaelforney/oscmix/pull/31
 [wp-signs]: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
 [tropes]: https://gist.github.com/ossa-ma/f3baa9d25154c33095e22272c631f5a1
+
+
+## 8. Fix proposed: output phase, measured on every output
+
+**Status:** [oscmix#36][36pr] opened 2026-08-27 -- one line in
+`device_ffucxii.c`, against `55802a6`. Fixes the defect in entry 4.
+
+The gate on `OUTPUT_PHASE` is **removed**, not corrected to
+`OUTPUT_HAS_REFLEVEL`, and the reason is measured rather than assumed:
+on a UCX II every one of the 20 outputs accepts phase and reports it
+back -- the 12 digital ones (ADAT/SPDIF, outputs 9-20) included, and
+those carry no reflevel flag, so gating on `OUTPUT_HAS_REFLEVEL` would
+leave them broken. Removing it also makes phase consistent with every
+other output control, none of which is gated; `OUTPUT_REFLEVEL` itself
+is not.
+
+Verified before and after the patch, both directions, on the device:
+
+- stock oscmix: writing `/output/1/phase` produces no MIDI write at all.
+- patched: `setreg 0508 0001` on the wire, and the device reports
+  `/output/1/phase = 1`; a write of `0` sends `setreg 0508 0000` and
+  reads back `0`.
+- swept across all 20 outputs: 20/20 read back `1` after a write of `1`,
+  20/20 read back `0` after a write of `0`, the device left clean.
+
+Register `0x0508` is what `regtoctl` already decodes as `OUTPUT_PHASE`,
+so the write direction now meets the read direction the device was
+already sending. The change is confined to `device_ffucxii.c`; other
+devices have their own `ctltoreg` and are untouched.

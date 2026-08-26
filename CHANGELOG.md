@@ -25,8 +25,11 @@
   survivor, equivalent over every real template.
 
 - **Docs.** `docs/upstream-issues.md` records #35 as filed, the 802
-  rework in huddx01's fork, and the rewrite of #29 and PR #31 after
-  reading them as the maintainer would. The release checklist gained
+  rework in huddx01's fork, the rewrite of #29 and PR #31 after
+  reading them as the maintainer would, and the output-phase fix
+  proposed upstream as PR #36 (the write gate on `OUTPUT_PHASE`,
+  measured wrong on all 20 outputs and removed), with entry 4's cause
+  corrected to match what was actually filed. The release checklist gained
   the write-sweep item it predated, TROUBLESHOOTING gained `--diff` and
   `--snapshot`, and the scratch-home install/uninstall cycle
   (checklist section 5) ran clean from the renamed directory.
