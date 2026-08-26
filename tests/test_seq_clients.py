@@ -100,3 +100,20 @@ def test_built_backend_revision_reads_the_checkout(tmp_path):
     revision = built_backend_revision(tmp_path)
     assert revision is not None
     assert len(revision) == 40
+    # str, not bytes: read from survivors -- without text=True the
+    # length check still passes on b"..." and json.dumps of the sweep
+    # artifact crashes instead.
+    assert isinstance(revision, str)
+
+
+def test_a_broken_checkout_answers_none_not_an_exception(tmp_path):
+    """A .git that is not a repository must not raise.
+
+    check=False is deliberate: this runs inside evidence collection, and
+    a half-cloned or corrupted build directory should degrade to
+    "revision unknown" in the artifact, not abort the measurement.
+    """
+    from oscmix_desk.discovery import built_backend_revision
+
+    (tmp_path / "build" / "oscmix" / ".git").mkdir(parents=True)
+    assert built_backend_revision(tmp_path) is None

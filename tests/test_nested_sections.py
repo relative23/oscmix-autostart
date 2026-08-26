@@ -211,7 +211,8 @@ def test_the_declared_eq_registers_are_all_in_the_recording():
 def test_a_childless_option_is_not_a_sub_family():
     """Found by reading a mutation survivor that was right to survive.
 
-    Dropping the flat lookup in `_register_for` changed nothing, because
+    Dropping the flat lookup in `_register_for` (since removed as
+    dead code) changed nothing, because
     the nested fallback answered instead: `settable_nested(device,
     "gain", "input")` returned the *gain* register under
     `ENABLE_OPTION`, its template matching the prefix exactly. The

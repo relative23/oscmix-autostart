@@ -121,6 +121,17 @@ then `systemctl --user restart oscmix.service`. The routing happens in the
 device's hardware mixer, so it works the same under PipeWire, PulseAudio
 and JACK.
 
+**Before guessing, ask the device.** `oscmix-session --diff` compares
+every register the device reports against your config and prints exactly
+what differs -- exit 0 means the desk matches, exit 3 names each
+mismatched register with both values. If something changed a fader or a
+link behind your back (a mixer GUI, another client), this is the
+fastest way to see it, and `systemctl --user reload oscmix.service`
+re-applies the config without a restart. `oscmix-session --snapshot`
+prints the complete register state -- all of it, including what a
+config cannot express -- which is what to save before and after an
+experiment. Both need the mixer GUI closed; they share its port.
+
 ## 6. Service does not start on hotplug
 
 ```sh

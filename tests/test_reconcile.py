@@ -267,10 +267,14 @@ def test_a_channel_setting_resolves_to_its_own_channels_register():
     broken. This test exists for the day they do not agree: two rows
     differing in `choices` would write the wrong enum value, and a write
     draws no reply to notice it by.
-    """
-    from oscmix_desk.reconcile import _register_for
-    from oscmix_desk.registers import UCX2
 
-    assert _register_for(UCX2, "input", "gain", 1).hi == 75.0
-    assert _register_for(UCX2, "input", "gain", 3).hi == 24.0
-    assert _register_for(UCX2, "input", "gain", 5) is None
+    `channel_entries` resolves through `option_register` directly; the
+    `_register_for` wrapper it went through was removed when its nested
+    fallback turned out to be dead code (17 surviving mutants, all in a
+    branch no loadable config can reach).
+    """
+    from oscmix_desk.registers import UCX2, option_register
+
+    assert option_register(UCX2, "input", "gain", 1).hi == 75.0
+    assert option_register(UCX2, "input", "gain", 3).hi == 24.0
+    assert option_register(UCX2, "input", "gain", 5) is None

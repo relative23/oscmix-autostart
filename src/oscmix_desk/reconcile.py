@@ -258,42 +258,23 @@ def channel_entries(config: Config) -> Tuple[Entry, ...]:
         return ()
     out = []
     for setting in config.channels:
-        register = _register_for(device, setting.family, setting.option,
-                                 setting.channel)
+        # `option_register` resolves flat and nested options alike: a
+        # nested option's name is the tail of its template, so
+        # "eq/band1freq" assembles to "/input/{ch}/eq/band1freq" and the
+        # sub-family switch "eq" to the switch register. A separate
+        # nested lookup lived here until the write sweep's survivors
+        # showed it had become unreachable -- the parser refuses invalid
+        # channels and this finds every valid option, so its 17
+        # surviving mutants were dead code, not missing tests. Its
+        # history matters though: resolving only in `settable_options`
+        # once dropped every EQ setting between the config and the wire.
+        register = option_register(device, setting.family, setting.option,
+                                   setting.channel)
         if register is None:
             continue
         path = "/%s/%d/%s" % (setting.family, setting.channel, setting.option)
         out.append(_encode(path, register, setting.value))
     return tuple(out)
-
-
-def _register_for(device: Device, family: str, option: str,
-                  channel: int) -> Optional["Register"]:
-    """The register a channel setting names, flat or nested.
-
-    A nested option carries the rest of the path -- `eq/band1freq`, or
-    `eq` for the sub-family switch -- and those are deliberately absent
-    from `settable_options`, which only lists what a `[input:N]` section
-    may say (ADR 0014).
-
-    Looking only there is how this went wrong: `[eq:input:3]` parsed,
-    validated, and produced no entry at all, so every EQ setting was
-    silently dropped between the config and the wire. That is the fourth
-    instance of that shape in this release, and the first one caught by
-    looking rather than by a failing gate.
-    """
-    # By channel, because one option name can have several rows when the
-    # device's limits differ per channel -- `/input/{ch}/gain` is three.
-    # They agree on domain and tag today, so `_encode` would produce the
-    # same entry either way; the day two rows disagree on `choices` this
-    # would write the wrong enum value and draw no reply to notice it
-    # by. Resolving properly now costs one argument.
-    flat = option_register(device, family, option, channel)
-    if flat is not None:
-        return flat
-    sub = option.split("/", 1)[0]
-    return settable_nested(device, sub, family).get(
-        ENABLE_OPTION if option == sub else option.split("/", 1)[1])
 
 
 def global_entries(config: Config) -> Tuple[Entry, ...]:

@@ -85,6 +85,17 @@ one that found all three defects in 0.1.3.
 - [ ] **If any routing behaviour changed in this release**, the
       measurement is from *after* that change. A routing change is not
       done until its measurement is in the release (roadmap item 4).
+- [ ] **If the register model changed** -- a row added, a domain or
+      bound changed, a capability split -- the write sweep has run
+      against the change: `python3 scripts/sweep-writes.py --out
+      docs/evidence/write-sweep-ucx2.json`, exit 0, and the committed
+      artifact is from that run. The sweep is what proved `verifiable`
+      means what it says (0.5.0), and an artifact older than the model
+      it vouches for is not evidence.
+      `test_the_artifact_covers_every_settable_register` catches a
+      register *added* without a fresh run; a changed bound or domain it
+      cannot see, which is why this is a checklist item and not only a
+      test.
 
 ## 5. Install, from nothing
 
