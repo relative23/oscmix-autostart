@@ -223,3 +223,52 @@ def test_the_artifact_names_the_device_and_the_pin(sweep):
     assert "24216011" in artifact["device"]
     assert len(artifact["oscmix_revision"]) == 40
     assert artifact["taken"].startswith("20")
+    # The artifact states its own method and pacing. It used to carry an
+    # `echo_timeout` the sweep no longer had, left over from the echo
+    # design that could not work -- a false statement in an evidence
+    # file. And provenance used to be patched in by hand after the run,
+    # so the tool could not produce its own format; now it can, and this
+    # asserts it did.
+    assert "refresh dump" in artifact["method"]
+    assert artifact["write_pace"] == sweep.WRITE_PACE
+    assert "echo_timeout" not in artifact
+
+
+def test_restoration_retries_until_the_device_matches(sweep):
+    """A dropped restore write is retried, not reported as damage.
+
+    One run left `/output/7/eq/band2q` and its partner holding a probe
+    value: the per-pass restore was a single write, and this repository
+    has measured that single writes can be dropped. The repair loop
+    escalates the same way the probes do, and only what still differs
+    after three rounds is reported as `not_restored`.
+    """
+
+    class Device:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, messages):
+            self.sent.extend(messages)
+
+    reference = {"/output/7/eq/band2q": 1.0, "/output/8/eq/band2q": 1.0}
+    drifted_state = {"/output/7/eq/band2q": 4.4, "/output/8/eq/band2q": 4.4}
+
+    # First readback still shows the drift (write dropped again), the
+    # second shows it landed. The loop must survive the first.
+    states = iter([dict(drifted_state), dict(reference)])
+    device = Device()
+    final, unrestored = sweep.repair(
+        device, None, reference, dict(drifted_state),
+        readback=lambda _d, _l: next(states))
+    assert unrestored == []
+    assert final == reference
+    paths = [m[0] for m in device.sent]
+    assert paths.count("/output/7/eq/band2q") == 2
+
+    # A register that never comes back is named, not swallowed.
+    stuck = iter([dict(drifted_state)] * 3)
+    _final, unrestored = sweep.repair(
+        Device(), None, reference, dict(drifted_state),
+        readback=lambda _d, _l: next(stuck))
+    assert unrestored == sorted(reference)

@@ -374,4 +374,11 @@ def test_the_evidence_names_the_particular_device():
     """
     source = repo_file("scripts", "verify-hardware.py").read_text()
     assert '"serial"' in source
-    assert "/proc/asound/cards" in source
+    # The reading rule moved into the library when the write sweep needed
+    # the same answer; the script delegates, and the behaviour is tested
+    # against a fake cards file in test_seq_clients.py.
+    assert "discovery_device_serial" in source
+    import inspect
+
+    from oscmix_desk import discovery
+    assert "/proc/asound/cards" in inspect.getsource(discovery)

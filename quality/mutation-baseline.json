@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-25",
+  "recorded": "2026-08-26",
   "note": [
     "A ratio, not a count. Absolute survivor counts rise with every",
     "line added -- new code means new mutants, so a healthy change",
@@ -94,36 +94,30 @@
     "moves the number is assertions rather than data."
   ],
   "measured": {
+    "total": 5044,
+    "killed": 3534,
+    "survived": 1428,
+    "not_covered": 82,
+    "score": 0.712,
+    "run_minutes": 81,
+    "cache": "cleared before the run, as CI does",
+    "scope": "register table exempt (ADR 0015)",
+    "note": [
+      "The 0.5.1 release measurement. 48 more mutants than 0.5.0, from",
+      "device_serial and built_backend_revision moving into discovery",
+      "and the channel-aware lookups gaining tests; the score rose",
+      "0.710 to 0.712."
+    ]
+  },
+  "previous": {
+    "recorded": "2026-08-25",
     "total": 4996,
     "killed": 3490,
     "survived": 1424,
     "not_covered": 82,
     "score": 0.71,
-    "run_minutes": 79,
-    "cache": "cleared before the run, as CI does",
-    "scope": "register table exempt (ADR 0015)",
-    "note": [
-      "The 0.5.0 release measurement. 130 more mutants than 0.4.0, from",
-      "the write sweep and the channel-aware option lookups, and the",
-      "score carried them: 0.711 to 0.710.",
-      "",
-      "A first attempt read 0.543 with not_covered at 3246 instead of",
-      "82. That run was worthless and the cause was local: `make",
-      "coverage` was started alongside it, and its first step is",
-      "`coverage erase`. mutmut reads that file to decide which tests",
-      "cover which mutant, so two thirds of the mutants looked",
-      "uncovered. Never run the two concurrently."
-    ]
-  },
-  "previous": {
-    "recorded": "2026-08-24",
-    "total": 4866,
-    "killed": 3402,
-    "survived": 1382,
-    "not_covered": 82,
-    "score": 0.711,
     "why_it_moved": [
-      "The 0.4.0 release measurement."
+      "The 0.5.0 release measurement."
     ]
   },
   "confirmed_by_ci": {

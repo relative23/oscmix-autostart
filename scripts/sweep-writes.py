@@ -45,6 +45,7 @@ from oscmix_desk.constants import (
     DEFAULT_OSC_RECV_PORT,
     DUMP_LISTEN_SETTLE,
 )
+from oscmix_desk.discovery import built_backend_revision, device_serial
 
 #: Steps as a fraction of the declared range, smallest first. One percent
 #: is below the quantisation of several families, which is the point: it
@@ -56,12 +57,6 @@ STEPS = (0.01, 0.10, 0.50)
 #: register's own unit. A guessed range would be worse than none: it
 #: would reject values the device accepts.
 UNBOUNDED_STEPS = (1.0, 10.0, 50.0)
-
-#: How long to wait for the device's report after a write. The device
-#: answers a genuine change in well under this; the wait is what a deaf
-#: register costs, and it is what makes the sweep's runtime a
-#: measurement rather than an estimate.
-ECHO_TIMEOUT = 0.25
 
 #: Seconds between writes inside a pass. A burst is dropped: oscmix
 #: turns each write into a MIDI SysEx message, and that wire carries
@@ -76,6 +71,18 @@ WRITE_PACE = 0.010
 #: Registers this tool refuses to touch, matched on the last path
 #: segment. See ADR 0016.
 DANGEROUS = ("reflevel",)
+
+#: What the artifact records about how the numbers were taken. In the
+#: artifact itself rather than only in the docs, because the file
+#: outlives the session that produced it.
+METHOD = ("Each register is written a different legal value from its own "
+          "declared domain and the result read back from a refresh dump. "
+          "An echo on the written path is never waited for: the device "
+          "answers a linked pair on the partner path and is silent on the "
+          "one addressed. Passes are split by channel parity so a linked "
+          "pair is never written against itself, writes are paced because "
+          "a burst is dropped, and every register gets three attempts. "
+          "Each pass restores what it wrote before the next begins.")
 
 
 def is_dangerous(path: str) -> bool:
@@ -408,6 +415,32 @@ def drifted(before: Dict[str, object],
                   and not path.endswith(STREAMING))
 
 
+def repair(device, listener, reference: Dict[str, object],
+           current: Dict[str, object], rounds: int = 3,
+           readback=None) -> Tuple[Dict[str, object], List[str]]:
+    """Re-write what drifted until it matches, or say what would not.
+
+    The per-pass restoration is a single write, and this repository has
+    measured that a single write can be dropped on the wire. One run
+    left `/output/7/eq/band2q` and its partner off by a probe value for
+    exactly that reason, with the desk otherwise clean. Restoration is a
+    promise the artifact makes (`not_restored`), so it gets the same
+    treatment as the probes themselves: escalate before concluding.
+    """
+    for _round in range(rounds):
+        wrong = drifted(reference, current)
+        if not wrong:
+            return current, []
+        writes = []
+        for path in wrong:
+            register = R.register_at(R.UCX2, path)
+            if register is not None and path in reference:
+                writes.append((path, register, reference[path]))
+        write_batch(device, writes)
+        current = (readback or read_all)(device, listener)
+    return current, drifted(reference, current)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--limit", type=int, default=None,
@@ -440,17 +473,24 @@ def main() -> int:
         findings = sweep(device, listener, targets, before,
                          lambda text: sys.stderr.write(text + "\n"))
         elapsed = time.monotonic() - started
-        after = read_all(device, listener)
+        _after, unrestored = repair(device, listener, before,
+                                    read_all(device, listener))
     finally:
         listener.close()
 
+    serial = device_serial()
     artifact = {
         "taken": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "device": ("Fireface UCX II, serial %s" % serial if serial
+                   else "serial unknown"),
+        "oscmix_revision": built_backend_revision(
+            Path(__file__).resolve().parent.parent) or "unknown",
         "probed": len(targets),
         "seconds": round(elapsed, 2),
-        "echo_timeout": ECHO_TIMEOUT,
+        "write_pace": WRITE_PACE,
+        "method": METHOD,
         "summary": summarise(findings),
-        "not_restored": drifted(before, after),
+        "not_restored": unrestored,
         "findings": findings,
     }
     text = json.dumps(artifact, indent=2, sort_keys=False)

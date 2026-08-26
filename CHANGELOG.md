@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.5.1 (2026-08-26)
+
+A cleanup release: everything the 0.5.0 audit left behind, found by
+asking what in the repository is stale, wrong, or hand-made.
+
+### Fixed
+
+- **The sweep's evidence artifact carried a false statement and could
+  not be reproduced by the tool.** It recorded an `echo_timeout` the
+  sweep no longer had -- a leftover of the echo design that could not
+  work -- and its provenance (`device`, `oscmix_revision`, `method`)
+  had been patched in by hand after the run, so a fresh `--out` run
+  produced an artifact that failed the repository's own tests. The tool
+  now records its real pacing, its method, the device serial and the
+  built backend revision itself, and the artifact test asserts it did.
+
+- **Restoration is verified and retried, not assumed.** The per-pass
+  restore was a single write, and this repository has measured that a
+  single write can be dropped: one run left `/output/7/eq/band2q` and
+  its partner holding a probe value while reporting the desk clean of
+  everything else. The repair loop now re-writes what still differs and
+  reads back, up to three rounds; only what survives that is reported
+  as `not_restored`. The committed artifact is from a fresh run of the
+  fixed tool: 1224 of 1238 confirmed, nothing left unrestored.
+
+### Changed
+
+- **`device_serial()` and the built-backend-revision lookup moved into
+  the library** (`discovery`), because the write sweep needed the same
+  answers as `verify-hardware.py` and two copies would be two places
+  for the rule to disagree. Both scripts now delegate.
+
+- **The docs caught up with 0.5.0.** The roadmap's status section said
+  0.4.0 was the released state; the README's evidence section did not
+  mention the write sweep and undercounted the decision records;
+  `docs/upstream-issues.md` was missing entries for the two issues
+  filed in 0.4.0 (#33, #34) and now carries the drafted report on
+  `/input/5..8/gain`, whose writes are clamped to zero by a gain flag
+  with no range in upstream's channel table.
+
 ## 0.5.0 (2026-08-25)
 
 ### Added

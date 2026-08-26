@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -107,3 +108,52 @@ def resolve_binary(name: str, env_var: str) -> Optional[str]:
         if os.access(candidate, os.X_OK):
             return candidate
     return None
+
+
+def device_serial(cards: Path = Path("/proc/asound/cards")) -> Optional[str]:
+    """The interface's serial, as RME prints it on the box.
+
+    Read from ``/proc/asound/cards``, where the USB-Audio driver puts
+    the device's own product string::
+
+        2 [II24216011  ]: USB-Audio - Fireface UCX II (24216011)
+
+    Not the USB ``iSerial`` (``3A179EA663AB340`` here), which is a
+    different number and not the one anybody can check against the
+    hardware -- and not the one this repository's recorded dumps carry.
+
+    Evidence names a *particular* box. Two Fireface units on one desk is
+    a configuration the roadmap intends to support, and an artifact that
+    does not say which one it measured stops being evidence the moment
+    there is a second. Lived in ``verify-hardware.py`` until the write
+    sweep needed the same answer; two copies would be two places for the
+    rule to disagree.
+    """
+    try:
+        text = cards.read_text()
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if "Fireface" not in line:
+            continue
+        found = re.search(r"\((\d{4,})\)", line)
+        if found:
+            return found.group(1)
+    return None
+
+
+def built_backend_revision(repo_root: Path) -> Optional[str]:
+    """The upstream oscmix commit built under ``repo_root``, or None.
+
+    A measurement that does not say which backend produced it cannot be
+    compared against the next one. ``install.sh`` pins the revision;
+    recording what is actually checked out in ``build/oscmix`` is what
+    makes an evidence artifact mean something, and reading the checkout
+    rather than the pin keeps the two honest against each other.
+    """
+    build = repo_root / "build" / "oscmix"
+    if not (build / ".git").exists():
+        return None
+    result = subprocess.run(["git", "-C", str(build), "rev-parse", "HEAD"],
+                            capture_output=True, text=True, check=False)
+    return result.stdout.strip() or None

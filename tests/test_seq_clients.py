@@ -54,3 +54,49 @@ def test_absent_device_returns_none(session_mod):
 def test_empty_input(session_mod):
     assert session_mod.parse_seq_clients("") == []
     assert session_mod.find_seq_client("", "Fireface UCX II") is None
+
+
+def test_device_serial_reads_the_product_string(tmp_path):
+    """The number RME prints on the box, not the USB iSerial.
+
+    Moved into the library from verify-hardware.py when the write sweep
+    needed the same answer -- an evidence artifact that cannot name its
+    box stops being evidence the moment there is a second one.
+    """
+    from oscmix_desk.discovery import device_serial
+
+    cards = tmp_path / "cards"
+    cards.write_text(
+        " 0 [NVidia       ]: HDA-Intel - HDA NVidia\n"
+        " 2 [II24216011   ]: USB-Audio - Fireface UCX II (24216011)\n")
+    assert device_serial(cards) == "24216011"
+
+    cards.write_text(" 0 [NVidia ]: HDA-Intel - HDA NVidia\n")
+    assert device_serial(cards) is None
+
+    assert device_serial(tmp_path / "missing") is None
+
+
+def test_built_backend_revision_reads_the_checkout(tmp_path):
+    """The revision comes from the checkout, not from the pin.
+
+    Reading what is actually built keeps install.sh's pin honest: if the
+    two ever disagree, the artifact names the binary that ran, which is
+    the one the measurement is about.
+    """
+    import subprocess
+
+    from oscmix_desk.discovery import built_backend_revision
+
+    # No build/oscmix at all: no answer, not a crash.
+    assert built_backend_revision(tmp_path) is None
+
+    build = tmp_path / "build" / "oscmix"
+    build.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=build, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-q", "--allow-empty", "-m", "x"],
+                   cwd=build, check=True)
+    revision = built_backend_revision(tmp_path)
+    assert revision is not None
+    assert len(revision) == 40

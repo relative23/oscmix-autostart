@@ -88,21 +88,33 @@ a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
 the honest answer today is "turn it in the GUI, and hope nothing resets
 it" -- which is the same answer TotalMix gives, minus the snapshot.
 
-## Where we are (0.4.0 released)
+## Where we are (0.5.0 released)
 
-**0.4.0 was tagged and published on 2026-08-24**, and the project was
-renamed from `oscmix-autostart` to `oscmix-desk` with it: the old name
-described 0.1.0 exactly and named one of two halves by the end.
+**0.5.0 was tagged and published on 2026-08-25.** The surface did not
+grow; the release proved the half of it nobody had asked the device
+about. Every settable register was written a different legal value and
+confirmed against the device's own report: **1224 of 1238 confirmed, 14
+skipped as dangerous, none deaf**, per-register verdicts in
+[docs/evidence/write-sweep-ucx2.json](evidence/write-sweep-ucx2.json).
+
+0.4.0 (2026-08-24) had finished the surface itself, and renamed the
+project from `oscmix-autostart` to `oscmix-desk`: the old name described
+0.1.0 exactly and named one of two halves by the end.
 
 All eleven register families are declared and measured at the device.
 Room EQ is declared **reported and not settable**, because the writes
 are ignored (upstream #33), and `/output/{ch}/phase` the same, because
-the writes never leave oscmix (upstream #34).
+the writes never leave oscmix (upstream #34). The write sweep added
+`/input/5..8/gain` to that class: upstream's channel table gives those
+inputs a gain flag and no range, so every write is clamped to zero
+(drafted for upstream in
+[docs/upstream-issues.md](upstream-issues.md)).
 
-What comes next is in
-[After 0.4.0](#after-040-what-actually-threatens-this), and it is not a
-feature list: the surface is finished, and what is left are the things
-that would make this unmaintainable or untrue in a few years.
+The five structural threats in [After
+0.4.0](#after-040-what-actually-threatens-this) are all addressed, and
+the write direction is proven. **There is no planned next release.**
+What remains open is upstream's: Room EQ writes (#33), output phase
+(#34), the gain ranges, and an 802 this project cannot test.
 
 Working and verified: playback→output and **hardware input** routing for
 mono and stereo pairs, stereo linking with the ordering that requires,
@@ -133,10 +145,11 @@ What 0.3.0 moved (2026-08-20):
 | decisions recorded | ADR 0001-0010 | ADR 0001-0013 |
 | upstream pin | 2411b12d | unchanged -- no bump, so no new evidence owed |
 
-Since the tag, on `main`: 5133 runtime lines, 743 test cases, 84
-register rows of which 71 are settable, mutation 0.692 with the floor at
-0.68, and ADR 0001-0014. Those are 0.4.0 in progress, not 0.3.0 -- the
-table above is the released record and stays as it was measured.
+As of 0.5.1, on `main`: 5780 runtime lines, 990 test cases, 149
+register rows of which 102 are settable (1238 concrete settable paths),
+mutation 0.710 with the floor at 0.70, coverage 95% gated at 95, and
+ADR 0001-0017. The table above is the released 0.3.0 record and stays
+as it was measured.
 
 **What the release is, in one line:** 0.2.0 made the existing behaviour
 provable; 0.3.0 spends that on surface, and every piece of it was

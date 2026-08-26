@@ -48,6 +48,8 @@ from oscmix_desk import (
     load_config,
 )
 from oscmix_desk.constants import LEVEL_MIN
+from oscmix_desk.discovery import built_backend_revision
+from oscmix_desk.discovery import device_serial as discovery_device_serial
 
 EXIT_SKIP = 77
 # How much louder an output must be when its own side carries the tone
@@ -168,16 +170,10 @@ class LevelReader:
 def backend_revision() -> Optional[str]:
     """The upstream oscmix commit this measurement was taken against.
 
-    A measurement that does not say which backend produced it cannot be
-    compared against the next one. install.sh pins this; recording it
-    here is what makes the evidence artifact mean something.
+    Moved into the library when the write sweep needed the same answer;
+    see ``discovery.built_backend_revision`` for why it is recorded.
     """
-    build = Path(__file__).resolve().parent.parent / "build" / "oscmix"
-    if not (build / ".git").exists():
-        return None
-    result = subprocess.run(["git", "-C", str(build), "rev-parse", "HEAD"],
-                            capture_output=True, text=True, check=False)
-    return result.stdout.strip() or None
+    return built_backend_revision(Path(__file__).resolve().parent.parent)
 
 
 def sink_layout(sink: Optional[str]) -> Optional[Tuple[str, List[str]]]:
@@ -273,33 +269,8 @@ def playback_sinks() -> Dict[Tuple[int, ...], str]:
 
 
 def device_serial() -> Optional[str]:
-    """The interface's serial, as RME prints it on the box.
-
-    Read from `/proc/asound/cards`, where the USB-Audio driver puts the
-    device's own product string:
-
-        2 [II24216011  ]: USB-Audio - Fireface UCX II (24216011)
-
-    Not the USB `iSerial` (`3A179EA663AB340` here), which is a different
-    number and not the one anybody can check against the hardware -- and
-    not the one this repository's recorded dumps already carry.
-
-    Evidence names a *particular* box. Two Fireface units on one desk is
-    a configuration this roadmap intends to support, and an artifact that
-    does not say which one it measured stops being evidence the moment
-    there is a second.
-    """
-    try:
-        cards = Path("/proc/asound/cards").read_text()
-    except OSError:
-        return None
-    for line in cards.splitlines():
-        if "Fireface" not in line:
-            continue
-        found = re.search(r"\((\d{4,})\)", line)
-        if found:
-            return found.group(1)
-    return None
+    """The interface's serial; see ``discovery.device_serial``."""
+    return discovery_device_serial()
 
 
 def is_stereo(positions: Sequence[str]) -> bool:

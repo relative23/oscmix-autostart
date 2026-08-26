@@ -234,3 +234,66 @@ that ADR states for timing constants applies to claims about upstream
 too: **name the recording, or do not make the claim.**
 
 [oscmix]: https://github.com/michaelforney/oscmix
+
+## 3. Filed: Room EQ writes are sent but the device ignores them
+
+**Status:** filed as [michaelforney/oscmix#33][33] on 2026-08-24.
+
+Distinct from #32, which was about *reading* the block: with the fold
+fixed and all 640 Room EQ registers readable, writing any of them is
+accepted by oscmix, put on the wire, and ignored by the device -- the
+value reads back unchanged. Found while measuring for the 0.4.0
+release. This project declares the family **reported and not settable**
+until it moves.
+
+[33]: https://github.com/michaelforney/oscmix/issues/33
+
+## 4. Filed: `/output/N/phase` writes never leave oscmix
+
+**Status:** filed as [michaelforney/oscmix#34][34] on 2026-08-24.
+
+The output tree's `phase` node has `.new` but no `.set`, so an OSC
+write is parsed and dropped without reaching the device. The input
+phase works. Found by reading the node table while declaring the
+register model; confirmed on the device. Declared **reported and not
+settable** here, same as Room EQ.
+
+[34]: https://github.com/michaelforney/oscmix/issues/34
+
+## 5. Drafted: `/input/5..8/gain` accepts writes but can never change
+
+**Status:** drafted, not yet filed. Found by the 0.5.0 write sweep on
+2026-08-25.
+
+### Title
+
+`/input/5..8/gain` accepts writes but can never change on a UCX II
+
+### Body
+
+On a Fireface UCX II, writing `/input/5/gain` through `/input/8/gain`
+has no effect. The register stays at 0 whatever value is sent, whether
+written alone or with others.
+
+`device_ffucxii.c` gives Analog 5-8 `INPUT_HAS_GAIN` but no `.gain`
+range, so it defaults to `{0, 0}`:
+
+```c
+{"Analog 5",    INPUT_HAS_GAIN | INPUT_HAS_REFLEVEL,
+        .reflevel={reflevel_input, LEN(reflevel_input)},
+},
+```
+
+`setinputgain` then clamps every value to that range, so `setval`
+always writes 0 and the device reports nothing because nothing changed.
+Inputs 1-4 have ranges (`{0, 750}` and `{0, 240}`) and work.
+
+I don't know which way it should go: if Analog 5-8 have no gain stage,
+the flag looks wrong; if they do, the range is missing. Either way the
+node is in the OSC tree and in the dump today, so it reads as a control
+that exists.
+
+`device_ff802.c` has the same shape on all eight Analog inputs. I have
+no 802 to test.
+
+Tested at 55802a6.

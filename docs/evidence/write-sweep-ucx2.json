@@ -1,10 +1,10 @@
 {
-  "taken": "2026-08-25T15:01:11+00:00",
+  "taken": "2026-08-25T22:36:35+00:00",
   "device": "Fireface UCX II, serial 24216011",
   "oscmix_revision": "55802a6ab865e551540ee9ad5081b8ae3276f8ca",
   "probed": 1238,
-  "seconds": 100.98,
-  "echo_timeout": 0.25,
+  "seconds": 100.38,
+  "write_pace": 0.01,
   "method": "Each register is written a different legal value from its own declared domain and the result read back from a refresh dump. An echo on the written path is never waited for: the device answers a linked pair on the partner path and is silent on the one addressed. Passes are split by channel parity so a linked pair is never written against itself, writes are paced because a burst is dropped, and every register gets three attempts. Each pass restores what it wrote before the next begins.",
   "summary": {
     "skipped": 14,

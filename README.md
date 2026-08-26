@@ -47,14 +47,21 @@ invisible at message level and only showed up by playing a tone and reading
 the device's own meters; that set the standard the project has been held to
 since.
 
+- **Every settable register is proven to accept a write**, not assumed
+  to: a sweep writes each of the 1238 a different legal value and
+  confirms the device's own report, with per-register verdicts in
+  [docs/evidence/write-sweep-ucx2.json](docs/evidence/write-sweep-ucx2.json).
+  It found two defects in this project's own register model and one
+  upstream before any user could.
 - Each release attaches a **hardware evidence artifact**: the routes
   measured, the levels, the device serial and the exact oscmix revision.
 - The upstream backend is **pinned to a full commit SHA**, and the pin only
   moves together with a fresh measurement.
-- Sixteen [decision records](docs/decisions/) carry the reasoning and the
+- Seventeen [decision records](docs/decisions/) carry the reasoning and the
   measurement behind anything non-obvious, including the ones that say *we
   looked and there was nothing to fix*.
-- Four issues have gone upstream from this work, two of them fixed.
+- Four issues have gone upstream from this work, two of them fixed,
+  and a fifth is [drafted](docs/upstream-issues.md).
 
 ## Why you want this
 
