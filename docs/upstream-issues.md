@@ -344,3 +344,75 @@ this project cannot meet alone.
 [hudd]: https://github.com/huddx01/oscmix/tree/dev
 [35c1]: https://github.com/michaelforney/oscmix/issues/35#issuecomment-5421134992
 [35c2]: https://github.com/michaelforney/oscmix/issues/35#issuecomment-5427409903
+
+
+## 7. Rewritten: #29 and PR #31, after reading them as the maintainer would
+
+**Status:** both edited in place on 2026-08-26. Neither is a new report;
+this entry records why two existing texts changed and what the test was.
+
+The user read the open items against the known signs of model-written
+text -- Wikipedia's [Signs of AI writing][wp-signs] and the Claude
+trope list at [tropes.fyi][tropes] -- and two of ours failed it. Not on
+facts: every number in both was measured. On voice and length, which
+is what the maintainer complained about on #30 (entry 1 above) and
+what makes a reader skim.
+
+**[PR #31][31]** (`cache-sync-output-stereo`): the body was 339 words
+under three headings, with a "How I observed it" narrative of two failed
+audio measurements, a "Why I care" section advertising this project,
+and two rounds of "happy to adjust". The code carried a nine-line block
+comment in a file that has three comments in 1698 lines, none of them
+longer than one. Now: 80 words, three paragraphs, the comment gone,
+the commit retitled `Update output stereo state on write` to match the
+upstream form (capitalised imperative, no `oscmix:` prefix, which
+upstream uses only for subcomponents), rebased onto `55802a6`. Diff
++18/-1 instead of +28/-1. Commit `56641bc`.
+
+**[#29][29]** (the project announcement): thanks in the opener and the
+closer, "in case it is useful", "feel free to link or ignore", "happy
+to look into a patch", one sixty-word sentence listing every feature
+with a parenthesis after each, "first-class citizen". It also still
+described oscmix-autostart, a name and a scope this project has
+outgrown (renamed in 0.5.0, commit `9a276ad`).
+Replaced, not commented, so nobody is notified over a rename. The one
+technical point in it -- `/refresh` dumps the input mix matrix but not
+`/mix/*/playback/*`, and a `/mix` write draws no reply -- is unchanged
+and still open; the roadmap carries it as a design constraint.
+
+New body of #29:
+
+> (Edited: the project was called oscmix-autostart when I opened this.
+> The old link redirects.)
+>
+> I've been running oscmix on a UCX II under Linux for a while and built
+> the glue around it that I was missing:
+> https://github.com/relative23/oscmix-desk
+>
+> udev rule and a systemd user unit so the backend comes up on hotplug,
+> plus a routing.conf that is applied on every start. The config part
+> grew more than planned. It now covers the mix matrix, faders, EQ,
+> dynamics, reverb and the clock, `--diff` shows what an apply would
+> change, and every register in it was checked against the device rather
+> than taken from the manual. None of it touches oscmix itself, the
+> backend is built from your repo at a pinned commit.
+>
+> One thing I ran into while verifying the applied state: the dump after
+> /refresh contains the input mix matrix but not /mix/*/playback/*, and a
+> /mix write gets no reply, so the playback matrix can't be read back at
+> all. Is that the device, or is it just not requested?
+
+**#33, #34, #35 were checked the same way and left alone**: 70 to 144
+words each, observation first, one code block, one question, within
+the 500-1200 characters the repository's other bug reports run to.
+
+**The rule this leaves behind** (also in the project memory): thanks
+once or not at all, no offers, no method narrative, no headed sections
+in an issue, no bold lead-ins, no "not X but Y", no dashes for pivots,
+plain "is" and "does", one direct question at most, no sign-off. And
+no fake typos as a disguise; that is a watermark too.
+
+[29]: https://github.com/michaelforney/oscmix/issues/29
+[31]: https://github.com/michaelforney/oscmix/pull/31
+[wp-signs]: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+[tropes]: https://gist.github.com/ossa-ma/f3baa9d25154c33095e22272c631f5a1
