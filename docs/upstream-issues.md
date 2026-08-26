@@ -1,7 +1,8 @@
 # Upstream issues
 
-One issue filed with [michaelforney/oscmix][oscmix], and the record of a
-second that was **not** filed because it did not reproduce.
+The record of what went to [michaelforney/oscmix][oscmix] from this
+project -- filed, fixed, withdrawn or still open -- and of what was
+observed upstream that this project depends on.
 
 The roadmap treats upstream limits as work items rather than weather. It
 also means those items are held to the same standard as everything else
@@ -299,3 +300,47 @@ that exists.
 no 802 to test.
 
 Tested at 55802a6.
+
+
+## 6. Observed: an 802 rework exists in a fork, with hardware behind it
+
+**Status:** observation, not an issue. Recorded 2026-08-26.
+
+Replying [on #35][35c1], `huddx01` -- who has an 802 -- pointed at the
+`dev` branch of [huddx01/oscmix][hudd] and announced a complete rework
+of `device_ff802.c`, written but not yet pushed ("will come soon").
+
+What the branch already holds (state of 2026-05-07, ten commits ahead
+of upstream, none pushed since 2026-08-03):
+
+- **A full 802 register mapping**, and it is a different scheme from
+  the UCX II's: channel stride `idx << 8` rather than `idx << 6`,
+  outputs based at `0x1E00`, the mix matrix inside the output block
+  from offset `0xE0`, globals from `0x3C00`, refresh at `0x0812`, and
+  a `DEVICE_MIX_VOLONLY` flag. If this is right, none of the UCX II
+  address arithmetic in [register-addresses.md](register-addresses.md)
+  transfers -- the rules are per device, which the offsets file's
+  design already assumes.
+- **Line inputs 1-8 carry `.gain = {0, 120}`** -- the exact hole #35
+  describes on the UCX II, plugged on the 802 side.
+- Some values are marked as guesses by their own commit messages
+  ("add durec regs (guess)"). The fork also reworks `oscmix.c` itself
+  and carries a UFX+ table.
+
+One thing looks like #35's mirror image: **Mic/Inst 9-12 carry no
+`INPUT_HAS_GAIN`**, yet those are the 802's remote-controllable
+preamps. Asked [in the same thread][35c2], together with the three
+measured write-path behaviours (no echo on the written path, bursts
+drop writes, out-of-range is refused not clamped) that would otherwise
+produce false results when he verifies his table.
+
+**What this changes here: nothing yet, possibly everything for the
+802.** The pin stays on upstream (ADR 0008), so this project can use
+the work only once it is merged. Until then it is the best available
+map of the 802's registers, and the first sign of the missing piece --
+somebody with the hardware -- for the one supported-device criterion
+this project cannot meet alone.
+
+[hudd]: https://github.com/huddx01/oscmix/tree/dev
+[35c1]: https://github.com/michaelforney/oscmix/issues/35#issuecomment-5421134992
+[35c2]: https://github.com/michaelforney/oscmix/issues/35#issuecomment-5427409903
