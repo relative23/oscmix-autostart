@@ -60,8 +60,8 @@ since.
 - Seventeen [decision records](docs/decisions/) carry the reasoning and the
   measurement behind anything non-obvious, including the ones that say *we
   looked and there was nothing to fix*.
-- Four issues have gone upstream from this work, two of them fixed,
-  and a fifth is [drafted](docs/upstream-issues.md).
+- Five issues have gone upstream from this work
+  ([documented](docs/upstream-issues.md)), two of them fixed.
 
 ## Why you want this
 

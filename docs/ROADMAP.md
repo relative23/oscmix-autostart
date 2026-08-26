@@ -107,14 +107,13 @@ are ignored (upstream #33), and `/output/{ch}/phase` the same, because
 the writes never leave oscmix (upstream #34). The write sweep added
 `/input/5..8/gain` to that class: upstream's channel table gives those
 inputs a gain flag and no range, so every write is clamped to zero
-(drafted for upstream in
-[docs/upstream-issues.md](upstream-issues.md)).
+(upstream [#35](https://github.com/michaelforney/oscmix/issues/35)).
 
 The five structural threats in [After
 0.4.0](#after-040-what-actually-threatens-this) are all addressed, and
 the write direction is proven. **There is no planned next release.**
 What remains open is upstream's: Room EQ writes (#33), output phase
-(#34), the gain ranges, and an 802 this project cannot test.
+(#34), the gain ranges (#35), and an 802 this project cannot test.
 
 Working and verified: playback→output and **hardware input** routing for
 mono and stereo pairs, stereo linking with the ordering that requires,

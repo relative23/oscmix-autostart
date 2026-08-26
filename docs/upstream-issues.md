@@ -260,10 +260,12 @@ settable** here, same as Room EQ.
 
 [34]: https://github.com/michaelforney/oscmix/issues/34
 
-## 5. Drafted: `/input/5..8/gain` accepts writes but can never change
+## 5. Filed: `/input/5..8/gain` accepts writes but can never change
 
-**Status:** drafted, not yet filed. Found by the 0.5.0 write sweep on
-2026-08-25.
+**Status:** filed as [michaelforney/oscmix#35][35] on 2026-08-26. Found
+by the 0.5.0 write sweep on 2026-08-25.
+
+[35]: https://github.com/michaelforney/oscmix/issues/35
 
 ### Title
 
