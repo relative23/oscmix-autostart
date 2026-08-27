@@ -31,10 +31,10 @@ DEVICE = "[device]\nname = Fireface UCX II\n\n"
 def test_the_options_come_from_the_register_model():
     assert set(registers.settable_options(registers.UCX2, "input")) == {
         "gain", "hi-z", "mute", "phase", "reflevel"}
-    # No `phase` on outputs: oscmix cannot write it. See
-    # test_output_phase_is_reported_and_not_settable below.
+    # `phase` joined with the f2fdd5e pin: this project's PR #36,
+    # merged upstream. See test_output_phase_is_settable_since_the_pin_moved.
     assert set(registers.settable_options(registers.UCX2, "output")) == {
-        "crossfeed", "mute", "reflevel", "volume"}
+        "crossfeed", "mute", "phase", "reflevel", "volume"}
 
 
 def test_phantom_power_is_modelled_but_not_settable():
@@ -107,7 +107,7 @@ def test_an_unknown_option_lists_what_is_valid(session_mod, tmp_path):
     with pytest.raises(session_mod.ConfigError) as excinfo:
         session_mod.load_config(write(tmp_path, DEVICE +
                                       "[output:5]\nnosuchoption = 3\n"))
-    assert "crossfeed, mute, reflevel, volume" in str(excinfo.value)
+    assert "crossfeed, mute, phase, reflevel, volume" in str(excinfo.value)
 
 
 def test_a_gain_outside_the_range_is_refused(session_mod, tmp_path):
@@ -221,13 +221,15 @@ def test_a_quantity_carries_its_own_bounds_and_unit(session_mod):
 
     # Gain has three rows, so a template lookup is ambiguous by design:
     # the two mic preamps reach 75 dB, the two instrument channels 24,
-    # and Analog 5-8 take no gain at all. Ask per channel.
+    # and Analog 5-8 reach 24 as well -- since fdc47f7 gave them the
+    # range their "Pre Gain" field always had. Ask per channel.
     mic = register_at(device, "/input/1/gain")
     assert mic.domain == NUMBER
     assert (mic.lo, mic.hi, mic.unit) == (0.0, 75.0, "dB")
     inst = register_at(device, "/input/3/gain")
     assert (inst.lo, inst.hi) == (0.0, 24.0)
-    assert register_at(device, "/input/5/gain").domain is None
+    line = register_at(device, "/input/5/gain")
+    assert (line.lo, line.hi, line.unit) == (0.0, 24.0, "dB")
 
 
 def test_a_quantity_out_of_range_names_the_range(tmp_path):
@@ -263,29 +265,20 @@ def test_an_unbounded_quantity_is_only_checked_for_being_a_number():
     assert _parse_number("1234.5", "x", "y", free) == 1234.5
 
 
-def test_output_phase_is_reported_and_not_settable(session_mod, tmp_path):
-    """`ctltoreg` gates OUTPUT_PHASE on `INPUT_HAS_REFLEVEL`, bit 2 of the
-    *input* flags. An output only ever sets `OUTPUT_HAS_REFLEVEL`, bit 0,
-    so the guard always breaks, ctltoreg returns -1 and `setval` writes
-    nothing. Every output, not just some.
-
-    Measured rather than deduced: `/input/1/phase` goes 0 -> 1 and reads
-    back, `/output/1/phase` and `/output/9/phase` stay 0. Tracing what
-    oscmix writes to the MIDI pipe during those writes shows register
-    0x0007 twice for the input and nothing at all for the outputs, so
-    the write never leaves rather than the device refusing it.
-
-    Reported as michaelforney/oscmix#34. Until it moves, a config that
-    accepted `phase` on an output would set nothing and say it had.
+def test_output_phase_is_settable_since_the_pin_moved(session_mod, tmp_path):
+    """It moved: upstream #34 was this project's report, the fix this
+    project's PR #36, merged as 9dba36f and in the pin since f2fdd5e.
+    Measured on all 20 outputs before this test changed sides: phase
+    reaches the device and reads back, analog and digital alike.
     """
     by_path = {r.template: r for r in registers.UCX2.registers}
-    assert by_path["/output/{ch}/phase"].domain is None
+    assert by_path["/output/{ch}/phase"].domain is not None
     assert by_path["/input/{ch}/phase"].domain is not None
 
-    with pytest.raises(session_mod.ConfigError) as excinfo:
-        session_mod.load_config(write(tmp_path, DEVICE +
-                                      "[output:5]\nphase = true\n"))
-    assert "phase" in str(excinfo.value)
+    config = session_mod.load_config(write(tmp_path, DEVICE +
+                                           "[output:5]\nphase = true\n"))
+    assert [(c.option, c.channel) for c in config.channels] == [
+        ("phase", 5)]
 
 
 def test_input_phase_still_works(session_mod, tmp_path):
@@ -299,10 +292,10 @@ def test_gain_resolves_per_channel_not_per_name(tmp_path):
     """The three gain rows, as a config sees them.
 
     Upstream's channel table is the authority and it disagrees with
-    itself by channel: `.gain={0, 750}` on the mic preamps, `{0, 240}`
-    on the instrument channels, and no range at all on Analog 5-8, which
-    `setinputgain` then clamps to {0, 0}. The write sweep measured the
-    consequence on 2026-08-25: inputs 1-4 take a value, 5-8 never move.
+    itself by channel: `.gain={0, 750}` on the mic preamps and
+    `{0, 240}` on the instrument channels -- and, since fdc47f7 closed
+    upstream #35, `{0, 240}` on Analog 5-8 as well, where no range at
+    all once clamped every write to zero (found by the 0.5.0 sweep).
 
     Resolving the option by name alone returned whichever row came last,
     so `[input:1] gain` was validated against the instrument ceiling and
@@ -321,7 +314,10 @@ def test_gain_resolves_per_channel_not_per_name(tmp_path):
     with pytest.raises(ConfigError, match=r"out of range 0\.0\.\.24\.0"):
         load_config(path)
 
-    # Analog 5-8 are readable and not settable, the same shape as 48v.
+    # Analog 5-8: settable since fdc47f7, measured here (12.0 dB
+    # round-trips), and clamped at their own 24 dB ceiling.
     path.write_text("[input:5]\ngain = 6.0\n")
-    with pytest.raises(ConfigError, match=r"channel 5 does not have it"):
+    assert load_config(path).channels
+    path.write_text("[input:5]\ngain = 30.0\n")
+    with pytest.raises(ConfigError, match=r"out of range 0\.0\.\.24\.0"):
         load_config(path)

@@ -257,10 +257,10 @@ def test_the_module_stays_pure(session_mod):
 def test_a_channel_setting_resolves_to_its_own_channels_register():
     """One option name, three rows, and the channel decides which.
 
-    `/input/{ch}/gain` splits by what the device accepts: 0..75 dB on the
-    two mic preamps, 0..24 on the two instrument channels, nothing on
-    Analog 5-8. Resolving by name alone returned whichever row came last
-    in the table.
+    `/input/{ch}/gain` splits by what the device accepts: 0..75 dB on
+    the two mic preamps, 0..24 on the instrument channels and (since
+    fdc47f7) on Analog 5-8. Resolving by name alone returned whichever
+    row came last in the table.
 
     Today the two settable rows agree on domain and tag, so the entry
     `_encode` builds is the same either way and nothing is visibly
@@ -277,4 +277,4 @@ def test_a_channel_setting_resolves_to_its_own_channels_register():
 
     assert option_register(UCX2, "input", "gain", 1).hi == 75.0
     assert option_register(UCX2, "input", "gain", 3).hi == 24.0
-    assert option_register(UCX2, "input", "gain", 5) is None
+    assert option_register(UCX2, "input", "gain", 5).hi == 24.0

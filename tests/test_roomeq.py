@@ -60,40 +60,38 @@ def test_the_middle_bands_have_no_type(band):
 
 
 # --------------------------------------------------------------------------
-# Reported, and not settable. The measurement that decided it.
+# Settable since the pin moved to f2fdd5e. The measurement that decided
+# it, both times.
 # --------------------------------------------------------------------------
 
-def test_not_one_room_eq_register_carries_a_value_domain():
-    """"A config cannot set what oscmix cannot write" -- the line
-    `/clock/samplerate` already sits on, applied to 640 registers.
+def test_every_room_eq_register_carries_a_value_domain():
+    """Until `f2fdd5e` every row here was read-only, measured: oscmix
+    sent writes to the `0x35D0` block it reads the family from, and the
+    UCX II takes Room EQ writes at `0x3400` (upstream #33, fixed
+    2026-08-27). Measured again at the new pin the same night:
 
-    Measured at 55802a6 on outputs 1 and 5, with the channel EQ as a
-    control in the same run:
+        /output/1/roomeq/band1gain  -6.0  ->  setreg 3403, reads back -6.0
 
-        /output/N/eq/band1gain      -6.0  ->  reads back -6.0
-        /output/N/roomeq/band1gain  -6.0  ->  reads back  0.0
-
-    Output 1 fails too, where the channel offset is zero and the address
-    is the base exactly, so it is not the offset arithmetic. 55802a6
-    fixed `regtoctl` -- the *read* path -- which is why 640 registers are
-    reported where 320 were. Writes still do nothing.
+    where it had always read 0.0. So now the opposite holds: every one
+    of the 640 rows carries a domain, and the section surface exists.
     """
     for register in UCX2.registers:
         if "roomeq" in register.template:
-            assert register.domain is None, register.template
-    assert settable_nested(UCX2, "roomeq", "output") == {}
+            assert register.domain is not None, register.template
+    options = settable_nested(UCX2, "roomeq", "output")
+    assert len(options) == 32          # switch + delay + 9x3 + 3 types
 
 
-def test_a_room_eq_section_is_refused_rather_than_ignored(tmp_path):
-    """The failure this replaces: `[roomeq:output:5]` was accepted and
-    produced nothing. A config that looks like it sets a shelf and sets
-    no register is worse than one that will not load."""
+def test_a_room_eq_section_loads_and_resolves(tmp_path):
+    """The refusal this replaces was itself a replacement: `[roomeq:...]`
+    was once accepted and silently produced nothing, then refused while
+    the device ignored the writes. Now it loads and resolves."""
     path = tmp_path / "routing.conf"
     path.write_text("[device]\nname = Fireface UCX II\n\n"
                     "[roomeq:output:5]\nband1gain = -6.0\n")
-    with pytest.raises(ConfigError) as raised:
-        load_config(path)
-    assert "cannot be set" in str(raised.value)
+    config = load_config(path)
+    assert [(c.family, c.option, c.channel) for c in config.channels] == [
+        ("output", "roomeq/band1gain", 5)]
 
 
 def test_an_unmodelled_device_still_gets_no_opinion(tmp_path):

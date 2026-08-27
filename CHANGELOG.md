@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.6.0 (2026-08-28)
+
+The pin moves to upstream `f2fdd5e`, and three register families move
+with it -- from "reported and not settable" to settable, each one fixed
+upstream within a single day and measured here before the model was
+allowed to say so.
+
+### Added
+
+- **`[roomeq:output:N]` sections.** Room EQ's 640 registers carry the
+  channel EQ's domains now, plus `delay` with upstream's own bounds
+  (0 to 0.425 s). The writes failed for a measured reason: the UCX II
+  takes Room EQ writes at `0x3400` while reporting the family from
+  `0x35D0`, a split range found through upstream #33 and fixed in
+  `f2fdd5e`. Measured at the new pin: `band1gain` -6.0 goes out as
+  `setreg 3403` and reads back -6.0, where it had always read 0.0.
+  `docs/register-addresses.md` records the write range, confirmed on
+  the wire on two outputs.
+
+- **`phase` on outputs.** Fixed by this project's PR #36, merged
+  upstream as `9dba36f`, and measured on all 20 outputs before the
+  model changed sides.
+
+- **`gain` on Analog 5-8**, 0 to 24 dB -- the range their "Pre Gain"
+  field always had, added upstream in `fdc47f7` after the 0.5.0 write
+  sweep filed #35. Measured: 12.0 dB round-trips.
+
+### Changed
+
+- **The write sweep now proves 1902 registers**, up from 1238: every
+  newly opened row was written a different legal value and confirmed
+  against the device's own report -- 1888 confirmed, the same 14
+  skipped as dangerous, at `f2fdd5e`
+  ([docs/evidence/write-sweep-ucx2.json](docs/evidence/write-sweep-ucx2.json)).
+  The refresh-dump fixture was re-recorded at the new pin (2322
+  registers, unchanged in shape -- all three fixes are write-side).
+
+- The read-only half of the nested-family split is empty for the first
+  time. The split and its assertions stay: the next read-only family
+  must not grow a config section that accepts settings and delivers
+  none.
+
 ## 0.5.2 (2026-08-27)
 
 ### Fixed

@@ -28,7 +28,7 @@ questions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Dict, Mapping, Optional, Sequence, Set, Tuple
 
 from .constants import LEVEL_MAX, LEVEL_MIN
@@ -323,45 +323,27 @@ def _band_registers(family: str, sub: str,
 
 
 def _roomeq_registers() -> Tuple["Register", ...]:
-    """Room EQ: 640 registers, modelled, readable, **not settable**.
+    """Room EQ: 640 registers, modelled, readable, **and settable**.
 
-    Every row here carries no value domain, which is this model's way of
-    saying "a config cannot set what oscmix cannot write" -- the same
-    line `/clock/samplerate` and `/hardware/ccmode` sit on.
+    That last word changed with the pin. Until `f2fdd5e` every row here
+    was declared with no value domain, because writes did not reach the
+    device: oscmix sent them to the same `0x35D0` block it reads the
+    family from, and the UCX II takes Room EQ *writes* at `0x3400` --
+    a split range nobody had measured (upstream #33). Fixed upstream on
+    2026-08-27 and measured here the same night at `f2fdd5e`:
 
-    It is not settable because writes do not reach the device. Measured
-    at 55802a6, on outputs 1 and 5, with the channel EQ as a control in
-    the same run:
+        /output/1/roomeq/band1gain  -6.0  ->  setreg 3403, reads back -6.0
 
-        /output/N/eq/band1gain      -6.0  ->  reads back -6.0
-        /output/N/roomeq/band1gain  -6.0  ->  reads back  0.0
-
-    The switch and `delay` behave the same way, and output 1 fails too,
-    where the channel offset is zero and the address is the base exactly
-    -- so it is not the offset arithmetic.
-
-    **And oscmix does send it.** Tracing what oscmix writes to the MIDI
-    pipe (fd 7, the one `alsaseqio` forwards) during exactly those two
-    writes shows both SysEx messages going out: register `0x0511` for
-    the channel EQ and `0x35D3` for Room EQ, which is what `ctltoreg`
-    maps them to. The device applies the first and ignores the second,
-    from the same address block it happily *reports* Room EQ values
-    from. So this is not oscmix dropping the write.
-
-    So the family is declared for what it is -- a surface this project
-    can read and report and cannot promise to set. `settable_nested`
-    returns nothing for it, and no `[roomeq:output:N]` section exists.
+    where it had always read 0.0 before. So the family now carries the
+    same domains as the channel EQ (checked against both upstream
+    trees), plus `delay` with upstream's own bounds: `.min=0 .max=425
+    .scale=0.001`, i.e. 0 to 0.425 s on the OSC side. `settable_nested`
+    answers for it, and `[roomeq:output:N]` sections load.
     """
     rows = list(_band_registers("output", "roomeq", _ROOMEQ_BANDS))
     rows.append(Register("/output/{ch}/roomeq/delay", "f", VERIFIABLE,
-                         "output"))
-    return tuple(_readonly(row) for row in rows)
-
-
-def _readonly(register: "Register") -> "Register":
-    """The same row with no value domain, so no config can set it."""
-    return replace(register, domain=None, choices=(), lo=None, hi=None,
-                   unit="")
+                         "output", NUMBER, lo=0.0, hi=0.425, unit="s"))
+    return tuple(rows)
 
 
 
@@ -478,21 +460,18 @@ UCX2 = Device(
         # Gain is one register to the protocol and three to the device.
         # Upstream's channel table carries the ranges, and `setinputgain`
         # clamps to them silently: `.gain={0, 750}` on the two mic
-        # preamps, `{0, 240}` on the two instrument channels, and *no
-        # range at all* on Analog 5-8, which leaves those clamped to
-        # {0, 0}. Measured 2026-08-25 by the write sweep: 1-4 take a
-        # value, 5-8 never move off zero however often they are written.
-        #
-        # So 5-8 are readable and not settable -- the same shape as 48v
-        # and the output phase, and for the same reason. One row with
-        # `hi=75` would have promised a config 75 dB on a channel that
-        # silently gives 24, or gain on a channel that has none.
+        # preamps and `{0, 240}` on the two instrument channels. Analog
+        # 5-8 had *no range at all* and were clamped to {0, 0} -- found
+        # by the 0.5.0 write sweep, filed as upstream #35, and fixed by
+        # the maintainer in fdc47f7 ("Pre Gain", 0-24 dB in the device
+        # UI). Measured here at f2fdd5e: /input/5/gain takes 12.0 dB
+        # and reads it back.
         Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain-mic",
                  NUMBER, lo=0.0, hi=75.0, unit="dB", policy=PIN),
         Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain-inst",
                  NUMBER, lo=0.0, hi=24.0, unit="dB", policy=PIN),
         Register("/input/{ch}/gain", "f", VERIFIABLE, "input-gain-line",
-                 policy=PIN),
+                 NUMBER, lo=0.0, hi=24.0, unit="dB", policy=PIN),
         Register("/input/{ch}/reflevel", "is", VERIFIABLE, "input-reflevel", ENUM,
                  ("+13dBu", "+19dBu"), policy=PIN),
         Register("/input/{ch}/mute", "i", VERIFIABLE, "input", BOOL),
@@ -501,20 +480,13 @@ UCX2 = Device(
         # Verifiable, but see complete_after_cold_plug below: a cold
         # plug delivers these only for some channels.
         Register("/output/{ch}/mute", "i", VERIFIABLE, "output", BOOL),
-        # Reported, and **not settable**: no domain, the same line
-        # `/clock/samplerate` and Room EQ sit on. `ctltoreg` gates
-        # OUTPUT_PHASE on `INPUT_HAS_REFLEVEL`, which is bit 2 of the
-        # *input* flags; an output only ever sets `OUTPUT_HAS_REFLEVEL`,
-        # bit 0. So the guard always breaks, ctltoreg returns -1, and
-        # `setval` writes nothing.
-        #
-        # Measured rather than deduced. `/input/1/phase` goes 0 -> 1 and
-        # reads back; `/output/1/phase` and `/output/9/phase` stay 0.
-        # Tracing what oscmix writes to the MIDI pipe during those three
-        # writes shows register 0x0007 twice for the input and nothing
-        # at all for the outputs -- so this is not the device refusing,
-        # it is the write never leaving. michaelforney/oscmix#34.
-        Register("/output/{ch}/phase", "i", VERIFIABLE, "output"),
+        # Settable since the pin moved to f2fdd5e: `ctltoreg` gated
+        # OUTPUT_PHASE on an *input* flag no output carries, so the
+        # write never left oscmix (upstream #34). Fixed by this
+        # project's PR #36, merged upstream as 9dba36f, and measured on
+        # every one of the 20 outputs: phase reaches the device and
+        # reads back, analog and digital alike.
+        Register("/output/{ch}/phase", "i", VERIFIABLE, "output", BOOL),
         Register("/output/{ch}/reflevel", "is", VERIFIABLE, "output-reflevel", ENUM,
                  ("+4dBu", "+13dBu", "+19dBu"), policy=PIN),
         # Crossfeed: the last of 0.4.0's per-channel families and the only

@@ -20,7 +20,8 @@ changes nothing, so the desk is untouched by the measurement.
     matrix pan         0x2000 | out << 6 | in
     matrix level       0x4000 | out << 6 | idx
                        idx = input index, or 20 + playback index
-    room EQ            0x35D0 + reg + (out << 5)
+    room EQ, reported  0x35D0 + reg + (out << 5)
+    room EQ, written   0x3400 + reg + (out << 5)   (since f2fdd5e; #33)
 
 ## The wire format
 
@@ -52,6 +53,22 @@ Written on 2026-08-24, traced on the pipe `alsaseqio` forwards (fd 7).
 All eleven appeared verbatim. `/output/1/eq/band1gain` at `0x0511` and
 `/input/1/phase` at `0x0007` were confirmed separately, in the runs that
 produced upstream issues #33 and #34.
+
+## Confirmed at f2fdd5e: the Room EQ write range
+
+Upstream #33's resolution split the family's arithmetic: the device
+*reports* Room EQ from the `0x35D0` block and *takes writes* at
+`0x3400` -- the same per-band offsets, `0x1D0` lower. Traced on the
+pipe on 2026-08-28, at the pin this repository now builds:
+
+| path | write address | |
+|---|---|---|
+| `/output/1/roomeq/band1gain` | `0x3403` | confirmed, and the value reads back |
+| `/output/5/roomeq/band1gain` | `0x3483` | confirmed |
+
+Nothing else in `ctltoreg` moved between `55802a6` and `f2fdd5e`; the
+gain-range fix (#35) and the phase-guard fix (this project's #36) change
+flags and bounds, not addresses.
 
 ## The reading that was wrong first, and why it is worth keeping
 

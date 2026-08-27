@@ -31,11 +31,12 @@ from oscmix_desk.registers import (
 )
 
 #: Every nested sub-family, split by whether a config can set it.
-#: The sweep below used to assume "nested" implied "settable", which was
-#: true until Room EQ: 640 registers the device reports and refuses to
-#: be written (see `test_roomeq.py`). Making the split explicit is
-#: better than skipping it, because the read-only half has assertions of
-#: its own -- above all that it grows no config section.
+#: The sweep below used to assume "nested" implied "settable", which
+#: Room EQ disproved: 640 registers reported and, until the f2fdd5e
+#: pin, refused on write (see `test_roomeq.py`). The read-only half is
+#: empty again since that pin -- the split stays, because the next
+#: read-only family will need its assertions, above all that it grows
+#: no config section.
 ALL_FAMILIES = [(family, sub)
                 for family in ("input", "output")
                 for sub in nested_families(UCX2, family)]
@@ -69,9 +70,8 @@ def test_the_sweep_covers_every_family_declared():
 def test_a_read_only_family_offers_no_config_section(tmp_path, family, sub):
     """"A config cannot set what oscmix cannot write."
 
-    Room EQ is reported by the device and ignores every write -- proven
-    against the channel EQ as a control in `test_roomeq.py`. It is
-    modelled so the surface is described, and it must not grow a section
+    Empty since the f2fdd5e pin made Room EQ writable, and kept: a
+    family modelled so the surface is described must not grow a section
     that would accept settings and deliver none.
     """
     from oscmix_desk.errors import ConfigError

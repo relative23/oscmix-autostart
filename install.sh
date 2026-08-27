@@ -13,7 +13,7 @@ OSCMIX_REPO="${OSCMIX_REPO:-https://github.com/michaelforney/oscmix}"
 # would make the word "verified" meaningless, and this clone-and-compile
 # is the only path here that executes code from the network.
 # Override to track upstream: OSCMIX_REF=master ./install.sh
-OSCMIX_REF="${OSCMIX_REF:-55802a6ab865e551540ee9ad5081b8ae3276f8ca}"
+OSCMIX_REF="${OSCMIX_REF:-f2fdd5ec78338848754aad32cc07f3440de63395}"
 USB_VENDOR="2a39"
 USB_PRODUCT="3fd9"
 

@@ -88,9 +88,12 @@ a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
 the honest answer today is "turn it in the GUI, and hope nothing resets
 it" -- which is the same answer TotalMix gives, minus the snapshot.
 
-## Where we are (0.5.2 released)
+## Where we are (0.6.0 released)
 
-**0.5.2 was tagged on 2026-08-27**: the resolve-order fix, after a boot
+**0.6.0 was tagged on 2026-08-28**: the pin moved to `f2fdd5e` and
+three families became settable -- Room EQ, output phase, gain on
+Analog 5-8 -- each fixed upstream and measured here, with the write
+sweep grown to 1902 proven registers. **0.5.2 was tagged on 2026-08-27**: the resolve-order fix, after a boot
 ran a February build from a pre-rename install for six hours -- closed
 for the backend pair and the GUI alike, with the corrections its second
 review demanded. 0.5.1 (2026-08-26) was the cleanup the 0.5.0 audit

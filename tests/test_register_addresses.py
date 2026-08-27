@@ -17,8 +17,9 @@ import pytest
 from conftest import repo_file
 
 #: The offsets upstream's `ctltoreg` assigns, for the controls measured.
-#: Transcribed from `device_ffucxii.c` at 55802a6 and confirmed on the
-#: wire; the doc names the run.
+#: Transcribed from `device_ffucxii.c`, confirmed on the wire, and
+#: re-checked at f2fdd5e (only Room EQ's write base changed); the doc
+#: names the runs.
 CONTROL_OFFSET = {
     "phase": 0x07,          # input
     "gain": 0x08,           # input
@@ -158,12 +159,23 @@ def test_the_room_eq_rule_reproduces_its_measured_address():
     assert address_from_table("output", 5, "ROOMEQ_BAND1GAIN") == 0x3653
 
 
+def test_the_room_eq_write_range_sits_0x1d0_below_the_read_range():
+    """f2fdd5e (upstream #33): the UCX II reports Room EQ from 0x35D0
+    and takes writes at 0x3400. Measured on the wire at the new pin:
+    /output/1/roomeq/band1gain emits 0x3403 and /output/5 emits 0x3483,
+    both exactly 0x1D0 below the addresses the device reports from."""
+    read5 = address_from_table("output", 5, "ROOMEQ_BAND1GAIN")
+    read1 = address_from_table("output", 1, "ROOMEQ_BAND1GAIN")
+    assert read5 - 0x1D0 == 0x3483
+    assert read1 - 0x1D0 == 0x3403
+
+
 def test_the_table_says_where_it_came_from():
     """A table of numbers with no provenance is folklore. It also carries
     upstream's attribution: the numbers are Michael Forney's under ISC,
     the same as the code quoted under patches/."""
     data = offsets()
-    assert data["revision"] == "55802a6ab865e551540ee9ad5081b8ae3276f8ca"
+    assert data["revision"] == "f2fdd5ec78338848754aad32cc07f3440de63395"
     assert "device_ffucxii.c" in data["source"]
     assert any("ISC" in line for line in data["_"])
 

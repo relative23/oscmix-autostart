@@ -1,14 +1,14 @@
 {
-  "taken": "2026-08-25T22:36:35+00:00",
+  "taken": "2026-08-27T21:48:41+00:00",
   "device": "Fireface UCX II, serial 24216011",
-  "oscmix_revision": "55802a6ab865e551540ee9ad5081b8ae3276f8ca",
-  "probed": 1238,
-  "seconds": 100.38,
+  "oscmix_revision": "f2fdd5ec78338848754aad32cc07f3440de63395",
+  "probed": 1902,
+  "seconds": 114.41,
   "write_pace": 0.01,
   "method": "Each register is written a different legal value from its own declared domain and the result read back from a refresh dump. An echo on the written path is never waited for: the device answers a linked pair on the partner path and is silent on the one addressed. Passes are split by channel parity so a linked pair is never written against itself, writes are paced because a burst is dropped, and every register gets three attempts. Each pass restores what it wrote before the next begins.",
   "summary": {
     "skipped": 14,
-    "confirmed": 1224
+    "confirmed": 1888
   },
   "not_restored": [],
   "findings": [
@@ -284,6 +284,38 @@
     },
     {
       "path": "/input/4/gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.24
+    },
+    {
+      "path": "/input/5/gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.24
+    },
+    {
+      "path": "/input/6/gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.24
+    },
+    {
+      "path": "/input/7/gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.24
+    },
+    {
+      "path": "/input/8/gain",
       "current": 0.0,
       "attempts": 1,
       "verdict": "confirmed",
@@ -764,6 +796,166 @@
     },
     {
       "path": "/output/20/mute",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/1/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/2/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/3/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/4/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/5/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/6/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/7/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/8/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/9/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/10/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/11/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/12/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/13/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/14/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/15/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/16/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/17/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/18/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/19/phase",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/20/phase",
       "current": 0,
       "attempts": 1,
       "verdict": "confirmed",
@@ -5073,6 +5265,5126 @@
       "verdict": "confirmed",
       "step": 1,
       "wrote": 0
+    },
+    {
+      "path": "/output/1/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/2/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/3/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/4/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/5/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/6/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/7/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/8/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/9/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/10/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/11/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/12/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/13/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/14/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/15/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/16/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/17/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/18/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/19/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/20/roomeq",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/1/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/2/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/3/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/4/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/5/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/6/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/7/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/8/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/9/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/10/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/11/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/12/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/13/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/14/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/15/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/16/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/17/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/18/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/19/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/20/roomeq/band1freq",
+      "current": 50,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 249.8
+    },
+    {
+      "path": "/output/1/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band1gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/2/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/3/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/4/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/5/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/6/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/7/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/8/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/9/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/10/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/11/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/12/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/13/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/14/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/15/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/16/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/17/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/18/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/19/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/20/roomeq/band1q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/1/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/2/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/3/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/4/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/5/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/6/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/7/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/8/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/9/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/10/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/11/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/12/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/13/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/14/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/15/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/16/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/17/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/18/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/19/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/20/roomeq/band1type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/1/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/2/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/3/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/4/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/5/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/6/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/7/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/8/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/9/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/10/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/11/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/12/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/13/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/14/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/15/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/16/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/17/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/18/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/19/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/20/roomeq/band2freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/1/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band2gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/2/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/3/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/4/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/5/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/6/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/7/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/8/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/9/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/10/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/11/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/12/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/13/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/14/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/15/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/16/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/17/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/18/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/19/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/20/roomeq/band2q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/1/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/2/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/3/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/4/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/5/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/6/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/7/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/8/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/9/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/10/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/11/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/12/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/13/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/14/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/15/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/16/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/17/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/18/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/19/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/20/roomeq/band3freq",
+      "current": 150,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 349.8
+    },
+    {
+      "path": "/output/1/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band3gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/2/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/3/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/4/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/5/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/6/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/7/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/8/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/9/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/10/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/11/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/12/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/13/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/14/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/15/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/16/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/17/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/18/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/19/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/20/roomeq/band3q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/1/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/2/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/3/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/4/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/5/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/6/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/7/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/8/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/9/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/10/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/11/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/12/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/13/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/14/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/15/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/16/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/17/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/18/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/19/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/20/roomeq/band4freq",
+      "current": 200,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 399.8
+    },
+    {
+      "path": "/output/1/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band4gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/2/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/3/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/4/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/5/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/6/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/7/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/8/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/9/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/10/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/11/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/12/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/13/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/14/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/15/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/16/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/17/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/18/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/19/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/20/roomeq/band4q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/1/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/2/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/3/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/4/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/5/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/6/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/7/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/8/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/9/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/10/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/11/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/12/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/13/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/14/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/15/roomeq/band5freq",
+      "current": 100,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 299.8
+    },
+    {
+      "path": "/output/16/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/17/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/18/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/19/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/20/roomeq/band5freq",
+      "current": 250,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 449.8
+    },
+    {
+      "path": "/output/1/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band5gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/2/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/3/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/4/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/5/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/6/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/7/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/8/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/9/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/10/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/11/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/12/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/13/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/14/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/15/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/16/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/17/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/18/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/19/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/20/roomeq/band5q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/1/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/2/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/3/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/4/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/5/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/6/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/7/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/8/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/9/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/10/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/11/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/12/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/13/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/14/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/15/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/16/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/17/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/18/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/19/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/20/roomeq/band6freq",
+      "current": 300,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 499.8
+    },
+    {
+      "path": "/output/1/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band6gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/2/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/3/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/4/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/5/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/6/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/7/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/8/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/9/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/10/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/11/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/12/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/13/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/14/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/15/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/16/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/17/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/18/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/19/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/20/roomeq/band6q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/1/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/2/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/3/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/4/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/5/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/6/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/7/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/8/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/9/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/10/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/11/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/12/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/13/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/14/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/15/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/16/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/17/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/18/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/19/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/20/roomeq/band7freq",
+      "current": 400,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 599.8
+    },
+    {
+      "path": "/output/1/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band7gain",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.299999988079071
+    },
+    {
+      "path": "/output/20/roomeq/band7gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/2/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/3/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/4/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/5/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/6/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/7/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/8/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/9/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/10/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/11/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/12/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/13/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/14/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/15/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/16/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/17/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/18/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/19/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/20/roomeq/band7q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/1/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/2/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/3/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/4/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/5/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/6/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/7/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/8/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/9/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/10/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/11/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/12/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/13/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/14/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/15/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/16/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/17/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/18/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/19/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/20/roomeq/band8freq",
+      "current": 600,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 799.8
+    },
+    {
+      "path": "/output/1/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band8gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/2/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/3/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/4/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/5/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/6/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/7/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/8/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/9/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/10/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/11/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/12/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/13/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/14/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/15/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/16/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/17/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/18/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/19/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/20/roomeq/band8q",
+      "current": 5.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 5.095
+    },
+    {
+      "path": "/output/1/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/2/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/3/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/4/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/5/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/6/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/7/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/8/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/9/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/10/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/11/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/12/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/13/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/14/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/15/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/16/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/17/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/18/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/19/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/20/roomeq/band8type",
+      "current": 0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 1
+    },
+    {
+      "path": "/output/1/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/2/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/3/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/4/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/5/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/6/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/7/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/8/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/9/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/10/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/11/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/12/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/13/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/14/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/15/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/16/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/17/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/18/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/19/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/20/roomeq/band9freq",
+      "current": 800,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 999.8
+    },
+    {
+      "path": "/output/1/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/2/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/3/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/4/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/5/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/6/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/7/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/8/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/9/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/10/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/11/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/12/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/13/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/14/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/15/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/16/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/17/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/18/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/19/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/20/roomeq/band9gain",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.4
+    },
+    {
+      "path": "/output/1/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/2/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/3/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/4/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/5/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/6/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/7/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/8/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/9/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/10/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/11/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/12/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/13/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/14/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/15/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/16/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/17/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/18/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/19/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/20/roomeq/band9q",
+      "current": 0.699999988079071,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.794999988079071
+    },
+    {
+      "path": "/output/1/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/2/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/3/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/4/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/5/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/6/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/7/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/8/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/9/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/10/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/11/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/12/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/13/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/14/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/15/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/16/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/17/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/18/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/19/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/20/roomeq/band9type",
+      "current": 1,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0
+    },
+    {
+      "path": "/output/1/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/2/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/3/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/4/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/5/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/6/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/7/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/8/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/9/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/10/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/11/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/12/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/13/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/14/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/15/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/16/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/17/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/18/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/19/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
+    },
+    {
+      "path": "/output/20/roomeq/delay",
+      "current": 0.0,
+      "attempts": 1,
+      "verdict": "confirmed",
+      "step": 1,
+      "wrote": 0.00425
     },
     {
       "path": "/input/1/dynamics",
