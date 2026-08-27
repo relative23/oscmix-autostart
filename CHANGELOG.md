@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A stale system-wide backend could shadow the pinned install.**
+  `resolve_binary` consulted PATH before the pinned location, and the
+  systemd user manager's PATH at early boot lacks `~/.local/bin` while
+  containing `/usr/local/bin` -- so the first hotplug start after a
+  reboot ran a February build from a pre-rename install, for six hours,
+  caught only by its enum warning missing the OSC address upstream
+  added in `05621e5`. `~/.local/bin` is now consulted before PATH (the
+  `OSCMIX_BIN_*` override still first), two tests pin the order, and
+  `install.sh` warns when a shadowing copy exists in `/usr/local/bin`.
+  TROUBLESHOOTING gained the diagnosis, and the journal lines that look
+  alarming and are not.
+
 ### Changed
 
 - **The nested-options fallback in `reconcile` is gone.** `_register_for`

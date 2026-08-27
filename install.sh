@@ -189,6 +189,16 @@ if [ -d "$LEGACY_LIB_DIR" ]; then
     rm -rf "$LEGACY_LIB_DIR"
 fi
 
+# A pre-rename install put root-owned binaries in /usr/local/bin. The
+# session prefers $BIN_DIR since the 2026-08-26 shadowing incident, but
+# a stale copy is still a trap for manual PATH use -- say so instead of
+# silently coexisting.
+for tool in oscmix alsaseqio; do
+    if [ -x "/usr/local/bin/$tool" ] && [ -e "$BIN_DIR/$tool" ]         && ! cmp -s "/usr/local/bin/$tool" "$BIN_DIR/$tool"; then
+        warn "stale $tool in /usr/local/bin differs from $BIN_DIR/$tool; remove it: sudo rm /usr/local/bin/$tool"
+    fi
+done
+
 # Install oscmix-desk components
 # --------------------------------------------------------------------------
 

@@ -844,6 +844,14 @@ Hotplug needed nothing, because udev
 already restarts the unit and the cold-plug recording says so. No timer,
 asserted by test. [ADR 0013](decisions/0013-reconcile-triggers.md).
 
+*Hit for real, 2026-08-27, from an unexpected side:* the second writer
+was not the GUI. Verifying the output-phase fix for upstream PR #36 ran
+a second (briefly a third) `alsaseqio`+`oscmix` pair against the live
+device around midnight; the service backend died four times in 80
+seconds while the clients overlapped (SIGPIPE cascade, the supervisor
+restarted it each time) and never once during the later single-client
+runs. Diagnostic clients count as writers too: one at a time.
+
 *Three positions, in increasing cost:*
 
 - **Start-only, stated.** Applied at every start, the GUI always wins

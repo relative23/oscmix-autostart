@@ -167,3 +167,36 @@ install -D -m644 build/oscmix/gtk/oscmix.gschema.xml \
   ~/.local/share/glib-2.0/schemas/oscmix.gschema.xml
 glib-compile-schemas ~/.local/share/glib-2.0/schemas
 ```
+
+## 8. Journal lines that look alarming and are not
+
+All three below come from the upstream backend or ALSA and are routine
+on this setup. None of them means the desk lost state -- `oscmix-session
+--diff` is the check that would show it if it had (section 5).
+
+- `snd_seq_event_input: No space left on device` -- the ALSA sequencer
+  input buffer overflowed. The device streams ~880 meter datagrams a
+  second, and a burst (a `/refresh` dump, a second client) can outrun
+  the pool. `alsaseqio` treats it as non-fatal and keeps reading; what
+  is lost are meter events, not the desk's registers.
+- `ignoring unknown sysex packet (mfr=200d ...)` -- the device sends a
+  vendor SysEx that oscmix does not decode. Ignored by design.
+- `unexpected enum value -1` -- a register reports a value outside its
+  declared enum; `/controlroom/mainout` reports -1 for "no main out".
+  The pinned build prefixes this warning with the OSC address.
+
+**If the enum warning appears *without* an OSC address, an old backend
+binary is running.** Builds before upstream `05621e5` print the bare
+message. Check what the service actually started:
+
+```sh
+journalctl --user -u oscmix.service --no-pager | grep "INFO: starting:" | tail -1
+```
+
+It must name `~/.local/bin/alsaseqio` and `~/.local/bin/oscmix`. A path
+like `/usr/local/bin/...` is a stale install shadowing the pinned one;
+remove it (`sudo rm /usr/local/bin/oscmix /usr/local/bin/alsaseqio`).
+The session now prefers `~/.local/bin` even when the systemd user
+manager's PATH lacks it, which is how the stale copy won once: measured
+2026-08-26, the first hotplug start after boot ran a February build for
+six hours.

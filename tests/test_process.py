@@ -221,6 +221,37 @@ def test_resolve_binary_falls_back_to_the_standard_locations(monkeypatch):
     assert discovery.resolve_binary("oscmix", "OSCMIX_BIN_BACKEND") == home_bin
 
 
+def test_a_stale_path_copy_does_not_shadow_the_pinned_install(monkeypatch):
+    # Measured 2026-08-26: the first hotplug start after boot ran with
+    # the user manager's default PATH, which lacks ~/.local/bin but has
+    # /usr/local/bin -- and a stale February build there won the PATH
+    # lookup over the pinned install for six hours. The pinned location
+    # is consulted before PATH ever is.
+    from oscmix_desk import discovery
+
+    home_bin = os.path.expanduser("~/.local/bin/oscmix")
+    monkeypatch.delenv("OSCMIX_BIN_BACKEND", raising=False)
+    monkeypatch.setattr(discovery.shutil, "which",
+                        lambda name: "/usr/local/bin/" + name)
+    monkeypatch.setattr(discovery.os, "access",
+                        lambda path, mode: path in (home_bin,
+                                                    "/usr/local/bin/oscmix"))
+    assert discovery.resolve_binary("oscmix", "OSCMIX_BIN_BACKEND") == home_bin
+
+
+def test_without_a_pinned_install_the_path_lookup_still_serves(monkeypatch):
+    # No ~/.local/bin install (a from-source user, say): whatever PATH
+    # names is used, exactly as before the ordering fix.
+    from oscmix_desk import discovery
+
+    monkeypatch.delenv("OSCMIX_BIN_BACKEND", raising=False)
+    monkeypatch.setattr(discovery.shutil, "which",
+                        lambda name: "/opt/audio/bin/" + name)
+    monkeypatch.setattr(discovery.os, "access", lambda path, mode: False)
+    assert (discovery.resolve_binary("oscmix", "OSCMIX_BIN_BACKEND")
+            == "/opt/audio/bin/oscmix")
+
+
 def test_resolve_binary_returns_none_when_nothing_is_found(monkeypatch):
     from oscmix_desk import discovery
 

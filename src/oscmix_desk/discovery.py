@@ -88,10 +88,17 @@ def udp_port_listening(port: int, proc_root: Path) -> bool:
 
 
 def resolve_binary(name: str, env_var: str) -> Optional[str]:
-    """Locate a binary: env override, then PATH, then standard locations.
+    """Locate a binary: env override, then ~/.local/bin, then PATH.
 
-    The systemd user manager's PATH does not necessarily include
-    ~/.local/bin, so the fallback list checks it explicitly.
+    The pinned build lives in ~/.local/bin (install.sh puts it there),
+    and the systemd user manager's PATH need not include that directory
+    -- but it does include /usr/local/bin. With PATH consulted first, a
+    stale copy there wins exactly when it matters most: the hotplug
+    start right after boot, before the desktop session has imported the
+    login PATH. Measured 2026-08-26: that start ran a February build
+    from a pre-rename install for six hours, caught only by its enum
+    warning missing the OSC address. So the pinned location is
+    consulted before PATH, and the explicit override before everything.
     """
     override = os.environ.get(env_var)
     if override:
@@ -99,11 +106,13 @@ def resolve_binary(name: str, env_var: str) -> Optional[str]:
             return override
         log.error("%s=%s is not an executable file", env_var, override)
         return None
+    pinned = os.path.join(os.path.expanduser("~/.local/bin"), name)
+    if os.access(pinned, os.X_OK):
+        return pinned
     found = shutil.which(name)
     if found:
         return found
-    for directory in (os.path.expanduser("~/.local/bin"),
-                      "/usr/local/bin", "/usr/bin"):
+    for directory in ("/usr/local/bin", "/usr/bin"):
         candidate = os.path.join(directory, name)
         if os.access(candidate, os.X_OK):
             return candidate
