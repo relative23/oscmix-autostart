@@ -12,7 +12,7 @@ import socket
 import threading
 import time
 
-from conftest import free_udp_port, repo_file
+from conftest import free_udp_port, osc_bundle, repo_file
 
 
 def make_route(session_mod, **kwargs):
@@ -441,9 +441,8 @@ class DumpingOscmix(threading.Thread):
                     continue
                 self.order.append(path)
                 if path == "/refresh":
-                    for register in self.dump:
-                        self.sock.sendto(register,
-                                         ("127.0.0.1", self.recv_port))
+                    self.sock.sendto(osc_bundle(self.dump),
+                                     ("127.0.0.1", self.recv_port))
 
 
 def run_verify_and_repair(session_mod, routes, dump, recv_port=None,
@@ -488,28 +487,21 @@ def test_mix_is_reapplied_once_the_dump_reports_the_link_state(session_mod):
 def test_reapply_repeats_no_link_message(session_mod):
     """Only the matrix is rewritten; re-linking could restart the race.
 
-    Seen failing once in CI (run 32067475867, repeat 4 of 5) and not
-    reproduced since: 15 further CI repeats green, plus 60 single runs,
-    40 under CPU load and 6 full local suite repeats. Left as it is
-    rather than rebuilt on suspicion -- what follows is what the next
-    person should not have to work out again.
+    The old fixture sent five dump registers as separate UDP datagrams.
+    It failed once in CI (run 32067475867, repeat 4 of 5), then the same
+    mechanism returned in the 0.5.2 mutation gate: one unconfirmed
+    register took `verify_and_repair` down its retry branch and rewrote
+    the links.
 
-    **The mechanism is known.** `/playback/1/stereo` and
+    `/playback/1/stereo` and
     `/output/5/stereo` can reach the device fake here only from the
     *retry* branch of `verify_and_repair`, which fires when an expected
     register stays unconfirmed and then calls `apply_routing` -- and
-    that rewrites the links. So the assertion below holds for the
-    loss-free path, and `DumpingOscmix` does not guarantee one: it sends
-    each dump register as its own datagram.
-
-    **The cause is not.** The obvious explanation -- the receive buffer
-    overflowing -- was checked and does not hold: this dump is five
-    datagrams, and the load runs above stayed green.
-
-    If it returns, the fixture sending the dump as a single OSC bundle
-    is the change to try, because that is also what upstream does.
-    Deliberate datagram loss stays where it belongs, in
-    tests/test_faults.py, where it is injected rather than stumbled on.
+    that rewrites the links. `DumpingOscmix` now mirrors upstream by
+    returning the dump in one OSC bundle, so this loss-free test cannot
+    stumble into that branch because of scheduling between datagrams.
+    Deliberate report loss remains in tests/test_faults.py, where it is
+    injected before bundling and its degraded result is asserted.
     """
     routes = [make_route(session_mod, volume=0.0)]
     device = run_verify_and_repair(session_mod, routes,

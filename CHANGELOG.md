@@ -24,6 +24,14 @@
   the UCM profiles it used, which this release's own hardware run
   measured the hard way, twice.
 
+- **The mutation gate's loss-free device fake is loss-free now.** It
+  sent one refresh dump as five separate UDP datagrams, while upstream
+  sends an OSC bundle, and a dropped register could spuriously take the
+  verifier's legitimate retry branch. The same timing failure first
+  appeared once in CI and returned in this release run. Normal fake
+  dumps now mirror upstream with one bundle; deliberate dropped,
+  duplicated and reordered reports remain explicit fault injections.
+
 ### Changed
 
 - **The nested-options fallback in `reconcile` is gone.** `_register_for`

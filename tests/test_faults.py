@@ -5,10 +5,11 @@ problem, not a logic error: a link message overtaken by its own mix, two
 teardown races, a stub that installed its signal handler too late. So the
 adversary here is the transport and the clock, not the input.
 
-OSC over UDP has no delivery guarantee and no ordering guarantee. These
-tests take that literally -- dropping, duplicating, reordering and
-delaying datagrams -- and assert the property that has to survive all of
-it: the routing is still written, and the process still exits cleanly.
+OSC over UDP has no delivery guarantee, while an overloaded backend can
+also lose individual register events before it builds a reply. These
+tests inject dropped, duplicated, reordered and delayed reports and
+assert the property that has to survive all of it: the routing is still
+written, and the process still exits cleanly.
 """
 
 import random
@@ -18,14 +19,14 @@ import threading
 import time
 
 import pytest
-from conftest import free_udp_port
+from conftest import free_udp_port, osc_bundle
 
 
 class LossyDevice(threading.Thread):
-    """A device stand-in that mistreats the datagrams it receives.
+    """A device stand-in that mistreats reports before bundling them.
 
-    ``drop`` discards a fraction, ``duplicate`` sends replies twice, and
-    ``reorder`` buffers replies and flushes them shuffled.
+    ``drop`` discards a fraction, ``duplicate`` reports registers twice,
+    and ``reorder`` shuffles reports within the reply bundle.
     """
 
     def __init__(self, session_mod, send_port, recv_port, dump=(),
@@ -62,13 +63,13 @@ class LossyDevice(threading.Thread):
             messages += list(self.dump)
         if self.reorder:
             self.random.shuffle(messages)
-        for message in messages:
-            if self.random.random() < self.drop:
-                continue
-            try:
-                self.sock.sendto(message, ("127.0.0.1", self.recv_port))
-            except OSError:
-                return
+        messages = [message for message in messages
+                    if self.random.random() >= self.drop]
+        try:
+            self.sock.sendto(osc_bundle(messages),
+                             ("127.0.0.1", self.recv_port))
+        except OSError:
+            return
 
     def run(self):
         while not self.stopping.is_set():
@@ -129,8 +130,7 @@ def test_the_mix_is_re_applied_however_much_the_dump_loses(session_mod,
 
 
 def test_duplicated_reports_do_not_confuse_the_read_back(session_mod):
-    # UDP may deliver the same datagram twice. A register reported twice
-    # is still one register.
+    # A register reported twice is still one register.
     device = run_under(session_mod, duplicate=True)
     assert device.received.count("/mix/5/playback/1") == 1
 

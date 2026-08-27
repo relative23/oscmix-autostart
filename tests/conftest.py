@@ -12,6 +12,7 @@ which run them as real subprocesses.
 import importlib.machinery
 import importlib.util
 import socket
+import struct
 import sys
 from pathlib import Path
 
@@ -42,6 +43,15 @@ def free_udp_port():
     port = sock.getsockname()[1]
     sock.close()
     return port
+
+
+def osc_bundle(messages):
+    """Pack OSC messages into one bundle datagram."""
+    bundle = bytearray(b"#bundle\x00" + b"\x00" * 8)
+    for message in messages:
+        bundle.extend(struct.pack(">i", len(message)))
+        bundle.extend(message)
+    return bytes(bundle)
 
 
 def load_executable(name):

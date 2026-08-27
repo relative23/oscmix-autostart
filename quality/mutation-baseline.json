@@ -104,6 +104,7 @@
     "killed": 3549,
     "survived": 1377,
     "not_covered": 82,
+    "timeout": 9,
     "score": 0.72,
     "run_minutes": 74,
     "cache": "cleared before the run, as CI does",
