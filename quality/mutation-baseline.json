@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-26",
+  "recorded": "2026-08-27",
   "note": [
     "A ratio, not a count. Absolute survivor counts rise with every",
     "line added -- new code means new mutants, so a healthy change",
@@ -91,33 +91,43 @@
     "capability map landed between this and the previous entry, and the",
     "score moved by a thousandth. That is ADR 0015 doing what it was",
     "written for: new register rows land inside the exemption, so what",
-    "moves the number is assertions rather than data."
+    "moves the number is assertions rather than data.",
+    "",
+    "0.71 -> 0.72 (2026-08-27), the 0.5.2 release run, and this rise is",
+    "deletions as much as tests: reading the survivors removed a dead",
+    "branch (17 unkillable mutants left the denominator) and added",
+    "assertions where the reading found real gaps. The policy printed",
+    "'raise min_score' itself, which is what this change does."
   ],
   "measured": {
+    "total": 5017,
+    "killed": 3549,
+    "survived": 1377,
+    "not_covered": 82,
+    "score": 0.72,
+    "run_minutes": 74,
+    "cache": "cleared before the run, as CI does",
+    "scope": "register table exempt (ADR 0015)",
+    "note": [
+      "The 0.5.2 release measurement. Fewer mutants than 0.5.1 (5044 ->",
+      "5017) because the survivor-reading pass deleted the dead",
+      "nested-options branch, whose 17 mutants could not be killed by any",
+      "test; survived fell 1428 -> 1377 while killed rose 3534 -> 3549,",
+      "from the assertions that pass added (built_backend_revision, the",
+      "resolve order for backend pair and GUI, the signal naming). First",
+      "clean run of the day was destroyed mid-write by an orphaned mutmut",
+      "from a stopped run; kill the orphans before trusting a crash."
+    ]
+  },
+  "previous": {
+    "recorded": "2026-08-26",
     "total": 5044,
     "killed": 3534,
     "survived": 1428,
     "not_covered": 82,
     "score": 0.712,
-    "run_minutes": 81,
-    "cache": "cleared before the run, as CI does",
-    "scope": "register table exempt (ADR 0015)",
-    "note": [
-      "The 0.5.1 release measurement. 48 more mutants than 0.5.0, from",
-      "device_serial and built_backend_revision moving into discovery",
-      "and the channel-aware lookups gaining tests; the score rose",
-      "0.710 to 0.712."
-    ]
-  },
-  "previous": {
-    "recorded": "2026-08-25",
-    "total": 4996,
-    "killed": 3490,
-    "survived": 1424,
-    "not_covered": 82,
-    "score": 0.71,
     "why_it_moved": [
-      "The 0.5.0 release measurement."
+      "The 0.5.1 release measurement."
     ]
   },
   "confirmed_by_ci": {
@@ -138,20 +148,18 @@
       "round-trip tests, the local 0.685 did not."
     ]
   },
-  "min_score": 0.71,
+  "min_score": 0.72,
   "tolerance": 0.01,
   "floor_note": [
-    "The gate is min_score - tolerance = 0.70. That is the number that",
+    "The gate is min_score - tolerance = 0.71. That is the number that",
     "matters: the score may not fall below it. min_score is set at the",
     "measured score rounded down to the hundredth, so the policy neither",
     "fails nor nags on the run it was recorded from -- a baseline that",
     "prints 'raise me' on every CI run teaches people to ignore it.",
     "",
-    "0.012 of headroom on the measured 0.712, which is the same margin",
-    "0.69 had. The difference is what eats it: before ADR 0015 every new",
-    "register family spent some, because its rows landed in the",
-    "denominator unattributable. Now they land inside the exemption, and",
-    "what moves the score is what should -- assertions getting better or",
-    "worse."
+    "0.010 of headroom on the measured 0.720, the same order as every",
+    "raise before it. What eats headroom stayed the same: assertions",
+    "getting better or worse, because register rows land inside the",
+    "ADR 0015 exemption."
   ]
 }

@@ -88,9 +88,13 @@ a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
 the honest answer today is "turn it in the GUI, and hope nothing resets
 it" -- which is the same answer TotalMix gives, minus the snapshot.
 
-## Where we are (0.5.0 released)
+## Where we are (0.5.2 released)
 
-**0.5.0 was tagged and published on 2026-08-25.** The surface did not
+**0.5.2 was tagged on 2026-08-27**: the resolve-order fix, after a boot
+ran a February build from a pre-rename install for six hours -- closed
+for the backend pair and the GUI alike, with the corrections its second
+review demanded. 0.5.1 (2026-08-26) was the cleanup the 0.5.0 audit
+left behind. **0.5.0 was tagged and published on 2026-08-25.** The surface did not
 grow; the release proved the half of it nobody had asked the device
 about. Every settable register was written a different legal value and
 confirmed against the device's own report: **1224 of 1238 confirmed, 14
@@ -104,16 +108,25 @@ project from `oscmix-autostart` to `oscmix-desk`: the old name described
 All eleven register families are declared and measured at the device.
 Room EQ is declared **reported and not settable**, because the writes
 are ignored (upstream #33), and `/output/{ch}/phase` the same, because
-the writes never leave oscmix (upstream #34). The write sweep added
-`/input/5..8/gain` to that class: upstream's channel table gives those
-inputs a gain flag and no range, so every write is clamped to zero
+the writes never leave oscmix (upstream #34; the fix is proposed as
+PR #36 and has been through one review round). The write sweep added
+`/input/5..8/gain` to that class: upstream's channel table gave those
+inputs a gain flag and no range, so every write was clamped to zero --
+**fixed upstream on 2026-08-27** (`fdc47f7`, `gain={0, 240}`, measured
+here: 12.0 dB written and read back). The pin predates both fixes, so
+these classes change when the pin next moves (ADR 0008), not before
 (upstream [#35](https://github.com/michaelforney/oscmix/issues/35)).
 
 The five structural threats in [After
 0.4.0](#after-040-what-actually-threatens-this) are all addressed, and
-the write direction is proven. **There is no planned next release.**
-What remains open is upstream's: Room EQ writes (#33), output phase
-(#34), the gain ranges (#35), and an 802 this project cannot test.
+the write direction is proven. **There is no planned next release.** The one measured candidate for
+whenever there is: the ALSA sequencer input pool overflows for real
+(200 cells, peak 200, failures counted by the kernel), and whether
+`alsaseqio` should size it explicitly is an upstream conversation --
+after a measurement of pool 2000 under a `/refresh` burst, not before.
+What remains open is upstream's: Room EQ writes (#33), the output
+phase PR (#36, one review round done), and an 802 this project cannot
+test; the gain ranges (#35) were fixed upstream on 2026-08-27.
 
 Working and verified: playback→output and **hardware input** routing for
 mono and stereo pairs, stereo linking with the ordering that requires,

@@ -272,10 +272,16 @@ fix lands upstream and the pin moves to carry it (ADR 0008).
 [34]: https://github.com/michaelforney/oscmix/issues/34
 [36pr]: https://github.com/michaelforney/oscmix/pull/36
 
-## 5. Filed: `/input/5..8/gain` accepts writes but can never change
+## 5. Fixed upstream: `/input/5..8/gain` accepts writes but can never change
 
 **Status:** filed as [michaelforney/oscmix#35][35] on 2026-08-26. Found
-by the 0.5.0 write sweep on 2026-08-25.
+by the 0.5.0 write sweep on 2026-08-25. **Closed 2026-08-27** by the
+maintainer with `fdc47f7`: Analog 5-8 do have a gain stage ("Pre Gain",
+0.0 to 24.0 dB in the device UI), so the row gains `gain={0, 240}`.
+Confirmed on this device the same evening -- built at `fdc47f7`,
+`/input/5/gain` takes 12.0 dB and reads it back -- and said so in a
+comment on the issue. The pin predates the fix, so the register class
+here changes when the pin next moves (ADR 0008).
 
 [35]: https://github.com/michaelforney/oscmix/issues/35
 
@@ -433,6 +439,14 @@ no fake typos as a disguise; that is a watermark too.
 
 **Status:** [oscmix#36][36pr] opened 2026-08-27 -- one line in
 `device_ffucxii.c`, against `55802a6`. Fixes the defect in entry 4.
+**Review round the same day:** the maintainer read the broken guard as
+misplaced rather than wrong -- meant for `OUTPUT_REFLEVEL` with the
+`OUTPUT_HAS_REFLEVEL` flag -- and asked for exactly that. Done as
+`9a545b4`, rebased onto `fdc47f7`, and re-measured before pushing:
+phase reaches the device and reads back on analog and digital outputs;
+reflevel still writes on outputs 1-8 (a same-value write of `+13dBu`
+went out) and is dropped on the digital ones now, which carry no
+reflevel. The reply on the PR is the user's own words.
 
 The gate on `OUTPUT_PHASE` is **removed**, not corrected to
 `OUTPUT_HAS_REFLEVEL`, and the reason is measured rather than assumed:
