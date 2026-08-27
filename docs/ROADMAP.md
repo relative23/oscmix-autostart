@@ -124,11 +124,18 @@ these classes change when the pin next moves (ADR 0008), not before
 
 The five structural threats in [After
 0.4.0](#after-040-what-actually-threatens-this) are all addressed, and
-the write direction is proven. **There is no planned next release.** The one measured candidate for
-whenever there is: the ALSA sequencer input pool overflows for real
-(200 cells, peak 200, failures counted by the kernel), and whether
-`alsaseqio` should size it explicitly is an upstream conversation --
-after a measurement of pool 2000 under a `/refresh` burst, not before.
+the write direction is proven. **There is no planned next release.** The ALSA-pool question that held
+this spot is answered, and the answer is no. Measured 2026-08-28: under
+a 10-dump `/refresh` flood -- idle, under full-core spin load, under
+the suite, and under four parallel suites (the mutation gate's shape)
+-- both the service's client and a fresh one peak at 96 of 200 cells
+with zero allocation failures, on ~49,000 events per window. The
+historical `Alloc failures` are rare scheduling events inside
+~90-minute full-load windows; every register-completeness check ever
+taken here came back complete. A pool-sizing patch upstream would be a
+fix without a reproducible defect, which is the kind of report this
+project does not file. A patched `alsaseqio` (input pool 2000) exists
+on a local branch, unneeded until a measurement says otherwise.
 What remains upstream is only PR #31 (output stereo) and an 802 this
 project cannot test: in one day, 2026-08-27, the maintainer fixed the
 gain ranges (#35) and the Room EQ write range (#33), and merged our

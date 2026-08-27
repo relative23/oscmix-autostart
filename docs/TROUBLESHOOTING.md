@@ -182,7 +182,10 @@ on this setup. None of them means the desk lost state -- `oscmix-session
   report can be among the drops -- which is why applied state is read
   back and `--diff` exists, rather than trusting every report arrived.
   The kernel counts the damage in `/proc/asound/seq/clients` under the
-  client's `Input pool` (`Alloc failures`).
+  client's `Input pool` (`Alloc failures`). Measured 2026-08-28: even a
+  ten-dump `/refresh` flood under four parallel test suites peaks at
+  96 of the 200 cells with zero failures -- the overflows are rare
+  scheduling events under sustained full load, not a capacity problem.
 - `ignoring unknown sysex packet (mfr=200d ...)` -- the device sends a
   vendor SysEx that oscmix does not decode. Ignored by design.
 - `unexpected enum value -1` -- a register reports a value outside its
