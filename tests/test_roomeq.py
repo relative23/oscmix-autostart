@@ -15,7 +15,6 @@ sub-families. This file is what only Room EQ knows.
 import pytest
 
 from oscmix_desk.config import load_config
-from oscmix_desk.errors import ConfigError
 from oscmix_desk.registers import (
     UCX2,
     declared_paths,
