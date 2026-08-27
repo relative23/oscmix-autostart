@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-27",
+  "recorded": "2026-08-28",
   "note": [
     "A ratio, not a count. Absolute survivor counts rise with every",
     "line added -- new code means new mutants, so a healthy change",
@@ -97,38 +97,41 @@
     "deletions as much as tests: reading the survivors removed a dead",
     "branch (17 unkillable mutants left the denominator) and added",
     "assertions where the reading found real gaps. The policy printed",
-    "'raise min_score' itself, which is what this change does."
+    "'raise min_score' itself, which is what this change does.",
+    "",
+    "0.72 held, not raised (2026-08-28): the 0.6.0 run measured 0.713.",
+    "The fall is the price of the opened surface, and the floor at 0.71",
+    "absorbed it as designed. Reading survivors for the next real gap is",
+    "the way back up, not lowering min_score."
   ],
   "measured": {
+    "total": 5017,
+    "killed": 3511,
+    "survived": 1414,
+    "not_covered": 82,
+    "score": 0.713,
+    "run_minutes": 90,
+    "cache": "cleared before the run, as CI does",
+    "scope": "register table exempt (ADR 0015)",
+    "note": [
+      "The 0.6.0 release measurement, and the score fell 0.720 -> 0.713",
+      "while the surface grew: opening Room EQ, output phase and the",
+      "line gains added covered branches whose mutants are messages and",
+      "equivalents, and the flipped refusal tests no longer kill what",
+      "they used to. 0.003 above the floor. min_score stays 0.72 -- a",
+      "ratchet is not walked back on the release that spends headroom;",
+      "the next rise re-earns it."
+    ]
+  },
+  "previous": {
+    "recorded": "2026-08-27",
     "total": 5017,
     "killed": 3549,
     "survived": 1377,
     "not_covered": 82,
-    "timeout": 9,
     "score": 0.72,
-    "run_minutes": 74,
-    "cache": "cleared before the run, as CI does",
-    "scope": "register table exempt (ADR 0015)",
-    "note": [
-      "The 0.5.2 release measurement. Fewer mutants than 0.5.1 (5044 ->",
-      "5017) because the survivor-reading pass deleted the dead",
-      "nested-options branch, whose 17 mutants could not be killed by any",
-      "test; survived fell 1428 -> 1377 while killed rose 3534 -> 3549,",
-      "from the assertions that pass added (built_backend_revision, the",
-      "resolve order for backend pair and GUI, the signal naming). First",
-      "clean run of the day was destroyed mid-write by an orphaned mutmut",
-      "from a stopped run; kill the orphans before trusting a crash."
-    ]
-  },
-  "previous": {
-    "recorded": "2026-08-26",
-    "total": 5044,
-    "killed": 3534,
-    "survived": 1428,
-    "not_covered": 82,
-    "score": 0.712,
     "why_it_moved": [
-      "The 0.5.1 release measurement."
+      "The 0.5.2 release measurement; min_score 0.72 is set from it."
     ]
   },
   "confirmed_by_ci": {
