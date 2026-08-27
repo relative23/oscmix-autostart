@@ -169,3 +169,16 @@ def test_a_config_error_exits_two_without_restarting(session_mod, tmp_path):
     path = tmp_path / "routing.conf"
     path.write_text("[route:x]\nplayback = 1/2\noutput = nonsense\n")
     assert cli.main(["--config", str(path)]) == session_mod.EXIT_CONFIG
+
+
+def test_a_signal_death_is_named_not_just_numbered(session_module, monkeypatch,
+                                                   caplog, tmp_path):
+    # A bare "status -13" sent the first reader of the midnight crash
+    # cluster to the exit-code tables; the log now says SIGPIPE itself.
+    monkeypatch.setattr(session_module, "usb_device_present",
+                        lambda *_a: True)
+    with caplog.at_level("ERROR"):
+        code = session_module._exit_code_for(
+            -13, session_module.Config(routes=[]), tmp_path, {"stop": False})
+    assert code == session_module.EXIT_FAILURE
+    assert "status -13 (SIGPIPE)" in caplog.text

@@ -125,7 +125,7 @@ outputs.
 
 **Not applied here.** Nothing in this project reads or writes `roomeq`;
 it is not in the register model. The patch exists so the measurement is
-reproducible and so 0.4.0, which plans to declare the family, does not
-start from a folded address space.
+reproducible and so 0.4.0, which declared the family (reported and not
+settable, upstream #33), did not start from a folded address space.
 
 [32]: https://github.com/michaelforney/oscmix/issues/32

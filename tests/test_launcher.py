@@ -224,8 +224,13 @@ def test_a_non_executable_override_is_refused_rather_than_ignored(
     assert launch_mod.resolve_gtk_binary() is None
 
 
-def test_the_binary_is_found_on_the_path(launch_mod, clean_env):
-    clean_env.setattr(launch_mod.shutil, "which", lambda _n: "/usr/bin/oscmix-gtk")
+def test_the_binary_is_found_on_the_path(launch_mod, clean_env, tmp_path):
+    # No pinned install (empty HOME): PATH serves, exactly as before.
+    from oscmix_desk import discovery
+
+    clean_env.setenv("HOME", str(tmp_path))
+    clean_env.setattr(discovery.shutil, "which",
+                      lambda _n: "/usr/bin/oscmix-gtk")
     assert launch_mod.resolve_gtk_binary() == "/usr/bin/oscmix-gtk"
 
 
@@ -233,20 +238,42 @@ def test_the_known_install_directories_are_searched_when_path_misses(
         launch_mod, clean_env, tmp_path):
     # install.sh puts it in ~/.local/bin, which is not on every desktop
     # session's PATH.
+    from oscmix_desk import discovery
+
     local_bin = tmp_path / ".local" / "bin"
     local_bin.mkdir(parents=True)
     gtk = local_bin / "oscmix-gtk"
     gtk.write_text("#!/bin/sh\n")
     gtk.chmod(0o755)
-    clean_env.setattr(launch_mod.shutil, "which", lambda _n: None)
+    clean_env.setattr(discovery.shutil, "which", lambda _n: None)
     clean_env.setenv("HOME", str(tmp_path))
     assert launch_mod.resolve_gtk_binary() == str(gtk)
 
 
-def test_no_binary_anywhere_resolves_to_none(launch_mod, clean_env, tmp_path):
-    clean_env.setattr(launch_mod.shutil, "which", lambda _n: None)
+def test_a_stale_path_copy_does_not_shadow_the_pinned_gui(
+        launch_mod, clean_env, tmp_path):
+    # The backend pair had this measured on 2026-08-26; the GUI resolved
+    # through its own PATH-first copy of the lookup and kept the hole.
+    # Same rule now: the pinned install wins over whatever PATH names.
+    from oscmix_desk import discovery
+
+    local_bin = tmp_path / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    gtk = local_bin / "oscmix-gtk"
+    gtk.write_text("#!/bin/sh\n")
+    gtk.chmod(0o755)
     clean_env.setenv("HOME", str(tmp_path))
-    clean_env.setattr(launch_mod.os, "access", lambda *_a: False)
+    clean_env.setattr(discovery.shutil, "which",
+                      lambda _n: "/usr/local/bin/oscmix-gtk")
+    assert launch_mod.resolve_gtk_binary() == str(gtk)
+
+
+def test_no_binary_anywhere_resolves_to_none(launch_mod, clean_env, tmp_path):
+    from oscmix_desk import discovery
+
+    clean_env.setenv("HOME", str(tmp_path))
+    clean_env.setattr(discovery.shutil, "which", lambda _n: None)
+    clean_env.setattr(discovery.os, "access", lambda *_a: False)
     assert launch_mod.resolve_gtk_binary() is None
 
 

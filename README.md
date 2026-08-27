@@ -369,9 +369,10 @@ stereo-link state machine, which is what pins down the ordering the mixer
 matrix depends on.
 
 Two gates exist because this project got burned by exactly what they
-catch. The Python matrix runs 3.9 through 3.13: a test helper that shadowed
-a private `threading.Thread` attribute passed on 3.14 and failed on
-everything older. And `make flake` repeats the suite, because the tests
+catch. The Python matrix runs 3.9 through 3.14: a test helper that shadowed
+a private `threading.Thread` attribute failed on 3.13 alone -- the
+colliding name exists only there -- and passed on 3.11 and 3.14, so no
+local run on one interpreter could have caught it. And `make flake` repeats the suite, because the tests
 bind real UDP sockets and drive background threads, where a teardown race
 survived several consecutive green runs.
 

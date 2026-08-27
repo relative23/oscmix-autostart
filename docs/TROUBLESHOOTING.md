@@ -175,10 +175,14 @@ on this setup. None of them means the desk lost state -- `oscmix-session
 --diff` is the check that would show it if it had (section 5).
 
 - `snd_seq_event_input: No space left on device` -- the ALSA sequencer
-  input buffer overflowed. The device streams ~880 meter datagrams a
-  second, and a burst (a `/refresh` dump, a second client) can outrun
-  the pool. `alsaseqio` treats it as non-fatal and keeps reading; what
-  is lost are meter events, not the desk's registers.
+  input pool overflowed and events were dropped; ALSA flushes the input
+  FIFO on this error, so what was queued at that moment is gone.
+  `alsaseqio` treats it as non-fatal and keeps reading. By sheer volume
+  the queue is meter traffic (~880 datagrams a second), but a register
+  report can be among the drops -- which is why applied state is read
+  back and `--diff` exists, rather than trusting every report arrived.
+  The kernel counts the damage in `/proc/asound/seq/clients` under the
+  client's `Input pool` (`Alloc failures`).
 - `ignoring unknown sysex packet (mfr=200d ...)` -- the device sends a
   vendor SysEx that oscmix does not decode. Ignored by design.
 - `unexpected enum value -1` -- a register reports a value outside its
@@ -195,8 +199,50 @@ journalctl --user -u oscmix.service --no-pager | grep "INFO: starting:" | tail -
 
 It must name `~/.local/bin/alsaseqio` and `~/.local/bin/oscmix`. A path
 like `/usr/local/bin/...` is a stale install shadowing the pinned one;
-remove it (`sudo rm /usr/local/bin/oscmix /usr/local/bin/alsaseqio`).
+remove it (`sudo rm /usr/local/bin/{oscmix,alsaseqio,oscmix-gtk}`).
 The session now prefers `~/.local/bin` even when the systemd user
 manager's PATH lacks it, which is how the stale copy won once: measured
 2026-08-26, the first hotplug start after boot ran a February build for
 six hours.
+
+## 9. Named sinks silent, Fireface missing from the sink list
+
+Symptom: sound settings offer only HDMI/onboard outputs; the `oscmix.*`
+sinks may still be listed but play into nothing; `verify-hardware`
+fails every route with "tone only 0.0 dB above what was already
+playing" or the response column reads `-/-`.
+
+Check the card's PipeWire profile:
+
+```sh
+wpctl status   # Settings -> no Fireface under Sinks
+pw-dump | grep -A2 alsa_card.usb-RME   # active_profile
+```
+
+`active_profile=off` with only `off` and `pro-audio` on offer means a
+system update changed the ALSA UCM profiles. Measured 2026-08-27: an
+`alsa-ucm-conf` upgrade retired the `Direct`/`HiFi` profiles this
+device used; WirePlumber's stored choice (`Direct`) no longer existed,
+so it fell back to `off` at the next boot -- no sink node, and the
+loopback sinks' `target.object` named a node that was gone.
+
+The recovery, in this order:
+
+```sh
+wpctl set-profile <device-id> 1    # pro-audio; persisted by WirePlumber
+sleep 5                            # let the sink node publish its layout
+oscmix-session --pipewire-sinks > ~/.config/pipewire/pipewire.conf.d/oscmix-sinks.conf
+systemctl --user restart pipewire wireplumber pipewire-pulse
+```
+
+The `sleep` is not decoration: regenerating in the first seconds after
+the profile switch found the sink with no channel layout yet, and the
+generator fell back to 7.1 surround position names (`FC`, `LFE`) that
+do not exist on the device's `AUX0..AUX19` map -- two of three sinks
+silent, with everything looking installed. The generator's log line
+says which case you got: `(20-channel channel layout)` is right,
+`(unknown channel layout)` means regenerate once the sink is up.
+
+The backend and `routing.conf` are not involved: the mixer state was
+intact throughout, this is purely the desktop-audio path into playback
+channels.

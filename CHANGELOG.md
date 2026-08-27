@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 (2026-08-27)
 
 ### Fixed
 
@@ -11,10 +11,18 @@
   reboot ran a February build from a pre-rename install, for six hours,
   caught only by its enum warning missing the OSC address upstream
   added in `05621e5`. `~/.local/bin` is now consulted before PATH (the
-  `OSCMIX_BIN_*` override still first), two tests pin the order, and
-  `install.sh` warns when a shadowing copy exists in `/usr/local/bin`.
+  `OSCMIX_BIN_*` override still first) -- for the backend pair **and for
+  `oscmix-gtk`**, whose launcher carried its own PATH-first copy of the
+  lookup and would have kept the hole; it now delegates to the one
+  rule. Tests pin the order for both, `install.sh` warns when a
+  shadowing copy of any of the three sits in `/usr/local/bin`, and the
+  supervisor names the signal when the backend dies of one
+  ("status -13 (SIGPIPE)") instead of leaving the number to be decoded.
   TROUBLESHOOTING gained the diagnosis, and the journal lines that look
-  alarming and are not.
+  alarming and are not -- plus the recovery for a Fireface whose
+  PipeWire profile went `off` after an `alsa-ucm-conf` update retired
+  the UCM profiles it used, which this release's own hardware run
+  measured the hard way, twice.
 
 ### Changed
 

@@ -171,7 +171,13 @@ def _exit_code_for(returncode: int, config: Config, sysfs_usb: Path,
     elif returncode == 0:
         log.info("backend exited cleanly")
     else:
-        log.error("backend exited with status %d", returncode)
+        suffix = ""
+        if returncode < 0:
+            try:
+                suffix = " (%s)" % signal.Signals(-returncode).name
+            except ValueError:
+                pass
+        log.error("backend exited with status %d%s", returncode, suffix)
         return EXIT_FAILURE
     sd_notify("READY=1")
     return EXIT_OK

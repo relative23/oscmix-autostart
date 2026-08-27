@@ -13,7 +13,6 @@ import configparser
 import logging
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -21,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from .constants import DEFAULT_OSC_PORT, DEFAULT_USB_ID
-from .discovery import udp_port_listening, usb_device_present
+from .discovery import resolve_binary, udp_port_listening, usb_device_present
 
 BACKEND_WAIT = float(os.environ.get("OSCMIX_BACKEND_WAIT", "5"))
 SERVICE = "oscmix.service"
@@ -102,18 +101,15 @@ def ensure_backend(port: int, proc_root: Path) -> bool:
 
 
 def resolve_gtk_binary() -> Optional[str]:
-    override = os.environ.get("OSCMIX_BIN_GTK")
-    if override:
-        return override if os.access(override, os.X_OK) else None
-    found = shutil.which("oscmix-gtk")
-    if found:
-        return found
-    for directory in (os.path.expanduser("~/.local/bin"),
-                      "/usr/local/bin", "/usr/bin"):
-        candidate = os.path.join(directory, "oscmix-gtk")
-        if os.access(candidate, os.X_OK):
-            return candidate
-    return None
+    """The GUI binary, resolved exactly like the backend pair.
+
+    This used to ask PATH first with its own copy of the lookup, which
+    left the GUI open to the same shadowing the backend was measured to
+    hit on 2026-08-26: a stale root-owned copy in /usr/local/bin wins
+    whenever the session's PATH lacks ~/.local/bin. One rule, one
+    place -- see resolve_binary for the ordering and the measurement.
+    """
+    return resolve_binary("oscmix-gtk", "OSCMIX_BIN_GTK")
 
 
 def main() -> int:

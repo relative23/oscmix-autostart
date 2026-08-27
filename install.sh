@@ -193,7 +193,7 @@ fi
 # session prefers $BIN_DIR since the 2026-08-26 shadowing incident, but
 # a stale copy is still a trap for manual PATH use -- say so instead of
 # silently coexisting.
-for tool in oscmix alsaseqio; do
+for tool in oscmix alsaseqio oscmix-gtk; do
     if [ -x "/usr/local/bin/$tool" ] && [ -e "$BIN_DIR/$tool" ]         && ! cmp -s "/usr/local/bin/$tool" "$BIN_DIR/$tool"; then
         warn "stale $tool in /usr/local/bin differs from $BIN_DIR/$tool; remove it: sudo rm /usr/local/bin/$tool"
     fi
