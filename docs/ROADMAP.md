@@ -107,9 +107,11 @@ project from `oscmix-autostart` to `oscmix-desk`: the old name described
 
 All eleven register families are declared and measured at the device.
 Room EQ is declared **reported and not settable**, because the writes
-are ignored (upstream #33), and `/output/{ch}/phase` the same, because
-the writes never leave oscmix (upstream #34; the fix is proposed as
-PR #36 and has been through one review round). The write sweep added
+were ignored (upstream #33 -- **fixed upstream 2026-08-27** in
+`f2fdd5e`, a split write range at `0x3400`, confirmed here at the
+device), and `/output/{ch}/phase` the same, because the writes never
+left oscmix (upstream #34 -- **fixed by our PR #36, merged 2026-08-27**
+as `9dba36f`). The write sweep added
 `/input/5..8/gain` to that class: upstream's channel table gave those
 inputs a gain flag and no range, so every write was clamped to zero --
 **fixed upstream on 2026-08-27** (`fdc47f7`, `gain={0, 240}`, measured
@@ -124,9 +126,11 @@ whenever there is: the ALSA sequencer input pool overflows for real
 (200 cells, peak 200, failures counted by the kernel), and whether
 `alsaseqio` should size it explicitly is an upstream conversation --
 after a measurement of pool 2000 under a `/refresh` burst, not before.
-What remains open is upstream's: Room EQ writes (#33), the output
-phase PR (#36, one review round done), and an 802 this project cannot
-test; the gain ranges (#35) were fixed upstream on 2026-08-27.
+What remains upstream is only PR #31 (output stereo) and an 802 this
+project cannot test: in one day, 2026-08-27, the maintainer fixed the
+gain ranges (#35) and the Room EQ write range (#33), and merged our
+output-phase fix (#36) -- every one confirmed at this device. The
+register classes here change when the pin next moves (ADR 0008).
 
 Working and verified: playback→output and **hardware input** routing for
 mono and stereo pairs, stereo linking with the ordering that requires,

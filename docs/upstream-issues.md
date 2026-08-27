@@ -236,9 +236,16 @@ too: **name the recording, or do not make the claim.**
 
 [oscmix]: https://github.com/michaelforney/oscmix
 
-## 3. Filed: Room EQ writes are sent but the device ignores them
+## 3. Fixed upstream: Room EQ writes are sent but the device ignores them
 
 **Status:** filed as [michaelforney/oscmix#33][33] on 2026-08-24.
+
+**Closed 2026-08-27** by the maintainer with `f2fdd5e`: the UCX II
+takes Room EQ *writes* at `0x3400` while *reporting* the family from
+`0x35D0` -- a split range, which is why writes to the reported block
+changed nothing. Confirmed on this device the same night: at
+`f2fdd5e`, `/output/1/roomeq/band1gain` takes -6.0 dB
+(`setreg 3403 FFC4`) and reads it back, where it had always read 0.0.
 
 Distinct from #32, which was about *reading* the block: with the fold
 fixed and all 640 Room EQ registers readable, writing any of them is
@@ -437,9 +444,9 @@ no fake typos as a disguise; that is a watermark too.
 
 ## 8. Fix proposed: output phase, measured on every output
 
-**Status:** [oscmix#36][36pr] opened 2026-08-27 -- one line in
-`device_ffucxii.c`, against `55802a6`. Fixes the defect in entry 4.
-**Review round the same day:** the maintainer read the broken guard as
+**Status:** [oscmix#36][36pr] opened 2026-08-27, **merged the same day
+as `9dba36f`** after one review round. Fixes the defect in entry 4.
+**The review round:** the maintainer read the broken guard as
 misplaced rather than wrong -- meant for `OUTPUT_REFLEVEL` with the
 `OUTPUT_HAS_REFLEVEL` flag -- and asked for exactly that. Done as
 `9a545b4`, rebased onto `fdc47f7`, and re-measured before pushing:
