@@ -351,9 +351,13 @@ of upstream, none pushed since 2026-08-03):
   ("add durec regs (guess)"). The fork also reworks `oscmix.c` itself
   and carries a UFX+ table.
 
-One thing looks like #35's mirror image: **Mic/Inst 9-12 carry no
-`INPUT_HAS_GAIN`**, yet those are the 802's remote-controllable
-preamps. Asked [in the same thread][35c2], together with the three
+One thing looked like #35's mirror image: **Mic/Inst 9-12 carry no
+`INPUT_HAS_GAIN`**. Answered by `huddx01` on 2026-08-28: it is not --
+the 802 (legacy and, to his knowledge, the FS models) has *physical*
+gain knobs on those channels, no digital gain and no reflevel, same
+for the phones outs. The missing flag is correct, and the question
+prompted him to fix his wiki. Closed without a patch, which is the
+right outcome for a question. Asked [in the same thread][35c2], together with the three
 measured write-path behaviours (no echo on the written path, bursts
 drop writes, out-of-range is refused not clamped) that would otherwise
 produce false results when he verifies his table.
