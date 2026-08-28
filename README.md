@@ -21,7 +21,7 @@ makes the desktop integration disappear.
 
 | Piece | What it does |
 |---|---|
-| `routing.conf` | the desk as a text file: routes, faders, per-channel state, EQ, dynamics, low cut, auto level, crossfeed, reverb, echo, control room, clock |
+| `routing.conf` | the desk as a text file: routes, faders, per-channel state, EQ, room EQ, dynamics, low cut, auto level, crossfeed, reverb, echo, control room, clock |
 | `--diff` | what an apply would change, without changing it |
 | `--dump-config` | the desk you have, as the file that reproduces it |
 | `--snapshot` | every register the device reports, for comparing two moments |
@@ -48,7 +48,7 @@ the device's own meters; that set the standard the project has been held to
 since.
 
 - **Every settable register is proven to accept a write**, not assumed
-  to: a sweep writes each of the 1238 a different legal value and
+  to: a sweep writes each of the 1902 a different legal value and
   confirms the device's own report, with per-register verdicts in
   [docs/evidence/write-sweep-ucx2.json](docs/evidence/write-sweep-ucx2.json).
   It found two defects in this project's own register model and one
