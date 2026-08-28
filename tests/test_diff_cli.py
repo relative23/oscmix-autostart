@@ -12,7 +12,7 @@ do with the answer.
 
 import socket
 
-from conftest import free_udp_port
+from conftest import free_udp_port, osc_bundle
 from test_dump_config_cli import FakeBackend, dump_of
 
 from oscmix_desk import cli
@@ -71,8 +71,8 @@ class RecordingBackend(FakeBackend):
                     continue
                 self.received.append(path)
                 if path == "/refresh":
-                    for register in self.dump:
-                        self.sock.sendto(register, ("127.0.0.1", self.recv_port))
+                    self.sock.sendto(osc_bundle(self.dump),
+                                     ("127.0.0.1", self.recv_port))
 
 
 #: What a device would report if it already held the config above.
@@ -300,3 +300,13 @@ def test_only_diff_can_return_it(session_mod, capsys, tmp_path):
     asked for"."""
     code, _out = run_snapshot(session_mod, capsys, tmp_path, MIXED)
     assert code == 0
+
+
+def test_two_port_draws_never_collide():
+    """send == recv is a backend answering itself and a CLI reading
+    silence; free_udp_port now remembers its recent draws, and this
+    holds it to that."""
+    from conftest import free_udp_port
+
+    for _ in range(500):
+        assert free_udp_port() != free_udp_port()

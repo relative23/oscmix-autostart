@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Two test-harness timing holes, closed at the source.** The flake
+  gate caught `test_a_rewrite_alone_does_not_make_it_differ` reading
+  empty stdout once in CI (run 33161748663): `free_udp_port()`'s
+  bind-close-return lets the OS hand the same port out twice, so a
+  send/recv pair can collide -- a fake backend answering itself while
+  the CLI reads silence. The helper now remembers its recent draws,
+  which heals every one of the 34 two-port call sites centrally, and a
+  regression test holds it there. The shared `FakeBackend` and the
+  diff CLI's recording fake also deliver dumps as one OSC bundle now,
+  as upstream does and as the apply-routing fixture already did --
+  deliberate dropped, duplicated and reordered reports stay per-datagram
+  fault injections. Nothing shipped changes; 0.6.0's own CI was green.
+
 ## 0.6.0 (2026-08-28)
 
 The pin moves to upstream `f2fdd5e`, and three register families move

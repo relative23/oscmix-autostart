@@ -14,7 +14,7 @@ import socket
 import threading
 import time
 
-from conftest import free_udp_port
+from conftest import free_udp_port, osc_bundle
 
 from oscmix_desk import cli
 
@@ -49,8 +49,8 @@ class FakeBackend(threading.Thread):
                 except ValueError:
                     continue
                 if path == "/refresh":
-                    for register in self.dump:
-                        self.sock.sendto(register, ("127.0.0.1", self.recv_port))
+                    self.sock.sendto(osc_bundle(self.dump),
+                                     ("127.0.0.1", self.recv_port))
 
 
 def dump_of(session_mod, registers):

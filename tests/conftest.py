@@ -9,6 +9,7 @@ which run them as real subprocesses.
 ``if __name__ == "__main__"`` guard keeps the import side-effect free.
 """
 
+import collections
 import importlib.machinery
 import importlib.util
 import socket
@@ -36,13 +37,27 @@ def repo_file(*parts):
     raise FileNotFoundError("/".join(parts))
 
 
+_recent_ports = collections.deque(maxlen=32)
+
+
 def free_udp_port():
-    """An ephemeral UDP port that was free a moment ago."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-    return port
+    """An ephemeral UDP port that was free a moment ago.
+
+    The bind-close-return pattern lets the OS hand the same port out
+    twice in a row, and callers draw pairs -- send == recv means a test
+    backend answering itself and a CLI reading total silence, which is
+    how test_a_rewrite_alone_does_not_make_it_differ failed once in
+    CI's flake gate (run 33161748663) with empty stdout. Remembering
+    the last few draws makes a pair collision impossible.
+    """
+    while True:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        if port not in _recent_ports:
+            _recent_ports.append(port)
+            return port
 
 
 def osc_bundle(messages):
