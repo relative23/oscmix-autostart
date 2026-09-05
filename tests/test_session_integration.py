@@ -314,6 +314,68 @@ def test_full_startup_verification_notify_and_shutdown(tmp_path, session_mod):
         terminate(proc)
 
 
+CHANNEL_ONLY_CONF = """\
+[osc]
+port = {port}
+recv-port = {recv_port}
+
+[input:3]
+gain = 12.0
+hi-z = true
+
+[clock]
+source = Internal
+"""
+
+
+def test_a_config_with_no_routes_is_applied_at_start(tmp_path, session_mod):
+    """Channel and global state alone must reach the device at start.
+
+    The session skipped the apply whenever `config.routes` was empty,
+    a guard from 0.1.0 that outlived the surface it was written for:
+    a file of `[input:N]` and `[clock]` sections parsed, printed its
+    writes in `--dry-run`, and wrote nothing at start. The stub replays
+    what it received on `/refresh`, so the read-back confirms exactly
+    what went out.
+    """
+    port, recv_port = free_udp_port(), free_udp_port()
+    env, stub_dir, _ = make_env(
+        tmp_path, with_client=True, with_usb=True, port=port,
+        reply_port=recv_port,
+    )
+    config = tmp_path / "routing.conf"
+    config.write_text(CHANNEL_ONLY_CONF.format(port=port, recv_port=recv_port))
+
+    proc = subprocess.Popen(
+        [sys.executable, str(SESSION_BIN), "--config", str(config),
+         "--timeout", "5"],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        datagram_log = stub_dir / "datagrams.hex"
+        assert wait_for(
+            lambda: datagram_log.exists()
+            and len(datagram_log.read_text().splitlines()) >= 4
+        ), "channel state never reached the backend"
+        received = [bytes.fromhex(line)
+                    for line in datagram_log.read_text().splitlines()]
+        # No links and no mix: the three settings, in file order, then
+        # the verification's state request.
+        assert received[:4] == [
+            session_mod.encode_osc("/input/3/gain", "f", 12.0),
+            session_mod.encode_osc("/input/3/hi-z", "i", 1),
+            session_mod.encode_osc("/clock/source", "i", 0),
+            session_mod.encode_osc("/refresh"),
+        ]
+        proc.send_signal(signal.SIGTERM)
+        assert proc.wait(timeout=10) == 0
+        stderr = proc.stderr.read()
+        assert "routing verified against device state" in stderr
+        assert "untouched" not in stderr
+    finally:
+        terminate(proc)
+
+
 def test_sigterm_ignoring_backend_gets_sigkilled(tmp_path):
     port = free_udp_port()
     env, stub_dir, _ = make_env(

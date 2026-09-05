@@ -110,7 +110,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if config_path is None:
         log.info("no routing.conf found; using defaults without routing")
     else:
-        log.info("configuration: %s (%d route(s))", config_path, len(config.routes))
+        log.info("configuration: %s (%d route(s), %d channel setting(s), "
+                 "%d global setting(s))", config_path, len(config.routes),
+                 len(config.channels), len(config.globals))
 
     if args.device:
         config.device_name = args.device

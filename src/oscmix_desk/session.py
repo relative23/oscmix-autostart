@@ -133,8 +133,16 @@ def _apply_and_verify(child: "subprocess.Popen[bytes]", config: Config,
     three points, with nobody looking again. See
     docs/decisions/0009-verifier-stop-contract.md.
     """
-    if not config.routes:
-        log.info("no routes configured; leaving mixer state untouched")
+    if not desired(config):
+        # Everything the config declares, not only its routes. Since
+        # 0.4.0 a file may consist of `[input:3]`, `[eq:input:3]` or
+        # `[clock]` sections alone, and a check on `config.routes` skipped
+        # every such file at start -- while `--dry-run` printed its
+        # writes and a SIGHUP reload sent them. The same shape as the
+        # two half-config defects fixed in 0.3.0: a function that looked
+        # at one part of the config and treated the rest as empty.
+        log.info("nothing declared in the config; leaving mixer state "
+                 "untouched")
         return None
 
     apply_routing(config, config.osc_port, config.osc_recv_port)
