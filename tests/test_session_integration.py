@@ -181,7 +181,33 @@ def make_env(tmp_path, *, with_client, with_usb, port=None, reply_port=None):
         "OSCMIX_LINK_SYNC_DELAY": "0.2",
     })
     _enable_subprocess_coverage(env)
+    _guard_systemctl(tmp_path, env)
     return env, stub_dir, backend
+
+
+def _guard_systemctl(tmp_path, env):
+    """Keep every subprocess here away from the real `systemctl`.
+
+    The launcher starts oscmix.service when the backend is not up, and
+    one test ran it with a faked device and the real PATH: on a machine
+    with the project installed that started the *developer's* user
+    service. Observed 2026-09-05 -- `Starting oscmix.service` in the
+    journal with no USB event, 30 s of waiting for a device the fake
+    /proc could not show, exit 0. Harmless that day, and a test suite
+    that arms somebody's desk is not harmless.
+
+    A stub first on PATH turns every call into a logged failure, which is
+    what a runner without a user manager answers anyway. A test that
+    needs specific answers puts its own stub in front of this one.
+    """
+    guard_bin = tmp_path / "guard-bin"
+    guard_bin.mkdir()
+    guard = guard_bin / "systemctl"
+    guard.write_text("#!/bin/sh\n"
+                     'echo "$@" >> "%s"\n'
+                     "exit 1\n" % (tmp_path / "systemctl-guard.log"))
+    guard.chmod(0o755)
+    env["PATH"] = "%s:%s" % (guard_bin, env["PATH"])
 
 
 def _enable_subprocess_coverage(env):
@@ -412,6 +438,12 @@ def test_launcher_reports_a_failing_exec_instead_of_crashing(tmp_path):
     assert result.returncode == 1
     assert "could not execute" in result.stderr
     assert "Traceback" not in result.stderr
+    # The device and the client are faked, so the launcher tries to
+    # start the service -- and that attempt must land on the guard in
+    # make_env, not on the machine's own user manager. This is the test
+    # that once started it for real.
+    guarded = (tmp_path / "systemctl-guard.log").read_text().splitlines()
+    assert "--user start --no-block oscmix.service" in guarded
 
 
 def test_the_stub_dies_with_the_session_that_started_it(tmp_path):
