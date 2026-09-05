@@ -191,8 +191,11 @@ def test_a_signal_death_is_named_not_just_numbered(session_module, monkeypatch,
 class RunningChild:
     """A backend that is still up, so a verifier may start."""
 
+    def __init__(self):
+        self.returncode = None
+
     def poll(self):
-        return None
+        return self.returncode
 
 
 def test_a_config_without_routes_is_still_applied(session_module, monkeypatch):
@@ -204,25 +207,52 @@ def test_a_config_without_routes_is_still_applied(session_module, monkeypatch):
     An `[input:3]` or `[clock]` section in such a file parsed, showed in
     `--dry-run`, went out on a SIGHUP reload, and never reached the
     device at start. The check is on what the config *declares* now.
+
+    The rest of the assertions pin what the function hands on, because
+    the first version of this test checked only "apply was called" and
+    the mutation run showed 19 survivors in the function -- the ports,
+    the stop check, the thread -- all of them newly covered and none of
+    them looked at.
     """
     from oscmix_desk import ChannelSetting, Config
     from oscmix_desk.config import GlobalSetting
 
     applied = []
+    verified = []
     monkeypatch.setattr(session_module, "apply_routing",
-                        lambda config, *a, **k: applied.append(config))
+                        lambda *args, **kwargs: applied.append((args, kwargs)))
     monkeypatch.setattr(session_module, "verify_and_repair",
-                        lambda *a, **k: None)
+                        lambda *args, **kwargs: verified.append((args, kwargs)))
     monkeypatch.setattr(session_module, "VERIFY_SETTLE", 0.0)
 
-    config = Config(channels=[ChannelSetting("input", 3, "gain", 12.0)],
+    child = RunningChild()
+    stop = {"stop": False}
+    config = Config(osc_port=7301, osc_recv_port=8301,
+                    channels=[ChannelSetting("input", 3, "gain", 12.0)],
                     globals=[GlobalSetting("clock", "source", "Internal")])
-    verifier = session_module._apply_and_verify(RunningChild(), config,
-                                                {"stop": False})
-    assert applied == [config]
+    verifier = session_module._apply_and_verify(child, config, stop)
+
+    # Written on the configured ports, not on defaults.
+    assert applied == [((config, 7301, 8301), {})]
+    # Verified on a thread the session can outlive (ADR 0009): a daemon,
+    # named for thread dumps, running the verifier exactly once.
     assert verifier is not None, "a config with state to verify got no verifier"
+    assert verifier.daemon is True
+    assert verifier.name == "verify"
     verifier.join(timeout=5)
     assert not verifier.is_alive()
+    assert len(verified) == 1
+    (verified_config, should_stop), kwargs = verified[0]
+    assert verified_config is config
+    assert kwargs == {}
+    # The stop check carries both reasons to stop writing: a shutdown
+    # request, and a backend that is already gone.
+    assert should_stop() is False
+    stop["stop"] = True
+    assert should_stop() is True
+    stop["stop"] = False
+    child.returncode = 1
+    assert should_stop() is True
 
 
 def test_an_empty_config_leaves_the_desk_alone(session_module, monkeypatch,
