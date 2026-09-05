@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-28",
+  "recorded": "2026-09-05",
   "note": [
     "A ratio, not a count. Absolute survivor counts rise with every",
     "line added -- new code means new mutants, so a healthy change",
@@ -102,36 +102,71 @@
     "0.72 held, not raised (2026-08-28): the 0.6.0 run measured 0.713.",
     "The fall is the price of the opened surface, and the floor at 0.71",
     "absorbed it as designed. Reading survivors for the next real gap is",
-    "the way back up, not lowering min_score."
+    "the way back up, not lowering min_score.",
+    "",
+    "0.6.1 (2026-09-05): 0.713 -> 0.714, and the interesting number is",
+    "not_covered, which fell 82 -> 50. The 0.6.1 fix made",
+    "`_apply_and_verify` apply a config that declares no route, and the",
+    "unit test written for that rule is the first test to drive the",
+    "function *in process*. Everything reaching it before went through",
+    "the subprocess integration tests, which load the checked-out source",
+    "and not the mutant (ADR 0005), so its mutants scored as covered by",
+    "nothing at all.",
+    "",
+    "32 mutants therefore entered the judged pool for the first time, and",
+    "the first run judged 19 of them survivors: the test asserted that",
+    "apply_routing had been called and that a thread came back, so the",
+    "ports handed to the apply, the stop check given to the verifier and",
+    "the thread's target, name and daemon flag could all be mutated in",
+    "silence. Reading them is what the nightly run is for, and it worked",
+    "exactly as ADR 0005 says it should -- the score would have been fine",
+    "either way.",
+    "",
+    "The strengthened test kills all 19, confirmed twice: by re-running",
+    "those mutants by name, and by this clean full run, in which no",
+    "`_apply_and_verify` mutant survives. The aggregate moved 15 rather",
+    "than 19 between the two runs, so four kills were lost elsewhere in",
+    "the same interval; run 1's per-mutant results were not kept, so they",
+    "cannot be attributed. Timing-dependent mutants drift by a few either",
+    "way here, which is the standing reason this file says to read the",
+    "survivors rather than the number."
   ],
   "measured": {
+    "total": 5026,
+    "killed": 3549,
+    "survived": 1419,
+    "not_covered": 50,
+    "timeout": 8,
+    "score": 0.714,
+    "run_minutes": 74,
+    "cache": "cleared before the run, as CI does",
+    "scope": "register table exempt (ADR 0015)",
+    "note": [
+      "The 0.6.1 release measurement, on a quiet machine. The source",
+      "grew by nine mutants (the desired() check that fixes the",
+      "no-routes apply, and the widened start-up log line); the rest of",
+      "the movement is the coverage shift described above.",
+      "",
+      "min_score stays 0.72 and is not lowered to the measured score.",
+      "The rule in floor_note -- set min_score at the measurement",
+      "rounded down -- exists so the policy does not nag on the run it",
+      "was recorded from, and it is a rule for *raising*. 0.6.0 already",
+      "declined to walk the ratchet back at 0.713, and 0.714 is a step",
+      "in the right direction rather than an argument for lowering the",
+      "bar to meet it. The floor at 0.710 is what the run had to clear,",
+      "and cleared by 0.004."
+    ]
+  },
+  "previous": {
+    "recorded": "2026-08-28",
     "total": 5017,
     "killed": 3511,
     "survived": 1414,
     "not_covered": 82,
     "score": 0.713,
-    "run_minutes": 90,
-    "cache": "cleared before the run, as CI does",
-    "scope": "register table exempt (ADR 0015)",
-    "note": [
-      "The 0.6.0 release measurement, and the score fell 0.720 -> 0.713",
-      "while the surface grew: opening Room EQ, output phase and the",
-      "line gains added covered branches whose mutants are messages and",
-      "equivalents, and the flipped refusal tests no longer kill what",
-      "they used to. 0.003 above the floor. min_score stays 0.72 -- a",
-      "ratchet is not walked back on the release that spends headroom;",
-      "the next rise re-earns it."
-    ]
-  },
-  "previous": {
-    "recorded": "2026-08-27",
-    "total": 5017,
-    "killed": 3549,
-    "survived": 1377,
-    "not_covered": 82,
-    "score": 0.72,
     "why_it_moved": [
-      "The 0.5.2 release measurement; min_score 0.72 is set from it."
+      "The 0.6.0 release measurement: the opened surface spent",
+      "headroom and min_score was held at 0.72 rather than raised."
     ]
   },
   "confirmed_by_ci": {

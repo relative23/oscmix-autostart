@@ -1,6 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 (2026-09-05)
+
+Two defects found by auditing the tree rather than by a failing test,
+one of them shipped since 0.4.0. The pin does not move.
+
+### Fixed
+
+- **A config with no `[route:*]` section was never applied at start.**
+  `session._apply_and_verify` returned before `apply_routing` whenever
+  `config.routes` was empty -- a guard from 0.1.0, when routes were all
+  a file could say, that survived every release the surface grew in.
+  Since 0.4.0 a file may consist of `[input:3]`, `[eq:input:3]` or
+  `[clock]` sections alone; such a file parsed, printed its writes in
+  `--dry-run` (which promises to print what the apply sends, roadmap
+  item G), went out on `systemctl --user reload`, and wrote nothing on
+  boot or hotplug, with the journal saying `no routes configured;
+  leaving mixer state untouched`. The check is on what the config
+  *declares* now, routes, channel state and global state alike, and
+  says `nothing declared in the config` only when that is empty.
+  Pinned by a unit test on the rule and an end-to-end test that starts
+  the session on a channel-only file and reads the three writes off the
+  stub backend, then the read-back confirming them. The start-up log
+  line counts channel and global settings beside routes now.
+
+- **One integration test started the developer's real `oscmix.service`.**
+  `test_launcher_reports_a_failing_exec_instead_of_crashing` ran
+  `bin/oscmix-launch` with a faked device and client but the real
+  `PATH`, so the launcher asked the machine's own user manager whether
+  the service was up and, when it was not, started it: observed in the
+  journal on 2026-09-05 as `Starting oscmix.service` with no USB event,
+  30 s of waiting for a device the fake `/proc` could not show, exit 0.
+  `make_env` now puts a refusing `systemctl` stub first on `PATH` for
+  every subprocess test, and the test that leaked asserts its start
+  attempt landed on the stub. The one test that needs specific answers
+  keeps its own stub in front.
 
 ### Changed
 
@@ -16,6 +50,30 @@
   as upstream does and as the apply-routing fixture already did --
   deliberate dropped, duplicated and reordered reports stay per-datagram
   fault injections. Nothing shipped changes; 0.6.0's own CI was green.
+
+- **The mutation run's survivors were read, as they are meant to be.**
+  Fixing the apply above made a unit test drive `_apply_and_verify` in
+  process for the first time -- everything reaching it before went
+  through the subprocess integration tests, which load the checked-out
+  source and never the mutant (ADR 0005). 32 mutants entered the judged
+  pool with that, and 19 of them survived: the test asserted that the
+  apply had been called and that a thread came back, so the ports handed
+  to the apply, the stop check given to the verifier and the thread's
+  target, name and daemon flag could all be mutated in silence. The
+  test pins each of them now, and the re-run kills all 19. Score 0.714
+  against a floor of 0.710; `not_covered` fell 82 to 50.
+
+- **Docs caught up.** The README counted "five issues, two fixed"
+  upstream; all five are fixed at the pin, and `docs/upstream-issues.md`
+  entry 2 now says so. The README's pin table listed `48v` beside the
+  settable options although no config can set it (the parser refuses
+  it by design), which invited exactly the line it refuses; it is named
+  as modelled-but-unsettable instead. `config/routing.conf.example` was
+  still headed `oscmix-autostart`, recommended `restart` where `reload`
+  is the reconcile, and showed none of the nested or global sections
+  that exist since 0.4.0; it does now. TROUBLESHOOTING section 8 gained
+  the `Invalid argument` / exit 1 / restart sequence the journal showed
+  once on 2026-08-30, with what it means and what it does not.
 
 ## 0.6.0 (2026-08-28)
 

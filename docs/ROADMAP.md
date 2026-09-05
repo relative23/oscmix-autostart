@@ -88,9 +88,15 @@ a GUI that nobody here maintains. Every row marked 0.4.0 is a row where
 the honest answer today is "turn it in the GUI, and hope nothing resets
 it" -- which is the same answer TotalMix gives, minus the snapshot.
 
-## Where we are (0.6.0 released)
+## Where we are (0.6.1)
 
-**0.6.0 was tagged on 2026-08-28**: the pin moved to `f2fdd5e` and
+**0.6.1 (2026-09-05)** fixes two defects an audit of the tree found:
+a config declaring channel or global state and no route was never
+applied at start -- a `config.routes` guard from 0.1.0 that outlived
+the surface it was written for, while `--dry-run` printed the writes
+and a SIGHUP reload sent them -- and one integration test reached the
+developer's real `systemctl` and started their user service. Neither
+moves the pin. **0.6.0 was tagged on 2026-08-28**: the pin moved to `f2fdd5e` and
 three families became settable -- Room EQ, output phase, gain on
 Analog 5-8 -- each fixed upstream and measured here, with the write
 sweep grown to 1902 proven registers. **0.5.2 was tagged on 2026-08-27**: the resolve-order fix, after a boot
