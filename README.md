@@ -60,8 +60,9 @@ since.
 - Seventeen [decision records](docs/decisions/) carry the reasoning and the
   measurement behind anything non-obvious, including the ones that say *we
   looked and there was nothing to fix*.
-- Five issues have gone upstream from this work
-  ([documented](docs/upstream-issues.md)), two of them fixed.
+- Five issues and two fixes have gone upstream from this work
+  ([documented](docs/upstream-issues.md)); all five are fixed at the
+  pinned revision.
 
 ## Why you want this
 
@@ -239,12 +240,15 @@ The defaults follow what a setting *is*:
 | pinned | remembered |
 |---|---|
 | the routing itself, channel links | `volume` |
-| `reflevel`, `gain`, `hi-z`, `48v` | `mute`, `phase` |
+| `reflevel`, `gain`, `hi-z` | `mute`, `phase` |
 
 Pinned settings describe your installation: a reference level or a hi-Z
 switch has to match the cable that is plugged in, and a wrong value there
 is a signal problem. Remembered settings are the ones you reach for
-during a session -- turn a monitor fader and it stays turned.
+during a session -- turn a monitor fader and it stays turned. `48v` is
+modelled as pinned as well, but no config can set it yet: phantom power
+stays out of the file until a hardware case proves the channel it names
+is the channel it powers.
 
 Override it per option when your setup disagrees:
 

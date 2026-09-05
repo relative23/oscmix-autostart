@@ -127,10 +127,12 @@ at startup without any client interaction.
 
 ---
 
-## 2. Filed: Room EQ registers reporting implausible values
+## 2. Fixed upstream: Room EQ registers reporting implausible values
 
 **Status:** filed as [michaelforney/oscmix#32][32] on 2026-08-20, with a
-mechanism and a before/after measurement.
+mechanism and a before/after measurement; **fixed upstream in
+`55802a6`** (2026-08-21) and measured here when the pin moved to it --
+640 Room EQ registers reported where 320 were before.
 
 **It was withdrawn first, and the withdrawal was right on the evidence
 at the time.** What follows is the original reasoning, kept intact,

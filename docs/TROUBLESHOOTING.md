@@ -170,7 +170,7 @@ glib-compile-schemas ~/.local/share/glib-2.0/schemas
 
 ## 8. Journal lines that look alarming and are not
 
-All three below come from the upstream backend or ALSA and are routine
+The lines below come from the upstream backend or ALSA and are routine
 on this setup. None of them means the desk lost state -- `oscmix-session
 --diff` is the check that would show it if it had (section 5).
 
@@ -191,6 +191,15 @@ on this setup. None of them means the desk lost state -- `oscmix-session
 - `unexpected enum value -1` -- a register reports a value outside its
   declared enum; `/controlroom/mainout` reports -1 for "no main out".
   The pinned build prefixes this warning with the OSC address.
+- `Invalid argument` followed by `ERROR: backend exited with status 1`
+  and `Scheduled restart job` -- the backend died and the unit restarted
+  it 3 s later (`Restart=on-failure`, `RestartSec=3`); the restart
+  re-applies the routing and reads it back like any start, so the
+  journal shows `routing verified against device state` right after.
+  Seen once here (2026-08-30, after 2 h 24 min of running, with the
+  mixer GUI open); the message is the backend's and its cause is not
+  known. Worth a look only if it repeats -- then keep the lines around
+  it, and check `oscmix-session --diff` after the restart.
 
 **If the enum warning appears *without* an OSC address, an old backend
 binary is running.** Builds before upstream `05621e5` print the bare

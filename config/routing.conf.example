@@ -1,16 +1,19 @@
-# oscmix-autostart routing configuration
+# oscmix-desk routing configuration
 #
 # Copied to ~/.config/oscmix/routing.conf on install (only if none exists).
-# The routes below are applied to the Fireface's hardware mixer every time
+# Everything below is applied to the Fireface's hardware mixer every time
 # the backend starts, so the device state is predictable after every boot
-# and hotplug.
+# and hotplug. A file may declare routes, channel state, EQ, dynamics,
+# reverb, the clock -- or only some of those. Routes are not required.
 #
 # A route rewrites exactly the registers it declares, and nothing else.
 # Whatever you change in oscmix-gtk survives every restart unless a route
 # declares that same register -- so mute, EQ and (unless you add a
 # 'volume' line) the output faders are yours to keep.
 #
-# Reload after editing:  systemctl --user restart oscmix.service
+# After editing:  systemctl --user reload oscmix.service
+# That re-reads this file and re-applies what it pins, leaving what it
+# remembers where you put it. A `restart` works too and re-applies all.
 
 [device]
 # ALSA sequencer client name to wait for (substring match).
@@ -63,9 +66,9 @@ port = 7222
 # '/mix/<out>/input/<in>' appears in the state dump, so an input route
 # is verified after every start rather than only re-applied.
 #
-# NOTE: a config using 'input' is rejected whole by oscmix-autostart
-# 0.2.0 and earlier -- an unknown option in a known section is an error
-# there, on purpose. A monitoring route that vanished with a warning
+# NOTE: a config using 'input' is rejected whole by 0.2.0 and earlier
+# (then called oscmix-autostart) -- an unknown option in a known section
+# is an error there, on purpose. A monitoring route that vanished with a warning
 # would be worse than one that refuses to start.
 #
 # PipeWire/PulseAudio send stereo audio to playback 1/2, so most setups
@@ -119,8 +122,43 @@ level = 0.0
 # an off-by-one in phantom power is a damaged ribbon microphone. Set it
 # in the mixer for now.
 #
-# These sections make a config unreadable by oscmix-autostart 0.2.0,
-# which rejects unknown sections' options rather than guessing.
+# These sections make a config unreadable by 0.2.0 and earlier, which
+# reject unknown sections' options rather than guessing.
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# The rest of the strip: nested and global sections (since 0.4.0)
+#
+# Per-channel families with more than one register sit in a section of
+# their own, named [<family>:<input|output>:<n>]. Families with no
+# channel at all are a plain [<family>]. Every option name and every
+# bound is the device's own; a value outside the register's range is
+# refused before anything reaches the hardware.
+#
+#   [eq:input:3]              # three-band EQ; also [eq:output:N]
+#   enabled = true
+#   band1freq = 80            # Hz
+#   band1gain = -3.0          # dB
+#   band1type = Low Shelf
+#
+#   [dynamics:output:5]       # compressor and expander
+#   enabled = true
+#   compthres = -18.0
+#   compratio = 4.0
+#
+#   [lowcut:input:1]          # also: [autolevel:...], [roomeq:output:N]
+#   enabled = true
+#   freq = 80
+#
+#   [clock]                   # channel-less families: clock, hardware,
+#   source = Internal         # controlroom, reverb, echo
+#
+#   [reverb]
+#   enabled = false
+#
+# `oscmix-session --dump-config` prints the desk you already have in
+# exactly this shape, which is the easiest way to see every option and
+# its current value.
 # --------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------
@@ -165,8 +203,9 @@ level = 0.0
 # and after that the mixer wins.
 #
 # The defaults follow what a setting is. The routing itself, channel
-# links, 'reflevel', 'gain', 'hi-z' and '48v' are pinned: they describe
-# what is physically plugged in, and a wrong value is a signal problem.
+# links, 'reflevel', 'gain' and 'hi-z' are pinned: they describe what is
+# physically plugged in, and a wrong value is a signal problem. ('48v'
+# is modelled as pinned too, and stays unsettable -- see above.)
 # 'volume', 'mute' and 'phase' are remembered: turn a monitor fader
 # during a session and it stays turned.
 #
